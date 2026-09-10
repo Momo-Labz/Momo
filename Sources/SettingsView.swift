@@ -12,6 +12,8 @@ struct SettingsView: View {
         TabView {
             providers
                 .tabItem { Label("Providers", systemImage: "sparkles") }
+            accountAccess
+                .tabItem { Label("Access", systemImage: "key.horizontal") }
             general
                 .tabItem { Label("General", systemImage: "gearshape") }
             deskDisplaySettings
@@ -21,7 +23,45 @@ struct SettingsView: View {
             privacy
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
-        .frame(width: 560, height: 450)
+        .frame(width: 590, height: 480)
+    }
+
+    private var accountAccess: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Provider access").font(.title2.bold())
+                Text("One permission map for usage, models, MCPs, plugins, and skills.")
+                    .foregroundStyle(.secondary)
+            }
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(ProviderAccessPlan.all) { plan in
+                        HStack(alignment: .top, spacing: 12) {
+                            ProviderMark(provider: plan.provider, size: 34, active: monitor.snapshot(for: plan.provider).activeCount > 0)
+                            VStack(alignment: .leading, spacing: 4) {
+                                HStack {
+                                    Text(plan.provider.name).font(.headline)
+                                    Spacer()
+                                    Text(plan.current.rawValue)
+                                        .font(.system(size: 8, weight: .black, design: .monospaced))
+                                        .padding(.horizontal, 7).padding(.vertical, 4)
+                                        .background(BarBoyStyle.raised)
+                                        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                                }
+                                Text(plan.detail).font(.caption)
+                                Text(plan.future).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .padding(11)
+                        .background(BarBoyStyle.surface)
+                        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    }
+                }
+            }
+            Text("BAR BOY will use OAuth 2.1 + PKCE for compatible remote MCP servers and Keychain for tokens. It will not import browser cookies or collect ChatGPT, Claude, Cursor, Gemini, or Grok passwords.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(24)
     }
 
     private var providers: some View {
@@ -88,7 +128,7 @@ struct SettingsView: View {
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
             LabeledContent("Refresh interval", value: "15 seconds")
-            LabeledContent("Version", value: "0.2.0")
+            LabeledContent("Version", value: "0.3.0")
         }
         .formStyle(.grouped)
         .padding(10)

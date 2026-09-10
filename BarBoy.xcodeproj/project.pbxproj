@@ -10,18 +10,24 @@
 		09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2244A22CE29B93DD607E1 /* SettingsView.swift */; };
 		136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */; };
 		187B6FDF407B0AB0E3907786 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D568DC6BE830956FA389F7D /* DashboardView.swift */; };
+		36D7CE2F6C0AB347E86D2AFB /* RelayRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */; };
 		3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */; };
 		64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914544FD481DF77821FAFD11 /* Models.swift */; };
 		68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */; };
 		6E707731B52AB1AA7AFB7DE1 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97EABE168680367E8C4D28E /* CommandPaletteView.swift */; };
 		7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */; };
 		76F832EA656D975C3B04DDFF /* BarBoyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4636595E64156A63431C041 /* BarBoyTests.swift */; };
+		854A48BAD75E91A6E9AE7AEB /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */; };
 		966A728AF138807269935D7E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */; };
 		AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */; };
+		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
+		D652487A4920533FC7F1137A /* BarBoyMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */; };
 		D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA94527A39181A6696901C9 /* ActivityMonitor.swift */; };
 		E052D23FE428CEED342603E6 /* icon-source.png in Resources */ = {isa = PBXBuildFile; fileRef = D3D299542F8A6FB8744AAD52 /* icon-source.png */; };
 		E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */; };
+		F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479945A2B783FEEB67F51BD8 /* RelayModels.swift */; };
 		F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */; };
+		F8912305CB95E1F9EFD74818 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 532B6989DEC8AFDE334B990F /* Assets.xcassets */; };
 		FC8BE595DDA7B427681021BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8CFC5B7008808730FE6A3D5E /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -36,9 +42,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayRootView.swift; sourceTree = "<group>"; };
+		0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayStore.swift; sourceTree = "<group>"; };
 		1CB2244A22CE29B93DD607E1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayKeychain.swift; sourceTree = "<group>"; };
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BarBoyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		479945A2B783FEEB67F51BD8 /* RelayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayModels.swift; sourceTree = "<group>"; };
 		4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskDisplayServer.swift; sourceTree = "<group>"; };
+		532B6989DEC8AFDE334B990F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyApp.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
@@ -47,6 +59,7 @@
 		914544FD481DF77821FAFD11 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		9D568DC6BE830956FA389F7D /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutService.swift; sourceTree = "<group>"; };
+		A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyMobileApp.swift; sourceTree = "<group>"; };
 		C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		CCA94527A39181A6696901C9 /* ActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitor.swift; sourceTree = "<group>"; };
 		D3D299542F8A6FB8744AAD52 /* icon-source.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "icon-source.png"; sourceTree = "<group>"; };
@@ -57,6 +70,18 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		028BB257D7B210C33D829CAF /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */,
+				1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */,
+				479945A2B783FEEB67F51BD8 /* RelayModels.swift */,
+				02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */,
+				0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
 		24D8A908600E79271809B94C /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -88,6 +113,7 @@
 		667FCD703AFFB8783FC50472 = {
 			isa = PBXGroup;
 			children = (
+				C543E80AA745DD72ABAA7E34 /* iOS */,
 				8043E9ABF527E479EC6F3EFD /* Resources */,
 				24D8A908600E79271809B94C /* Sources */,
 				51FCE9378B6CA151B99CC03B /* Tests */,
@@ -99,6 +125,7 @@
 			isa = PBXGroup;
 			children = (
 				85FA579C0D401BBE1ED8A9E9 /* BarBoy.app */,
+				426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */,
 				41688AC811F225C650766F04 /* BarBoyTests.xctest */,
 			);
 			name = Products;
@@ -109,6 +136,23 @@
 			children = (
 				8CFC5B7008808730FE6A3D5E /* Assets.xcassets */,
 				D3D299542F8A6FB8744AAD52 /* icon-source.png */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		C543E80AA745DD72ABAA7E34 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				F5C4924FD9A66995BF652888 /* Resources */,
+				028BB257D7B210C33D829CAF /* Sources */,
+			);
+			path = iOS;
+			sourceTree = "<group>";
+		};
+		F5C4924FD9A66995BF652888 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				532B6989DEC8AFDE334B990F /* Assets.xcassets */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -152,6 +196,24 @@
 			productReference = 41688AC811F225C650766F04 /* BarBoyTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B9531DE5F5BEC5D145C684A4 /* BarBoyMobile */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1F27660D795C66017F123B01 /* Build configuration list for PBXNativeTarget "BarBoyMobile" */;
+			buildPhases = (
+				28ECF248CC834232C80A991B /* Sources */,
+				7CC210CC014003EC02969414 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BarBoyMobile;
+			packageProductDependencies = (
+			);
+			productName = BarBoyMobile;
+			productReference = 426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -166,6 +228,10 @@
 						ProvisioningStyle = Automatic;
 					};
 					A3EFA47AFE23938615D8FE68 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+					B9531DE5F5BEC5D145C684A4 = {
 						DevelopmentTeam = "";
 						ProvisioningStyle = Automatic;
 					};
@@ -187,6 +253,7 @@
 			targets = (
 				1D991A361BC6E15CB58AD857 /* BarBoy */,
 				A3EFA47AFE23938615D8FE68 /* BarBoyTests */,
+				B9531DE5F5BEC5D145C684A4 /* BarBoyMobile */,
 			);
 		};
 /* End PBXProject section */
@@ -201,9 +268,29 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7CC210CC014003EC02969414 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F8912305CB95E1F9EFD74818 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		28ECF248CC834232C80A991B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D652487A4920533FC7F1137A /* BarBoyMobileApp.swift in Sources */,
+				BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */,
+				F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */,
+				36D7CE2F6C0AB347E86D2AFB /* RelayRootView.swift in Sources */,
+				854A48BAD75E91A6E9AE7AEB /* RelayStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		4872BFF2D243B7C2E8ACFF6C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -278,7 +365,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -297,16 +384,38 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				PRODUCT_NAME = "BAR BOY";
-				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		1BB91EE22C87CC46887B587B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.momolabz.barboy.mobile;
+				PRODUCT_MODULE_NAME = BarBoyMobile;
+				PRODUCT_NAME = "MOMO RELAY";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
 		};
@@ -411,7 +520,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -424,15 +533,37 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.2.0;
+				MARKETING_VERSION = 0.3.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "BAR BOY";
-				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		DFEEB6B76101226B646F2FD0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				INFOPLIST_FILE = iOS/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.momolabz.barboy.mobile;
+				PRODUCT_MODULE_NAME = BarBoyMobile;
+				PRODUCT_NAME = "MOMO RELAY";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
 		};
@@ -477,6 +608,15 @@
 			buildConfigurations = (
 				7DEC2E5CAD41B0049B709C0C /* Debug */,
 				EAD8A49068B12A32055838D6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1F27660D795C66017F123B01 /* Build configuration list for PBXNativeTarget "BarBoyMobile" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1BB91EE22C87CC46887B587B /* Debug */,
+				DFEEB6B76101226B646F2FD0 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

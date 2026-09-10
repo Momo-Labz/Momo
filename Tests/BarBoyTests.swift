@@ -40,10 +40,35 @@ final class BarBoyTests: XCTestCase {
     func testDeskDisplayHTMLIsSmallScreenFirst() {
         let html = DeskDisplayServer.dashboardHTML(token: "abc123")
         XCTAssertTrue(html.contains("width=device-width"))
-        XCTAssertTrue(html.contains("WHAT THEY ARE WORKING ON"))
+        XCTAssertTrue(html.contains("YOUR RETURN QUEUE"))
         XCTAssertTrue(html.contains("abc123"))
         XCTAssertTrue(html.contains("overflow:hidden"))
         XCTAssertTrue(html.contains("NEED"))
+    }
+
+    func testCapabilityProvenanceInference() {
+        let event: [String: Any] = [
+            "model_name": "gpt-5.6",
+            "tool_name": "mcp__github__search_code",
+            "skill_path": "/Users/me/.agents/skills/frontend-design/SKILL.md",
+            "plugins": ["Codex Security"]
+        ]
+        let result = SessionCapabilities.infer(from: event)
+        XCTAssertEqual(result.model, "gpt-5.6")
+        XCTAssertTrue(result.mcpServers.contains("github"))
+        XCTAssertTrue(result.skills.contains("frontend-design"))
+        XCTAssertTrue(result.plugins.contains("Codex Security"))
+    }
+
+    func testDeskDisplayIncludesCapabilityProvenance() throws {
+        let session = AgentSession(id: "cap", provider: .codex, role: .main, title: "Build", detail: "", project: "Hub", updatedAt: .now, isRunning: true, processID: nil, tokens: nil, model: "gpt-5.6", mcpServers: ["github"], skills: ["ship"], plugins: ["security"])
+        let snapshot = ProviderSnapshot(provider: .codex, sessions: [session], activeCount: 1, localTokensToday: 0, updatedAt: .now)
+        let text = String(decoding: DeskDisplayServer.makeStatusJSON(snapshots: [snapshot], includeTitles: true), as: UTF8.self)
+        XCTAssertTrue(text.contains("gpt-5.6"))
+        XCTAssertTrue(text.contains("github"))
+        XCTAssertTrue(text.contains("ship"))
+        XCTAssertTrue(text.contains("security"))
+        XCTAssertTrue(text.contains("capabilityCount"))
     }
 
     func testRunningSessionWinsAgeLabel() {
@@ -54,9 +79,9 @@ final class BarBoyTests: XCTestCase {
     func testRenderDashboardSnapshotsWhenRequested() throws {
         let now = Date()
         let sessions = [
-            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400),
-            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 89, tokens: 4_800),
-            AgentSession(id: "claude-main", provider: .claude, role: .main, title: "Reviewing onboarding copy", detail: "Recent local session", project: "Momo", updatedAt: now.addingTimeInterval(-420), isRunning: false, processID: nil, tokens: 31_200, attention: .needsInput, attentionReason: "Approve the revised copy")
+            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
+            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 89, tokens: 4_800, model: "GPT-5.6", mcpServers: [], skills: ["qa"], plugins: []),
+            AgentSession(id: "claude-main", provider: .claude, role: .main, title: "Reviewing onboarding copy", detail: "Recent local session", project: "Momo", updatedAt: now.addingTimeInterval(-420), isRunning: false, processID: nil, tokens: 31_200, attention: .needsInput, attentionReason: "Approve the revised copy", model: "Claude Sonnet", mcpServers: ["figma"], skills: ["brand"], plugins: ["Canva"])
         ]
         let snapshots = [
             ProviderSnapshot(provider: .codex, sessions: Array(sessions.prefix(2)), activeCount: 2, localTokensToday: 17_200, updatedAt: now),

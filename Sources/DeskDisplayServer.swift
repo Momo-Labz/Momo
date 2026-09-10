@@ -160,6 +160,7 @@ final class DeskDisplayServer: ObservableObject {
         let sessions: [[String: Any]] = snapshots
             .flatMap(\.sessions)
             .sorted {
+                if $0.attention.isUrgent != $1.attention.isUrgent { return $0.attention.isUrgent }
                 if $0.isRunning != $1.isRunning { return $0.isRunning }
                 return $0.updatedAt > $1.updatedAt
             }
@@ -176,7 +177,13 @@ final class DeskDisplayServer: ObservableObject {
                     "age": session.ageLabel,
                     "attention": session.attention.rawValue,
                     "attentionLabel": session.attention.label,
-                    "urgent": session.attention.isUrgent
+                    "attentionReason": session.attentionReason ?? "",
+                    "urgent": session.attention.isUrgent,
+                    "model": session.model ?? "",
+                    "mcpServers": session.mcpServers,
+                    "skills": session.skills,
+                    "plugins": session.plugins,
+                    "capabilityCount": session.capabilityCount
                 ]
             }
         let object: [String: Any] = [
@@ -211,7 +218,7 @@ final class DeskDisplayServer: ObservableObject {
         </head>
         <body>
           <header><div class="logo">▣</div><div><div class="brand">MOMO LABZ</div><div class="sub" id="summary">CONNECTING AGENT DESK…</div></div><div class="signal" id="signal">LOCAL</div></header>
-          <section class="board"><div class="pane"><div class="provider-head"><span>PROVIDER</span><span>SH</span><span>WK</span><span>SE</span></div><div id="providers"></div></div><div class="pane"><div class="heading">WHAT THEY ARE WORKING ON</div><div id="sessions"></div></div></section>
+          <section class="board"><div class="pane"><div class="provider-head"><span>PROVIDER</span><span>SH</span><span>WK</span><span>SE</span></div><div id="providers"></div></div><div class="pane"><div class="heading">YOUR RETURN QUEUE</div><div id="sessions"></div></div></section>
           <footer><span>PRIVATE · MAC → DESK</span><span id="clock">--:--</span></footer>
         <script>
         const key='\(token)';
@@ -222,7 +229,7 @@ final class DeskDisplayServer: ObservableObject {
           const signal=document.getElementById('signal');signal.textContent=data.attentionCount?`! ${data.attentionCount} NEED${data.attentionCount===1?'S':''} YOU`:'LIVE';signal.className=data.attentionCount?'signal alert':'signal';
           document.getElementById('providers').innerHTML=data.providers.slice(0,5).map(p=>`<div class="provider"><div class="provider-name"><div class="mark">${esc(p.mark)}</div><div><div class="pname">${esc(p.name).toUpperCase()}</div><div class="local">${esc(p.usage).toUpperCase()}</div></div></div><span>${pct(p.short)}</span><span>${pct(p.week)}</span><span class="${p.needsAttention?'urgent':''}">${p.needsAttention?'!':''}${esc(p.sessionCount)}</span></div>`).join('');
           const sessions=data.sessions.length?data.sessions:[{mark:'·',title:'Waiting for a session',role:'MOMO',project:'READY',age:'IDLE',urgent:false}];
-          document.getElementById('sessions').innerHTML=sessions.slice(0,5).map(s=>`<div class="session"><div class="mark">${esc(s.mark)}</div><div><div class="title">${esc(s.title)}</div><div class="meta">${esc(s.role)} · ${esc(s.project)}</div></div><div class="state ${s.urgent?'alert':''}">${esc(s.urgent?s.attentionLabel:s.age)}</div></div>`).join('');
+          document.getElementById('sessions').innerHTML=sessions.slice(0,5).map(s=>{const cap=[s.model,s.capabilityCount?`${s.capabilityCount} CAP`:null].filter(Boolean).join(' / ');return `<div class="session"><div class="mark">${esc(s.mark)}</div><div><div class="title">${esc(s.title)}</div><div class="meta">${esc(s.urgent?(s.attentionReason||s.attentionLabel):(cap||`${s.role} / ${s.project}`))}</div></div><div class="state ${s.urgent?'alert':''}">${esc(s.urgent?s.attentionLabel:s.age)}</div></div>`}).join('');
         }
         async function poll(){try{const r=await fetch(`/api/status?key=${key}`,{cache:'no-store'});if(!r.ok)throw Error();render(await r.json())}catch(e){const s=document.getElementById('signal');s.textContent='OFFLINE';s.className='signal offline'}}
         setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);setInterval(poll,2500);poll();

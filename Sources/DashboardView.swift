@@ -8,6 +8,7 @@ struct DashboardView: View {
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @Environment(\.openSettings) private var openSettings
     @State private var selection: AIProvider?
+    @State private var inspectedSession: AgentSession?
 
     private var visibleSnapshots: [ProviderSnapshot] {
         monitor.snapshots.filter { snapshot in
@@ -26,6 +27,8 @@ struct DashboardView: View {
     }
 
     private var urgentCount: Int { allSessions.filter { $0.attention.isUrgent }.count }
+    private var urgentSessions: [AgentSession] { allSessions.filter { $0.attention.isUrgent } }
+    private var activeSessions: [AgentSession] { allSessions.filter { !$0.attention.isUrgent } }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +36,7 @@ struct DashboardView: View {
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
             ScrollView {
                 VStack(alignment: .leading, spacing: 15) {
-                    if urgentCount > 0 { attentionBanner }
+                    yourTurnSection
                     usageTable
                     activitySection
                     if preferences.deskDisplayEnabled { deskDisplaySection }
@@ -46,6 +49,9 @@ struct DashboardView: View {
         .frame(width: 420, height: 650)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
+        .sheet(item: $inspectedSession) { session in
+            SessionInspectorView(session: session)
+        }
     }
 
     private var header: some View {
@@ -74,20 +80,39 @@ struct DashboardView: View {
         .padding(14)
     }
 
-    private var attentionBanner: some View {
-        HStack(spacing: 10) {
-            AttentionPulse()
-            VStack(alignment: .leading, spacing: 2) {
-                Text(urgentCount == 1 ? "AN AGENT NEEDS YOU" : "\(urgentCount) AGENTS NEED YOU")
-                    .font(.system(size: 11, weight: .black, design: .monospaced))
-                Text("Open the session below to approve, answer, or recover it.")
-                    .font(.caption).foregroundStyle(.secondary)
+    private var yourTurnSection: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            sectionLabel("YOUR TURN", note: urgentCount == 0 ? "agents keep moving" : "\(urgentCount) blocking")
+            if urgentSessions.isEmpty {
+                HStack(spacing: 10) {
+                    Rectangle().fill(Color.primary).frame(width: 7, height: 27)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("NO ONE IS WAITING").font(.system(size: 10, weight: .black, design: .monospaced))
+                        Text("You can stay in flow. BAR BOY is watching the returns.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(10)
+                .background(BarBoyStyle.surface)
+                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(urgentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
+                        Button { inspectedSession = session } label: {
+                            SessionRow(session: session)
+                        }
+                        .buttonStyle(.plain)
+                        if index < min(urgentSessions.count, 3) - 1 {
+                            Rectangle().fill(BarBoyStyle.coral.opacity(0.35)).frame(height: 1).padding(.leading, 43)
+                        }
+                    }
+                }
+                .padding(.horizontal, 10)
+                .background(BarBoyStyle.coral.opacity(0.08))
+                .overlay(Rectangle().stroke(BarBoyStyle.coral, lineWidth: 1.5))
             }
-            Spacer()
         }
-        .padding(11)
-        .background(BarBoyStyle.coral.opacity(0.10))
-        .overlay(Rectangle().stroke(BarBoyStyle.coral, lineWidth: 1.5))
     }
 
     private var usageTable: some View {
@@ -122,23 +147,26 @@ struct DashboardView: View {
 
     private var activitySection: some View {
         VStack(alignment: .leading, spacing: 7) {
-            sectionLabel("AGENTS + SESSIONS", note: "\(allSessions.filter(\.isRunning).count) live")
-            if allSessions.isEmpty {
+            sectionLabel("AGENTS IN MOTION", note: "\(allSessions.filter(\.isRunning).count) live")
+            if activeSessions.isEmpty {
                 Surface {
                     HStack(spacing: 12) {
                         PixelBarBoyMark(size: 26)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("QUIET RIGHT NOW").font(.system(size: 10, weight: .black, design: .monospaced))
-                            Text("New local AI sessions will appear here.").font(.caption).foregroundStyle(.secondary)
+                            Text(urgentSessions.isEmpty ? "QUIET RIGHT NOW" : "ALL RETURNS NEED YOU").font(.system(size: 10, weight: .black, design: .monospaced))
+                            Text(urgentSessions.isEmpty ? "New local AI sessions will appear here." : "Clear the return queue above to keep work moving.").font(.caption).foregroundStyle(.secondary)
                         }
                         Spacer()
                     }
                 }
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(allSessions.prefix(6).enumerated()), id: \.element.id) { index, session in
-                        SessionRow(session: session)
-                        if index < min(allSessions.count, 6) - 1 {
+                    ForEach(Array(activeSessions.prefix(5).enumerated()), id: \.element.id) { index, session in
+                        Button { inspectedSession = session } label: {
+                            SessionRow(session: session)
+                        }
+                        .buttonStyle(.plain)
+                        if index < min(activeSessions.count, 5) - 1 {
                             Rectangle().fill(BarBoyStyle.hairline.opacity(0.7)).frame(height: 1).padding(.leading, 43)
                         }
                     }
@@ -238,8 +266,14 @@ private struct SessionRow: View {
             ProviderMark(provider: session.provider, size: 27, active: session.isRunning)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title).font(.subheadline.weight(.semibold)).lineLimit(1)
-                Text("\(session.role.rawValue.uppercased()) · \(session.project.uppercased())")
+                Text("\(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
                     .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                if !session.capabilitySummary.isEmpty {
+                    Text(session.capabilitySummary)
+                        .font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 6)
             Text(session.attention.isUrgent ? session.attention.label : session.ageLabel)
@@ -251,6 +285,69 @@ private struct SessionRow: View {
         }
         .padding(.vertical, 8)
         .help(session.attentionReason ?? session.detail)
+    }
+}
+
+private struct SessionInspectorView: View {
+    @Environment(\.dismiss) private var dismiss
+    let session: AgentSession
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 12) {
+                ProviderMark(provider: session.provider, size: 36, active: session.isRunning)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(session.title).font(.headline).lineLimit(2)
+                    Text("\(session.provider.name.uppercased()) / \(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
+                        .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("DONE") { dismiss() }.barBoyButton()
+            }
+            .padding(16)
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if session.attention.isUrgent {
+                        InspectorBlock(title: "RETURN", values: [session.attentionReason ?? "This agent needs your response"], alert: true)
+                    }
+                    InspectorBlock(title: "MODEL", values: [session.model ?? "Not exposed by this session"])
+                    InspectorBlock(title: "MCP SERVERS", values: session.mcpServers.isEmpty ? ["None recorded"] : session.mcpServers)
+                    InspectorBlock(title: "SKILLS", values: session.skills.isEmpty ? ["None recorded"] : session.skills)
+                    InspectorBlock(title: "PLUGINS", values: session.plugins.isEmpty ? ["None recorded"] : session.plugins)
+                    InspectorBlock(title: "LATEST", values: [session.detail])
+                }
+                .padding(16)
+            }
+        }
+        .frame(width: 430, height: 470)
+        .background(BarBoyStyle.panel)
+    }
+}
+
+private struct InspectorBlock: View {
+    let title: String
+    let values: [String]
+    var alert = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 8, weight: .black, design: .monospaced))
+                .foregroundStyle(alert ? BarBoyStyle.coral : .secondary)
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                    Text(value.isEmpty ? "No detail recorded" : value)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(9)
+                    if index < values.count - 1 { Rectangle().fill(BarBoyStyle.hairline).frame(height: 1) }
+                }
+            }
+            .background(alert ? BarBoyStyle.coral.opacity(0.08) : BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(alert ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+        }
     }
 }
 

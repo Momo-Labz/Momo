@@ -1,12 +1,25 @@
-# Product direction: an agent attention router
+# Product direction: remove the human prompt bottleneck
 
 `BAR BOY` can remain a working title. The durable idea is not another usage meter and not another general chat window. It is the place where parallel AI work returns to the human.
 
 ## The wedge
 
-**Know what is working, what finished, and what needs you—across every agent—without reopening every tool.**
+**Keep every agent moving without becoming the full-time scheduler for your own AI tools.**
 
-The status-bar app is the control surface. The physical Momo Labz character is the ambient surface. Both show the same queue, and coral is reserved for moments that require intervention.
+The Mac status-bar app is the local scanner and control surface. MOMO RELAY on iPhone is the portable return queue. The physical Momo Labz character is the ambient surface. All three show the same priority order, and coral is reserved for moments that require intervention.
+
+```text
+Codex / Claude / Gemini / Cursor / Grok
+                    |
+       model + MCP + plugin + skill provenance
+                    |
+                YOUR TURN
+        Mac / iPhone / desk display
+                    |
+       answer / approve / recover / route
+                    |
+             exact source session
+```
 
 ## Defensible differences
 
@@ -17,6 +30,22 @@ The status-bar app is the control surface. The physical Momo Labz character is t
 5. **A visible trust ladder.** Every action is classified as suggest, prepare, ask-to-run, or pre-approved automation. Keep a local audit trail and a one-click stop switch.
 6. **Return-to-work routing.** An alert should focus the exact task, terminal, IDE pane, or approval—not just announce that something happened.
 7. **Local-first by default.** Session titles and project context stay on the Mac; cloud sync is optional and encrypted if it is ever added.
+8. **Capability receipts.** Each return carries the model, MCP servers, plugins, and skills actually recorded in that session—not merely everything installed on the machine.
+9. **One permission map.** Momo grants access once per supported provider or MCP server, sees the scope, and can revoke it without hunting through individual agent apps.
+
+## Authorization ladder
+
+1. **Local session access:** no provider account required; the Mac reads enabled local adapters.
+2. **Organization usage:** OpenAI and Anthropic usage endpoints require organization-level administrative credentials. Store them in Keychain and request the minimum scope.
+3. **Remote MCP:** follow MCP OAuth discovery, OAuth 2.1, PKCE, resource binding, refresh-token rotation, and secure token storage.
+4. **Consumer accounts:** only add ChatGPT, Claude, Cursor, Gemini, or Grok subscription data when the provider publishes a supported delegated interface. Never scrape cookies or collect provider passwords.
+
+## What version 0.3 proves
+
+- The Mac return queue and capability provenance are implemented.
+- The same queue is exposed to the 3D-print display and the buildable iOS companion.
+- iOS pairing data is stored in Keychain and local alerts fire when foreground polling discovers a new return.
+- Account access is mapped honestly; organization usage fetching, cloud relay, APNs, and write-back to source sessions remain next-stage work.
 
 ## Suggested build order
 
@@ -39,7 +68,7 @@ The status-bar app is the control surface. The physical Momo Labz character is t
 - Prepare replies, patches, calendar events, and follow-ups
 - Action allowlists per project and provider
 - Confirmation receipts, undo where possible, and complete action history
-- Optional phone/watch companion for urgent approvals away from the desk
+- Encrypted phone/watch relay for urgent approvals away from the desk
 
 ## Naming territories
 

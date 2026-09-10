@@ -62,7 +62,11 @@ actor LocalActivityScanner {
                     processID: process.pid,
                     tokens: nil,
                     attention: .working,
-                    attentionReason: nil
+                    attentionReason: nil,
+                    model: nil,
+                    mcpServers: [],
+                    skills: [],
+                    plugins: []
                 )
             }
 
@@ -133,13 +137,17 @@ actor LocalActivityScanner {
                 processID: nil,
                 tokens: metadata.tokens,
                 attention: metadata.attention,
-                attentionReason: metadata.attentionReason
+                attentionReason: metadata.attentionReason,
+                model: metadata.capabilities.model,
+                mcpServers: metadata.capabilities.mcpServers.sorted(),
+                skills: metadata.capabilities.skills.sorted(),
+                plugins: metadata.capabilities.plugins.sorted()
             )
         }
     }
 
-    private func sessionMetadata(from url: URL) -> (title: String?, detail: String?, project: String?, tokens: Int?, isSubagent: Bool, attention: AgentAttention, attentionReason: String?) {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return (nil, nil, nil, nil, false, .working, nil) }
+    private func sessionMetadata(from url: URL) -> (title: String?, detail: String?, project: String?, tokens: Int?, isSubagent: Bool, attention: AgentAttention, attentionReason: String?, capabilities: SessionCapabilities) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return (nil, nil, nil, nil, false, .working, nil, SessionCapabilities()) }
         defer { try? handle.close() }
         let maxBytes = 320 * 1024
         let head = (try? handle.read(upToCount: maxBytes / 2)) ?? Data()
@@ -151,7 +159,7 @@ actor LocalActivityScanner {
         var data = head
         data.append(Data("\n".utf8))
         data.append(tail)
-        guard let text = String(data: data, encoding: .utf8) else { return (nil, nil, nil, nil, false, .working, nil) }
+        guard let text = String(data: data, encoding: .utf8) else { return (nil, nil, nil, nil, false, .working, nil, SessionCapabilities()) }
 
         var title: String?
         var detail: String?
@@ -160,6 +168,7 @@ actor LocalActivityScanner {
         var isSubagent = false
         var attention: AgentAttention = .working
         var attentionReason: String?
+        var capabilities = SessionCapabilities()
 
         for line in text.split(separator: "\n").suffix(500) {
             guard let data = line.data(using: .utf8),
@@ -179,8 +188,9 @@ actor LocalActivityScanner {
                 attention = signal.state
                 attentionReason = signal.reason
             }
+            capabilities.merge(SessionCapabilities.infer(from: object))
         }
-        return (title, detail, project, tokens == 0 ? nil : tokens, isSubagent, attention, attentionReason)
+        return (title, detail, project, tokens == 0 ? nil : tokens, isSubagent, attention, attentionReason, capabilities)
     }
 
     private func attentionSignal(in object: [String: Any]) -> (state: AgentAttention, reason: String)? {

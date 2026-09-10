@@ -119,6 +119,10 @@ struct AgentSession: Identifiable, Hashable {
     let tokens: Int?
     let attention: AgentAttention
     let attentionReason: String?
+    let model: String?
+    let mcpServers: [String]
+    let skills: [String]
+    let plugins: [String]
 
     init(
         id: String,
@@ -132,7 +136,11 @@ struct AgentSession: Identifiable, Hashable {
         processID: Int?,
         tokens: Int?,
         attention: AgentAttention = .working,
-        attentionReason: String? = nil
+        attentionReason: String? = nil,
+        model: String? = nil,
+        mcpServers: [String] = [],
+        skills: [String] = [],
+        plugins: [String] = []
     ) {
         self.id = id
         self.provider = provider
@@ -146,6 +154,10 @@ struct AgentSession: Identifiable, Hashable {
         self.tokens = tokens
         self.attention = attention
         self.attentionReason = attentionReason
+        self.model = model
+        self.mcpServers = mcpServers
+        self.skills = skills
+        self.plugins = plugins
     }
 
     var ageLabel: String {
@@ -156,6 +168,123 @@ struct AgentSession: Identifiable, Hashable {
         if seconds < 86_400 { return "\(seconds / 3_600)H" }
         return "\(seconds / 86_400)D"
     }
+
+    var capabilityCount: Int {
+        mcpServers.count + skills.count + plugins.count
+    }
+
+    var capabilitySummary: String {
+        var parts: [String] = []
+        if let model, !model.isEmpty { parts.append(model.uppercased()) }
+        if !mcpServers.isEmpty { parts.append("\(mcpServers.count) MCP") }
+        if !skills.isEmpty { parts.append("\(skills.count) SKILL\(skills.count == 1 ? "" : "S")") }
+        if !plugins.isEmpty { parts.append("\(plugins.count) PLUGIN\(plugins.count == 1 ? "" : "S")") }
+        return parts.joined(separator: " / ")
+    }
+}
+
+struct SessionCapabilities: Equatable {
+    var model: String?
+    var mcpServers: Set<String> = []
+    var skills: Set<String> = []
+    var plugins: Set<String> = []
+
+    mutating func merge(_ other: SessionCapabilities) {
+        if let candidate = other.model, !candidate.isEmpty { model = candidate }
+        mcpServers.formUnion(other.mcpServers)
+        skills.formUnion(other.skills)
+        plugins.formUnion(other.plugins)
+    }
+
+    static func infer(from value: Any) -> SessionCapabilities {
+        var result = SessionCapabilities()
+        inspect(value, context: nil, result: &result)
+        return result
+    }
+
+    private static func inspect(_ value: Any, context: String?, result: inout SessionCapabilities) {
+        if let dict = value as? [String: Any] {
+            for (rawKey, child) in dict {
+                let key = rawKey.lowercased().replacingOccurrences(of: "-", with: "_")
+                let strings = scalarStrings(in: child)
+                if ["model", "model_name", "model_slug", "model_id"].contains(key), let candidate = strings.first {
+                    result.model = normalize(candidate)
+                }
+                if key.contains("mcp") && (key.contains("server") || key == "mcps") {
+                    strings.map(normalize).filter(isUseful).forEach { result.mcpServers.insert($0) }
+                }
+                if key == "skill" || key == "skills" || key == "skill_name" {
+                    strings.map(normalize).filter(isUseful).forEach { result.skills.insert($0) }
+                }
+                if key == "plugin" || key == "plugins" || key == "plugin_name" {
+                    strings.map(normalize).filter { !$0.isEmpty && $0.count <= 48 }.forEach { result.plugins.insert($0) }
+                }
+                inspect(child, context: key, result: &result)
+            }
+            return
+        }
+
+        if let array = value as? [Any] {
+            array.forEach { inspect($0, context: context, result: &result) }
+            return
+        }
+
+        guard let text = value as? String else { return }
+        let normalized = normalize(text)
+        if normalized.hasPrefix("mcp__") {
+            let parts = normalized.split(separator: "_", omittingEmptySubsequences: true)
+            if parts.count >= 2 { result.mcpServers.insert(String(parts[1])) }
+        }
+        if let marker = text.range(of: "/skills/"), let suffix = text[marker.upperBound...].split(separator: "/").first {
+            let skill = normalize(String(suffix))
+            if isUseful(skill) { result.skills.insert(skill) }
+        }
+        if context == "tool_name", normalized.hasPrefix("mcp_") {
+            let pieces = normalized.replacingOccurrences(of: "mcp__", with: "").split(separator: "_", omittingEmptySubsequences: true)
+            if let server = pieces.first { result.mcpServers.insert(String(server)) }
+        }
+    }
+
+    private static func scalarStrings(in value: Any) -> [String] {
+        if let text = value as? String { return [text] }
+        if let values = value as? [String] { return values }
+        if let values = value as? [Any] { return values.compactMap { $0 as? String } }
+        return []
+    }
+
+    private static func normalize(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lastPath = trimmed.contains("/") ? URL(fileURLWithPath: trimmed).lastPathComponent : trimmed
+        return String(lastPath.prefix(48))
+    }
+
+    private static func isUseful(_ value: String) -> Bool {
+        !value.isEmpty && value.count <= 48 && !value.contains(" ")
+    }
+}
+
+enum AccountAccessKind: String {
+    case local = "LOCAL NOW"
+    case organizationAPI = "ORG API"
+    case delegatedOAuth = "OAUTH"
+    case awaitingProvider = "WAITING"
+}
+
+struct ProviderAccessPlan: Identifiable {
+    let provider: AIProvider
+    let current: AccountAccessKind
+    let detail: String
+    let future: String
+
+    var id: AIProvider { provider }
+
+    static let all: [ProviderAccessPlan] = [
+        .init(provider: .codex, current: .organizationAPI, detail: "Local Codex sessions work now.", future: "OpenAI organization usage can use an admin key; ChatGPT consumer access waits for a supported delegated API."),
+        .init(provider: .claude, current: .organizationAPI, detail: "Local Claude sessions work now.", future: "Anthropic organization usage can use an Admin API key; consumer-plan access waits for a supported delegated API."),
+        .init(provider: .gemini, current: .awaitingProvider, detail: "Local Gemini CLI sessions work now.", future: "Account usage will connect only through a provider-supported OAuth scope."),
+        .init(provider: .cursor, current: .awaitingProvider, detail: "Local Cursor activity works now.", future: "Account usage stays linked to Cursor's official dashboard until a supported API is available."),
+        .init(provider: .grok, current: .awaitingProvider, detail: "Local Grok processes work now.", future: "xAI usage will use an official API credential or delegated authorization when available.")
+    ]
 }
 
 struct ProviderSnapshot: Identifiable {
