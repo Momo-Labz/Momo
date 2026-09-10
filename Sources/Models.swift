@@ -30,6 +30,16 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
+    var applicationBundleIdentifiers: [String] {
+        switch self {
+        case .codex: return ["com.openai.codex", "com.openai.chat"]
+        case .claude: return ["com.anthropic.claudefordesktop"]
+        case .gemini: return []
+        case .cursor: return ["com.todesktop.230313mzl4w4u92"]
+        case .grok: return []
+        }
+    }
+
     var processTerms: [String] {
         switch self {
         case .codex: return ["codex"]

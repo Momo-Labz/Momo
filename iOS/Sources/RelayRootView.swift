@@ -69,22 +69,36 @@ private struct PairView: View {
 
 private struct HubView: View {
     @EnvironmentObject private var store: RelayStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var selected: RelaySession?
+    @State private var tab: MobileHubTab = .home
 
     private var status: RelayStatus { store.status ?? .demo }
     private var urgent: [RelaySession] { status.sessions.filter(\.urgent) }
     private var working: [RelaySession] { status.sessions.filter { !$0.urgent } }
+    private var skills: [String] { unique(status.sessions.flatMap { $0.skills ?? [] }) }
+    private var mcps: [String] { unique(status.sessions.flatMap { $0.mcpServers ?? [] }) }
+    private var plugins: [String] { unique(status.sessions.flatMap { $0.plugins ?? [] }) }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(RelayStyle.line).frame(height: 1)
+            tabBar
+            Rectangle().fill(RelayStyle.line).frame(height: 1)
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
-                    returnQueue
-                    providerStrip
-                    sessionList
+                Group {
+                    switch tab {
+                    case .home:
+                        VStack(alignment: .leading, spacing: 18) { returnQueue; providerStrip }
+                    case .agents:
+                        sessionList
+                    case .tools:
+                        toolsList
+                    }
                 }
+                .id(tab)
+                .transition(.opacity.combined(with: .offset(y: reduceMotion ? 0 : 4)))
                 .padding(16)
             }
         }
@@ -94,7 +108,7 @@ private struct HubView: View {
 
     private var header: some View {
         HStack(spacing: 11) {
-            RelayMark(size: 38)
+            RelayAnimatedMark(size: 38)
             VStack(alignment: .leading, spacing: 1) {
                 Text("MOMO LABZ").font(.system(size: 9, weight: .black, design: .monospaced)).tracking(1.2).foregroundStyle(.secondary)
                 Text("RELAY").font(.system(size: 17, weight: .black, design: .monospaced)).tracking(1)
@@ -112,6 +126,25 @@ private struct HubView: View {
             }
         }
         .padding(16)
+    }
+
+    private var tabBar: some View {
+        HStack(spacing: 0) {
+            ForEach(MobileHubTab.allCases) { item in
+                Button {
+                    withAnimation(reduceMotion ? nil : .timingCurve(0.32, 0.72, 0, 1, duration: 0.20)) { tab = item }
+                } label: {
+                    Label(item.label, systemImage: item.symbol)
+                        .font(.system(size: 10, weight: .black, design: .monospaced))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(tab == item ? RelayStyle.panel : Color.primary)
+                        .background(tab == item ? Color.primary : Color.clear)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
     }
 
     private var returnQueue: some View {
@@ -147,7 +180,7 @@ private struct HubView: View {
                 HStack(spacing: 8) {
                     ForEach(status.providers) { provider in
                         VStack(alignment: .leading, spacing: 9) {
-                            HStack { Text(provider.mark).font(.headline); Spacer(); Text(provider.active > 0 ? "LIVE" : "IDLE").font(.system(size: 8, weight: .black, design: .monospaced)).foregroundStyle(.secondary) }
+                            HStack { RelayProviderIcon(provider: provider, size: 25); Spacer(); Text(provider.active > 0 ? "LIVE" : "IDLE").font(.system(size: 8, weight: .black, design: .monospaced)).foregroundStyle(.secondary) }
                             Text(provider.name.uppercased()).font(.system(size: 11, weight: .black, design: .monospaced))
                             Text(provider.usage.uppercased()).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
                         }
@@ -174,6 +207,83 @@ private struct HubView: View {
             .background(RelayStyle.surface)
             .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
         }
+    }
+
+    private var toolsList: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            MobileCapabilitySection(title: "SKILLS", values: skills)
+            MobileCapabilitySection(title: "MCP SERVERS", values: mcps)
+            MobileCapabilitySection(title: "PLUGINS", values: plugins)
+            Text("CAPABILITIES ARE READ FROM EACH SESSION'S LOCAL EVENT LOG.")
+                .font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func unique(_ values: [String]) -> [String] {
+        Array(Set(values)).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+}
+
+private enum MobileHubTab: String, CaseIterable, Identifiable {
+    case home, agents, tools
+    var id: String { rawValue }
+    var label: String { rawValue.uppercased() }
+    var symbol: String {
+        switch self {
+        case .home: return "square.grid.2x2.fill"
+        case .agents: return "sparkles"
+        case .tools: return "square.stack.3d.up.fill"
+        }
+    }
+}
+
+private struct MobileCapabilitySection: View {
+    let title: String
+    let values: [String]
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LabelLine(title: title, note: "\(values.count) DETECTED")
+            VStack(spacing: 0) {
+                if values.isEmpty {
+                    Text("NONE RECORDED").font(.system(size: 10, weight: .black, design: .monospaced))
+                        .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading).padding(12)
+                } else {
+                    ForEach(Array(values.enumerated()), id: \.offset) { index, value in
+                        HStack { Text(value.uppercased()).font(.system(size: 11, weight: .bold, design: .monospaced)); Spacer() }
+                            .padding(12)
+                        if index < values.count - 1 { Rectangle().fill(RelayStyle.line).frame(height: 1) }
+                    }
+                }
+            }
+            .background(RelayStyle.surface)
+            .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
+        }
+    }
+}
+
+private struct RelayProviderIcon: View {
+    let provider: RelayProvider
+    let size: CGFloat
+    var body: some View {
+        ZStack {
+            Rectangle().fill(provider.active > 0 ? Color.primary : RelayStyle.surface)
+            Group {
+                switch provider.id.lowercased() {
+                case "codex": Text("⌬")
+                case "claude": Text("✳")
+                case "gemini": Text("✦")
+                case "cursor": Image(systemName: "cursorarrow")
+                case "grok": Text("𝕏")
+                default: Text(provider.mark)
+                }
+            }
+            .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
+            .foregroundStyle(provider.active > 0 ? RelayStyle.panel : Color.primary)
+        }
+        .frame(width: size, height: size)
+        .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
+        .accessibilityLabel(provider.name)
     }
 }
 
@@ -246,5 +356,21 @@ private struct RelayMark: View {
             }
         }
         .frame(width: size, height: size)
+    }
+}
+
+private struct RelayAnimatedMark: View {
+    let size: CGFloat
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
+
+    var body: some View {
+        RelayMark(size: size)
+            .opacity(appeared || reduceMotion ? 1 : 0.35)
+            .offset(y: appeared || reduceMotion ? 0 : 4)
+            .onAppear {
+                guard !reduceMotion else { appeared = true; return }
+                withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.22)) { appeared = true }
+            }
     }
 }

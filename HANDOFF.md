@@ -2,7 +2,7 @@
 
 ## Current state
 
-Version 0.3 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO RELAY companion, and a printable Agent Desk prototype. The Mac now prioritizes a human return queue and records model/MCP/plugin/skill provenance when sessions expose it. Core monitoring remains local and requires no provider credentials.
+Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO RELAY companion, and a printable Agent Desk prototype. The Mac opens as a compact models-only strip and expands into a horizontal Home, Agents, and Tools workspace. Both apps prioritize the human return queue and expose model/MCP/plugin/skill provenance when sessions provide it. Core monitoring remains local and requires no provider credentials.
 
 ## Before public distribution
 
@@ -23,7 +23,8 @@ Version 0.3 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 
 - `BarBoyApp.swift`: menu-bar, settings, and preview window scenes.
 - `ActivityMonitor.swift`: process scanning and conservative JSONL metadata extraction.
-- `DashboardView.swift`: the production popover UI.
+- `DashboardView.swift`: the compact popup plus expanded three-tab workspace.
+- `DesignSystem.swift` and `DESIGN.md`: Momo Labz visual tokens, provider marks, components, and motion contract.
 - `SettingsView.swift`: provider controls and privacy disclosure.
 - `Models.swift`: providers, sessions, and snapshots.
 - `AttentionNotifier.swift`: opt-in user notifications for newly urgent sessions.

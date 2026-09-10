@@ -97,17 +97,21 @@ final class BarBoyTests: XCTestCase {
         let deskDisplay = DeskDisplayServer(defaults: suite)
         try render(preferredScheme: .dark, name: "barboy-dark", monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
         try render(preferredScheme: .light, name: "barboy-light", monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
+        try render(preferredScheme: .dark, name: "barboy-agents-dark", initialTab: .agents, monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
+        try render(preferredScheme: .dark, name: "barboy-tools-dark", initialTab: .tools, monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
+        try renderCompact(preferredScheme: .dark, name: "barboy-compact-dark", monitor: monitor, preferences: preferences)
+        try renderCompact(preferredScheme: .light, name: "barboy-compact-light", monitor: monitor, preferences: preferences)
     }
 
-    private func render(preferredScheme: ColorScheme, name: String, monitor: ActivityMonitor, preferences: PreferencesStore, deskDisplay: DeskDisplayServer) throws {
-        let view = DashboardView(refreshOnAppear: false)
+    private func render(preferredScheme: ColorScheme, name: String, initialTab: DashboardTab = .home, monitor: ActivityMonitor, preferences: PreferencesStore, deskDisplay: DeskDisplayServer) throws {
+        let view = DashboardView(refreshOnAppear: false, initialTab: initialTab)
             .environmentObject(monitor)
             .environmentObject(preferences)
             .environmentObject(deskDisplay)
             .preferredColorScheme(preferredScheme)
-            .frame(width: 420, height: 650)
+            .frame(width: 760, height: 500)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 420, height: 650)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 760, height: 500)
         hostingView.appearance = NSAppearance(named: preferredScheme == .dark ? .darkAqua : .aqua)
         hostingView.layoutSubtreeIfNeeded()
         guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
@@ -117,6 +121,28 @@ final class BarBoyTests: XCTestCase {
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         guard let png = bitmap.representation(using: .png, properties: [:]) else {
             XCTFail("Could not encode dashboard")
+            return
+        }
+        try png.write(to: URL(fileURLWithPath: "/tmp/\(name).png"), options: .atomic)
+    }
+
+    private func renderCompact(preferredScheme: ColorScheme, name: String, monitor: ActivityMonitor, preferences: PreferencesStore) throws {
+        let view = CompactDashboardView(refreshOnAppear: false, animateMomo: false)
+            .environmentObject(monitor)
+            .environmentObject(preferences)
+            .preferredColorScheme(preferredScheme)
+            .frame(width: 430, height: 154)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 154)
+        hostingView.appearance = NSAppearance(named: preferredScheme == .dark ? .darkAqua : .aqua)
+        hostingView.layoutSubtreeIfNeeded()
+        guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
+            XCTFail("Could not render compact dashboard")
+            return
+        }
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        guard let png = bitmap.representation(using: .png, properties: [:]) else {
+            XCTFail("Could not encode compact dashboard")
             return
         }
         try png.write(to: URL(fileURLWithPath: "/tmp/\(name).png"), options: .atomic)

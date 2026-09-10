@@ -8,8 +8,8 @@ options:
 settings:
   base:
     PRODUCT_NAME: BAR BOY
-    MARKETING_VERSION: 0.3.0
-    CURRENT_PROJECT_VERSION: 3
+    MARKETING_VERSION: 0.4.0
+    CURRENT_PROJECT_VERSION: 4
     SWIFT_VERSION: 5.0
     MACOSX_DEPLOYMENT_TARGET: 14.0
     CODE_SIGN_STYLE: Automatic
@@ -68,8 +68,8 @@ targets:
       path: iOS/Info.plist
       properties:
         CFBundleDisplayName: MOMO RELAY
-        CFBundleShortVersionString: "0.3.0"
-        CFBundleVersion: "3"
+        CFBundleShortVersionString: "0.4.0"
+        CFBundleVersion: "4"
         UILaunchScreen: {}
         NSLocalNetworkUsageDescription: MOMO RELAY connects to BAR BOY on your local network to show agents waiting for you.
         NSAppTransportSecurity:

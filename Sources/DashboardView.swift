@@ -7,136 +7,314 @@ struct DashboardView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @Environment(\.openSettings) private var openSettings
-    @State private var selection: AIProvider?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var tab: DashboardTab = .home
+    @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
 
-    private var visibleSnapshots: [ProviderSnapshot] {
-        monitor.snapshots.filter { snapshot in
-            preferences.isEnabled(snapshot.provider)
-                && (!preferences.hideIdleProviders || snapshot.activeCount > 0 || !snapshot.sessions.isEmpty)
-                && (selection == nil || selection == snapshot.provider)
+    init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home) {
+        self.refreshOnAppear = refreshOnAppear
+        _tab = State(initialValue: initialTab)
+    }
+
+    private var enabledSnapshots: [ProviderSnapshot] {
+        monitor.snapshots.filter {
+            preferences.isEnabled($0.provider)
+                && (!preferences.hideIdleProviders || $0.activeCount > 0 || !$0.sessions.isEmpty)
         }
     }
 
     private var allSessions: [AgentSession] {
-        visibleSnapshots.flatMap(\.sessions).sorted {
+        enabledSnapshots.flatMap(\.sessions).sorted {
             if $0.attention.isUrgent != $1.attention.isUrgent { return $0.attention.isUrgent }
             if $0.isRunning != $1.isRunning { return $0.isRunning }
             return $0.updatedAt > $1.updatedAt
         }
     }
 
-    private var urgentCount: Int { allSessions.filter { $0.attention.isUrgent }.count }
+    private var visibleSessions: [AgentSession] {
+        allSessions.filter { providerFilter == nil || $0.provider == providerFilter }
+    }
+
     private var urgentSessions: [AgentSession] { allSessions.filter { $0.attention.isUrgent } }
-    private var activeSessions: [AgentSession] { allSessions.filter { !$0.attention.isUrgent } }
+    private var urgentCount: Int { urgentSessions.count }
+    private var liveCount: Int { allSessions.filter(\.isRunning).count }
+    private var skillTiles: [CapabilityTile] { capabilityTiles(kind: .skill) { $0.skills } }
+    private var integrationTiles: [CapabilityTile] {
+        capabilityTiles(kind: .mcp) { $0.mcpServers } + capabilityTiles(kind: .plugin) { $0.plugins }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            ScrollView {
-                VStack(alignment: .leading, spacing: 15) {
-                    yourTurnSection
-                    usageTable
-                    activitySection
-                    if preferences.deskDisplayEnabled { deskDisplaySection }
-                }
-                .padding(14)
-            }
+            page
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
             footer
         }
-        .frame(width: 420, height: 650)
+        .frame(minWidth: 760, minHeight: 500)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
-        .sheet(item: $inspectedSession) { session in
-            SessionInspectorView(session: session)
-        }
+        .sheet(item: $inspectedSession) { SessionInspectorView(session: $0) }
     }
 
     private var header: some View {
-        HStack(spacing: 11) {
-            PixelBarBoyMark(size: 34, tile: true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("MOMO LABZ")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
-                    .tracking(1.4)
-                    .foregroundStyle(.secondary)
-                Text("BAR BOY")
-                    .font(.system(size: 15, weight: .black, design: .monospaced))
-                    .tracking(1.1)
+        HStack(spacing: 12) {
+            PixelBarBoyMark(size: 32, tile: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
+                Text("BAR BOY").font(BarBoyStyle.display).tracking(0.9)
             }
+            HStack(spacing: 4) {
+                ForEach(DashboardTab.allCases) { item in
+                    Button {
+                        withAnimation(reduceMotion ? nil : BarBoyStyle.pageAnimation) { tab = item }
+                    } label: {
+                        Label(item.label, systemImage: item.symbol)
+                            .font(BarBoyStyle.navLabel)
+                            .padding(.horizontal, 11).padding(.vertical, 7)
+                            .foregroundStyle(tab == item ? BarBoyStyle.inverseInk : Color.primary)
+                            .background(tab == item ? Color.primary : Color.clear, in: Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(tab == item ? .isSelected : [])
+                }
+            }
+            .padding(3)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .padding(.leading, 12)
             Spacer()
             if urgentCount > 0 {
-                Text("! \(urgentCount) NEED\(urgentCount == 1 ? "S" : "") YOU")
-                    .font(.system(size: 9, weight: .black, design: .monospaced))
-                    .foregroundStyle(BarBoyStyle.coral)
+                HStack(spacing: 5) {
+                    Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 13)
+                    Text("\(urgentCount) NEED\(urgentCount == 1 ? "S" : "") YOU")
+                }
+                .font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
+                .accessibilityLabel("\(urgentCount) sessions need you")
+            } else {
+                Text("\(liveCount) LIVE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
             Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                .barBoyButton().help("Refresh local activity")
-            Button { openSettings() } label: { Image(systemName: "slider.horizontal.3") }
-                .barBoyButton().help("Settings")
+                .barBoyIconButton().help("Refresh local activity")
+            Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
+                .barBoyIconButton().help("Settings")
         }
-        .padding(14)
+        .padding(.horizontal, 14)
+        .frame(height: 62)
     }
 
-    private var yourTurnSection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            sectionLabel("YOUR TURN", note: urgentCount == 0 ? "agents keep moving" : "\(urgentCount) blocking")
-            if urgentSessions.isEmpty {
-                HStack(spacing: 10) {
-                    Rectangle().fill(Color.primary).frame(width: 7, height: 27)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("NO ONE IS WAITING").font(.system(size: 10, weight: .black, design: .monospaced))
-                        Text("You can stay in flow. BAR BOY is watching the returns.")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                }
-                .padding(10)
-                .background(BarBoyStyle.surface)
-                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(urgentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                        Button { inspectedSession = session } label: {
-                            SessionRow(session: session)
-                        }
-                        .buttonStyle(.plain)
-                        if index < min(urgentSessions.count, 3) - 1 {
-                            Rectangle().fill(BarBoyStyle.coral.opacity(0.35)).frame(height: 1).padding(.leading, 43)
-                        }
-                    }
-                }
-                .padding(.horizontal, 10)
-                .background(BarBoyStyle.coral.opacity(0.08))
-                .overlay(Rectangle().stroke(BarBoyStyle.coral, lineWidth: 1.5))
+    @ViewBuilder private var page: some View {
+        Group {
+            switch tab {
+            case .home: homePage
+            case .agents: agentsPage
+            case .tools: toolsPage
             }
         }
+        .id(tab)
+        .transition(.asymmetric(
+            insertion: .opacity.combined(with: .offset(y: reduceMotion ? 0 : 5)),
+            removal: .opacity
+        ))
+    }
+
+    private var homePage: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 15) {
+                returnQueue
+                skillSection
+                integrationsSection
+                if preferences.deskDisplayEnabled { deskDisplayStrip }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
+            VStack(alignment: .leading, spacing: 14) {
+                shortcutsPanel
+                primaryAction
+                liveSummary
+            }
+            .frame(width: 222, alignment: .topLeading)
+        }
+        .padding(18)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var returnQueue: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "YOUR TURN", note: urgentCount == 0 ? "FLOW CLEAR" : "\(urgentCount) BLOCKING")
+            VStack(spacing: 0) {
+                if urgentSessions.isEmpty {
+                    HStack(spacing: 11) {
+                        Rectangle().fill(Color.primary).frame(width: 6, height: 32)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("NO ONE IS WAITING").font(BarBoyStyle.rowTitle)
+                            Text("The queue interrupts only when an agent needs you.")
+                                .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(11)
+                } else {
+                    ForEach(Array(urgentSessions.prefix(2).enumerated()), id: \.element.id) { index, session in
+                        Button { inspectedSession = session } label: { SessionRow(session: session) }
+                            .buttonStyle(.plain)
+                        if index < min(urgentSessions.count, 2) - 1 {
+                            Rectangle().fill(BarBoyStyle.coral.opacity(0.36)).frame(height: 1).padding(.leading, 45)
+                        }
+                    }
+                }
+            }
+            .background(urgentSessions.isEmpty ? BarBoyStyle.surface : BarBoyStyle.coral.opacity(0.08))
+            .overlay(Rectangle().stroke(urgentSessions.isEmpty ? BarBoyStyle.hairline : BarBoyStyle.coral, lineWidth: urgentSessions.isEmpty ? 1 : 1.5))
+        }
+    }
+
+    private var skillSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "SKILLS IN USE", note: skillTiles.isEmpty ? "NOT RECORDED" : "\(skillTiles.count) DETECTED")
+            if skillTiles.isEmpty {
+                EmptyCapabilityRow(text: "Skills appear when a local session records them.")
+            } else {
+                HStack(spacing: 8) {
+                    ForEach(skillTiles.prefix(4)) { CapabilitySquare(tile: $0) }
+                    if skillTiles.count > 4 { MoreCapabilitySquare(count: skillTiles.count - 4) }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private var integrationsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "ACTIVE INTEGRATIONS", note: "MCP + PLUGINS")
+            HStack(spacing: 7) {
+                if integrationTiles.isEmpty {
+                    Text("NONE RECORDED IN LIVE SESSIONS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                } else {
+                    ForEach(integrationTiles.prefix(6)) { IntegrationMark(tile: $0) }
+                    if integrationTiles.count > 6 {
+                        Text("+\(integrationTiles.count - 6)")
+                            .font(BarBoyStyle.microLabel).frame(width: 30, height: 30)
+                            .background(BarBoyStyle.raised)
+                            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        }
+    }
+
+    private var shortcutsPanel: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            Label("SHORTCUTS", systemImage: "command").font(BarBoyStyle.sectionLabel).foregroundStyle(.secondary)
+            ShortcutRow(label: "Quick Ask", keys: ["⌃", "⌥", "SPACE"])
+            ShortcutRow(label: "Talk", keys: ["NEXT"], disabled: true)
+            ShortcutRow(label: "Dictate", keys: ["NEXT"], disabled: true)
+            ShortcutRow(label: "Hands-free", keys: ["NEXT"], disabled: true)
+        }
+        .padding(12)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var primaryAction: some View {
+        Button(action: openNext) {
+            HStack {
+                Text(urgentSessions.isEmpty ? "ASK AI" : "OPEN RETURN")
+                Spacer()
+                Image(systemName: urgentSessions.isEmpty ? "arrow.up.right" : "arrow.right")
+            }
+            .font(BarBoyStyle.actionLabel)
+            .padding(.horizontal, 14)
+            .frame(height: 48)
+            .foregroundStyle(BarBoyStyle.inverseInk)
+            .background(Color.primary)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(BarBoyPressButtonStyle(reduceMotion: reduceMotion))
+        .help(urgentSessions.isEmpty ? "Open Quick Ask" : "Inspect the next blocked session")
+    }
+
+    private var liveSummary: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            SummaryRow(label: "LIVE NOW", value: liveCount)
+            SummaryRow(label: "MODELS SEEN", value: enabledSnapshots.count)
+            SummaryRow(label: "CAPABILITIES", value: skillTiles.count + integrationTiles.count)
+        }
+        .padding(12)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var agentsPage: some View {
+        HStack(alignment: .top, spacing: 16) {
+            usageTable.frame(width: 328)
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
+            activitySection.frame(maxWidth: .infinity)
+        }
+        .padding(18)
+        .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var toolsPage: some View {
+        HStack(alignment: .top, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(title: "SKILL CATALOG", note: "USED BY LIVE SESSIONS")
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
+                    if skillTiles.isEmpty { EmptyCapabilityRow(text: "No skills recorded yet.") }
+                    else { ForEach(skillTiles) { CapabilitySquare(tile: $0) } }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(title: "INTEGRATIONS", note: "MCP + PLUGINS")
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(integrationTiles) { tile in
+                        HStack(spacing: 10) {
+                            IntegrationMark(tile: tile)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle)
+                                Text("\(tile.kind.label) / \(tile.provider.name.uppercased())")
+                                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+                    }
+                    if integrationTiles.isEmpty { EmptyCapabilityRow(text: "No integrations recorded yet.") }
+                }
+                Button("MANAGE PROVIDER ACCESS") { openSettings() }
+                    .barBoyButton()
+            }
+            .frame(width: 310, alignment: .topLeading)
+        }
+        .padding(18)
+        .frame(maxHeight: .infinity, alignment: .top)
     }
 
     private var usageTable: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            sectionLabel("MODELS", note: "local + linked usage")
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "MODELS", note: "LOCAL + LINKED")
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text("PROVIDER").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("SHORT").frame(width: 46, alignment: .trailing)
-                    Text("WEEK").frame(width: 46, alignment: .trailing)
-                    Text("SESS").frame(width: 38, alignment: .trailing)
+                    Text("SHORT").frame(width: 40, alignment: .trailing)
+                    Text("WEEK").frame(width: 40, alignment: .trailing)
+                    Text("SESS").frame(width: 34, alignment: .trailing)
                 }
-                .font(.system(size: 8, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 10).padding(.vertical, 7)
+                .font(BarBoyStyle.tableHeader).foregroundStyle(.secondary)
+                .padding(.horizontal, 9).padding(.vertical, 7)
                 Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-                ForEach(monitor.snapshots.filter { preferences.isEnabled($0.provider) }) { snapshot in
-                    ProviderUsageRow(snapshot: snapshot, selected: selection == snapshot.provider) {
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.82)) {
-                            selection = selection == snapshot.provider ? nil : snapshot.provider
-                        }
+                ForEach(Array(enabledSnapshots.enumerated()), id: \.element.id) { index, snapshot in
+                    ProviderUsageRow(snapshot: snapshot, selected: providerFilter == snapshot.provider) {
+                        providerFilter = providerFilter == snapshot.provider ? nil : snapshot.provider
                     }
-                    if snapshot.provider != monitor.snapshots.filter({ preferences.isEnabled($0.provider) }).last?.provider {
-                        Rectangle().fill(BarBoyStyle.hairline.opacity(0.7)).frame(height: 1).padding(.leading, 42)
+                    if index < enabledSnapshots.count - 1 {
+                        Rectangle().fill(BarBoyStyle.hairline.opacity(0.7)).frame(height: 1).padding(.leading, 41)
                     }
                 }
             }
@@ -146,71 +324,77 @@ struct DashboardView: View {
     }
 
     private var activitySection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            sectionLabel("AGENTS IN MOTION", note: "\(allSessions.filter(\.isRunning).count) live")
-            if activeSessions.isEmpty {
-                Surface {
-                    HStack(spacing: 12) {
-                        PixelBarBoyMark(size: 26)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(urgentSessions.isEmpty ? "QUIET RIGHT NOW" : "ALL RETURNS NEED YOU").font(.system(size: 10, weight: .black, design: .monospaced))
-                            Text(urgentSessions.isEmpty ? "New local AI sessions will appear here." : "Clear the return queue above to keep work moving.").font(.caption).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                    }
-                }
-            } else {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "AGENTS", note: providerFilter?.name.uppercased() ?? "\(liveCount) LIVE")
+            ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(Array(activeSessions.prefix(5).enumerated()), id: \.element.id) { index, session in
-                        Button { inspectedSession = session } label: {
-                            SessionRow(session: session)
+                    if visibleSessions.isEmpty {
+                        HStack(spacing: 12) {
+                            PixelBarBoyMark(size: 28)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("QUIET RIGHT NOW").font(BarBoyStyle.rowTitle)
+                                Text("New local sessions appear here.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                            }
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
-                        if index < min(activeSessions.count, 5) - 1 {
-                            Rectangle().fill(BarBoyStyle.hairline.opacity(0.7)).frame(height: 1).padding(.leading, 43)
+                        .padding(13)
+                    } else {
+                        ForEach(Array(visibleSessions.prefix(6).enumerated()), id: \.element.id) { index, session in
+                            Button { inspectedSession = session } label: { SessionRow(session: session) }
+                                .buttonStyle(.plain)
+                            if index < min(visibleSessions.count, 6) - 1 {
+                                Rectangle().fill(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.35) : BarBoyStyle.hairline.opacity(0.7))
+                                    .frame(height: 1).padding(.leading, 45)
+                            }
                         }
                     }
                 }
-                .padding(.horizontal, 10)
-                .background(BarBoyStyle.surface)
-                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
             }
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         }
     }
 
-    private var deskDisplaySection: some View {
-        HStack(spacing: 9) {
-            Text("DESK DISPLAY").font(.system(size: 9, weight: .black, design: .monospaced))
-            Rectangle().fill(deskDisplay.state == .ready ? Color.primary : Color.secondary).frame(width: 7, height: 7)
-            Text("\(deskDisplay.state.label.uppercased()) · \(deskDisplay.pairingCode)")
-                .font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+    private var deskDisplayStrip: some View {
+        HStack(spacing: 8) {
+            Text("DESK DISPLAY").font(BarBoyStyle.microLabel)
+            Rectangle().fill(deskDisplay.state == .ready ? Color.primary : Color.secondary).frame(width: 6, height: 6)
+            Text("\(deskDisplay.state.label.uppercased()) / \(deskDisplay.pairingCode)")
+                .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             Spacer()
             Button("OPEN") { if let url = deskDisplay.displayURL { NSWorkspace.shared.open(url) } }.barBoyButton()
         }
     }
 
     private var footer: some View {
-        HStack {
-            Button("ASK AI") { NotificationCenter.default.post(name: .showCommandPalette, object: nil) }
-                .barBoyButton().help("Quick Ask · Control–Option–Space")
+        HStack(spacing: 10) {
             Button("SUPPORT US") { NSWorkspace.shared.open(URL(string: "https://github.com/sponsors/Momo-Labz")!) }
                 .barBoyButton()
+            Text("PRIVATE / LOCAL-FIRST").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             Spacer()
             TimelineView(.periodic(from: .now, by: 15)) { _ in
-                Text(lastUpdateLabel.uppercased())
-                    .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                Text(lastUpdateLabel.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
             Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }
                 .buttonStyle(.plain).help("Quit BAR BOY")
         }
-        .padding(11)
+        .padding(.horizontal, 14)
+        .frame(height: 48)
     }
 
-    private func sectionLabel(_ title: String, note: String) -> some View {
-        HStack {
-            Text(title).font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.9).foregroundStyle(.secondary)
-            Spacer()
-            Text(note).font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.tertiary)
+    private func openNext() {
+        if let session = urgentSessions.first { inspectedSession = session }
+        else { NotificationCenter.default.post(name: .showCommandPalette, object: nil) }
+    }
+
+    private func capabilityTiles(kind: CapabilityKind, values: (AgentSession) -> [String]) -> [CapabilityTile] {
+        var seen = Set<String>()
+        return allSessions.flatMap { session in
+            values(session).compactMap { name in
+                let key = "\(kind.rawValue):\(name.lowercased())"
+                guard seen.insert(key).inserted else { return nil }
+                return CapabilityTile(name: name, kind: kind, provider: session.provider)
+            }
         }
     }
 
@@ -219,7 +403,223 @@ struct DashboardView: View {
         let seconds = max(0, Int(Date().timeIntervalSince(date)))
         return seconds < 5 ? "Updated now" : "Updated \(seconds)s ago"
     }
+}
 
+struct CompactDashboardView: View {
+    var refreshOnAppear = true
+    var animateMomo = true
+    @EnvironmentObject private var monitor: ActivityMonitor
+    @EnvironmentObject private var preferences: PreferencesStore
+    @Environment(\.openWindow) private var openWindow
+
+    private var snapshots: [ProviderSnapshot] {
+        monitor.snapshots.filter { preferences.isEnabled($0.provider) }
+    }
+
+    private var urgentCount: Int { snapshots.reduce(0) { $0 + $1.needsAttentionCount } }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                AnimatedMomoMark(size: 28, animated: animateMomo)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.2).foregroundStyle(.secondary)
+                    Text("MODELS").font(BarBoyStyle.display)
+                }
+                Spacer()
+                if urgentCount > 0 {
+                    Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
+                        .accessibilityLabel("\(urgentCount) sessions need you")
+                }
+                Button(action: expand) {
+                    Label("EXPAND", systemImage: "arrow.up.left.and.arrow.down.right")
+                        .font(BarBoyStyle.microLabel)
+                }
+                .barBoyButton()
+                .help("Open the full BAR BOY hub")
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 52)
+
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+
+            HStack(spacing: 7) {
+                ForEach(snapshots) { snapshot in
+                    CompactProviderCell(snapshot: snapshot)
+                }
+            }
+            .padding(12)
+        }
+        .frame(width: 430, height: 154)
+        .background(BarBoyStyle.panel)
+        .task { if refreshOnAppear { monitor.refresh() } }
+    }
+
+    private func expand() {
+        let compactWindow = NSApplication.shared.keyWindow
+        openWindow(id: "dashboard")
+        DispatchQueue.main.async { compactWindow?.orderOut(nil) }
+    }
+}
+
+private struct CompactProviderCell: View {
+    let snapshot: ProviderSnapshot
+
+    var body: some View {
+        VStack(spacing: 5) {
+            ZStack(alignment: .topTrailing) {
+                ProviderMark(provider: snapshot.provider, size: 30, active: snapshot.activeCount > 0)
+                if snapshot.needsAttentionCount > 0 {
+                    Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 12).offset(x: 4, y: -3)
+                }
+            }
+            Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
+            Text(snapshot.usageText.uppercased()).font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 72)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.activeCount) active")
+    }
+}
+
+enum DashboardTab: String, CaseIterable, Identifiable {
+    case home, agents, tools
+    var id: String { rawValue }
+    var label: String { rawValue.uppercased() }
+    var symbol: String {
+        switch self {
+        case .home: return "square.grid.2x2.fill"
+        case .agents: return "sparkles"
+        case .tools: return "square.stack.3d.up.fill"
+        }
+    }
+}
+
+private enum CapabilityKind: String {
+    case skill, mcp, plugin
+    var label: String { self == .skill ? "SKILL" : (self == .mcp ? "MCP" : "PLUGIN") }
+}
+
+private struct CapabilityTile: Identifiable {
+    let name: String
+    let kind: CapabilityKind
+    let provider: AIProvider
+    var id: String { "\(kind.rawValue):\(name.lowercased())" }
+    var monogram: String { String(name.prefix(2)).uppercased() }
+}
+
+private struct SectionHeader: View {
+    let title: String
+    let note: String
+    var body: some View {
+        HStack {
+            Text(title).font(BarBoyStyle.sectionLabel).tracking(0.8).foregroundStyle(.secondary)
+            Spacer()
+            Text(note).font(BarBoyStyle.microLabel).foregroundStyle(.tertiary)
+        }
+    }
+}
+
+private struct CapabilitySquare: View {
+    let tile: CapabilityTile
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text(tile.monogram).font(BarBoyStyle.capabilityMark)
+                Spacer()
+                ProviderMark(provider: tile.provider, size: 18, active: true)
+            }
+            Spacer()
+            Text(tile.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(2)
+            Text(tile.kind.label).font(.system(size: 7, weight: .black, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .padding(9)
+        .frame(width: 82, height: 78, alignment: .leading)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(tile.name), \(tile.kind.label), used by \(tile.provider.name)")
+    }
+}
+
+private struct MoreCapabilitySquare: View {
+    let count: Int
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("+\(count)").font(BarBoyStyle.metric)
+            Text("MORE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+        }
+        .frame(width: 62, height: 78)
+        .background(BarBoyStyle.raised)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+}
+
+private struct EmptyCapabilityRow: View {
+    let text: String
+    var body: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "square.dashed")
+            Text(text).font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+            Spacer()
+        }
+        .padding(11)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+}
+
+private struct IntegrationMark: View {
+    let tile: CapabilityTile
+    var body: some View {
+        VStack(spacing: 1) {
+            Text(tile.monogram).font(BarBoyStyle.rowTitle)
+            Text(tile.kind == .mcp ? "M" : "P")
+                .font(.system(size: 6, weight: .black, design: .monospaced)).foregroundStyle(.secondary)
+        }
+        .frame(width: 30, height: 30)
+        .background(BarBoyStyle.raised)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .help("\(tile.name) / \(tile.kind.label) / \(tile.provider.name)")
+        .accessibilityLabel("\(tile.name), \(tile.kind.label)")
+    }
+}
+
+private struct ShortcutRow: View {
+    let label: String
+    let keys: [String]
+    var disabled = false
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(label).font(BarBoyStyle.bodySmall)
+                .foregroundStyle(disabled ? Color.secondary.opacity(0.5) : Color.secondary).lineLimit(1)
+            Spacer(minLength: 6)
+            HStack(spacing: 3) {
+                ForEach(keys, id: \.self) { key in
+                    Text(key).font(BarBoyStyle.keycap)
+                        .foregroundStyle(disabled ? Color.secondary.opacity(0.5) : Color.primary)
+                        .padding(.horizontal, key.count > 1 ? 7 : 6).frame(height: 24)
+                        .background(BarBoyStyle.raised)
+                        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                }
+            }
+        }
+    }
+}
+
+private struct SummaryRow: View {
+    let label: String
+    let value: Int
+    var body: some View {
+        HStack {
+            Text(label).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            Spacer()
+            Text("\(value)").font(BarBoyStyle.metric)
+        }
+    }
 }
 
 private struct ProviderUsageRow: View {
@@ -229,30 +629,29 @@ private struct ProviderUsageRow: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 ProviderMark(provider: snapshot.provider, size: 24, active: snapshot.activeCount > 0)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(snapshot.provider.name.uppercased())
-                        .font(.system(size: 10, weight: .black, design: .monospaced))
-                    Text(snapshot.usageText.uppercased())
-                        .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.secondary)
+                    Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle)
+                    Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(percent(snapshot.shortWindowPercent)).frame(width: 46, alignment: .trailing)
-                Text(percent(snapshot.weekWindowPercent)).frame(width: 46, alignment: .trailing)
+                Text(percent(snapshot.shortWindowPercent)).frame(width: 40, alignment: .trailing)
+                Text(percent(snapshot.weekWindowPercent)).frame(width: 40, alignment: .trailing)
                 ZStack(alignment: .topTrailing) {
-                    Text("\(snapshot.sessions.count)").frame(width: 38, alignment: .trailing)
+                    Text("\(snapshot.sessions.count)").frame(width: 34, alignment: .trailing)
                     if snapshot.needsAttentionCount > 0 {
-                        Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 11).offset(x: 5, y: -5)
+                        Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 11).offset(x: 4, y: -5)
                     }
                 }
             }
-            .font(.system(size: 10, weight: .bold, design: .monospaced))
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .background(selected ? Color.primary.opacity(0.08) : Color.clear)
+            .font(BarBoyStyle.metricSmall)
+            .padding(.horizontal, 9).padding(.vertical, 7)
+            .background(selected ? Color.primary.opacity(0.09) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.sessions.count) sessions, \(snapshot.usageText) local usage")
     }
 
     private func percent(_ value: Int?) -> String { value.map { "\($0)%" } ?? "—" }
@@ -260,30 +659,28 @@ private struct ProviderUsageRow: View {
 
 private struct SessionRow: View {
     let session: AgentSession
-
     var body: some View {
         HStack(spacing: 9) {
-            ProviderMark(provider: session.provider, size: 27, active: session.isRunning)
+            ProviderMark(provider: session.provider, size: 28, active: session.isRunning)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title).font(.subheadline.weight(.semibold)).lineLimit(1)
+                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(1)
                 Text("\(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
                 if !session.capabilitySummary.isEmpty {
-                    Text(session.capabilitySummary)
-                        .font(.system(size: 7, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
+                    Text(session.capabilitySummary).font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.tertiary).lineLimit(1)
                 }
             }
             Spacer(minLength: 6)
             Text(session.attention.isUrgent ? session.attention.label : session.ageLabel)
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : .secondary)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : Color.secondary)
                 .padding(.horizontal, 6).padding(.vertical, 4)
                 .background(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.10) : BarBoyStyle.raised)
                 .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
         }
-        .padding(.vertical, 8)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .contentShape(Rectangle())
         .help(session.attentionReason ?? session.detail)
     }
 }
@@ -291,7 +688,6 @@ private struct SessionRow: View {
 private struct SessionInspectorView: View {
     @Environment(\.dismiss) private var dismiss
     let session: AgentSession
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
@@ -299,14 +695,13 @@ private struct SessionInspectorView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(session.title).font(.headline).lineLimit(2)
                     Text("\(session.provider.name.uppercased()) / \(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
-                        .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                        .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("DONE") { dismiss() }.barBoyButton()
             }
             .padding(16)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if session.attention.isUrgent {
@@ -330,39 +725,20 @@ private struct InspectorBlock: View {
     let title: String
     let values: [String]
     var alert = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text(title)
-                .font(.system(size: 8, weight: .black, design: .monospaced))
-                .foregroundStyle(alert ? BarBoyStyle.coral : .secondary)
+            Text(title).font(BarBoyStyle.microLabel).foregroundStyle(alert ? BarBoyStyle.coral : Color.secondary)
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(Array(values.enumerated()), id: \.offset) { index, value in
                     Text(value.isEmpty ? "No detail recorded" : value)
                         .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(9)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(9)
                     if index < values.count - 1 { Rectangle().fill(BarBoyStyle.hairline).frame(height: 1) }
                 }
             }
             .background(alert ? BarBoyStyle.coral.opacity(0.08) : BarBoyStyle.surface)
             .overlay(Rectangle().stroke(alert ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
         }
-    }
-}
-
-private struct AttentionPulse: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var pulse = false
-
-    var body: some View {
-        Rectangle()
-            .fill(BarBoyStyle.coral)
-            .frame(width: 8, height: 24)
-            .opacity(pulse && !reduceMotion ? 0.42 : 1)
-            .scaleEffect(pulse && !reduceMotion ? 0.88 : 1)
-            .onAppear { pulse = true }
-            .animation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.85).repeatForever(autoreverses: true), value: pulse)
     }
 }
 

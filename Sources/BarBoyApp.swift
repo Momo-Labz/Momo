@@ -10,10 +10,9 @@ struct BarBoyApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            DashboardView()
+            CompactDashboardView()
                 .environmentObject(monitor)
                 .environmentObject(preferences)
-                .environmentObject(deskDisplay)
         } label: {
             ZStack {
                 MenuBarLabelView(snapshots: monitor.snapshots, compact: preferences.compactMenuBar)
@@ -37,10 +36,10 @@ struct BarBoyApp: App {
                 .environmentObject(preferences)
                 .environmentObject(deskDisplay)
                 .environmentObject(attentionNotifier)
-                .frame(width: 420, height: 650)
+                .frame(minWidth: 760, minHeight: 500)
         }
         .defaultPosition(.center)
-        .windowResizability(.contentSize)
+        .defaultSize(width: 900, height: 560)
 
         Window("Quick Ask", id: "command-palette") {
             CommandPaletteView()
