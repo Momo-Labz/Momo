@@ -6,6 +6,11 @@ struct CommandPaletteView: View {
     @State private var prompt = ""
     @Environment(\.dismiss) private var dismiss
 
+    private var versionLabel: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+        return version == "Development" ? version.uppercased() : "V\(version)"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
@@ -46,7 +51,7 @@ struct CommandPaletteView: View {
                 .frame(height: 108)
 
             HStack {
-                Text("V0.2 COPIES YOUR PROMPT, THEN OPENS THE PROVIDER")
+                Text("\(versionLabel) COPIES YOUR PROMPT, THEN OPENS THE PROVIDER")
                     .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
                 Spacer()
                 Button("CANCEL") { dismiss() }.barBoyButton()

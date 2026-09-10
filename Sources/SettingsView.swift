@@ -8,6 +8,15 @@ struct SettingsView: View {
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+    }
+
+    private var refreshIntervalLabel: String {
+        let seconds = Int(ActivityMonitor.refreshInterval)
+        return "\(seconds) second\(seconds == 1 ? "" : "s")"
+    }
+
     var body: some View {
         TabView {
             providers
@@ -127,8 +136,8 @@ struct SettingsView: View {
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
-            LabeledContent("Refresh interval", value: "15 seconds")
-            LabeledContent("Version", value: "0.3.0")
+            LabeledContent("Refresh interval", value: refreshIntervalLabel)
+            LabeledContent("Version", value: appVersion)
         }
         .formStyle(.grouped)
         .padding(10)
@@ -246,9 +255,9 @@ struct SettingsView: View {
             Image(systemName: "lock.shield")
                 .font(.system(size: 38, weight: .light))
             Text("Your work stays on your Mac").font(.title2.bold())
-            Text("BAR BOY reads process names and recent local session metadata for Codex, Claude, Gemini, Cursor, and Grok. It does not upload prompts, source code, or usage data.")
+            Text("BAR BOY inspects running process names and recent local session metadata only for providers you enable. It does not upload prompts, source code, or usage data.")
                 .foregroundStyle(.secondary)
-            Text("Disable any provider in the Providers tab to stop scanning its session folder.")
+            Text("Disable a provider in the Providers tab to stop its process and file scanning and exclude it from Desk Display and MOMO RELAY status.")
                 .font(.callout)
             Spacer()
         }

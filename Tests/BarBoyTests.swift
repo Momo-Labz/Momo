@@ -77,6 +77,10 @@ final class BarBoyTests: XCTestCase {
     }
 
     func testRenderDashboardSnapshotsWhenRequested() throws {
+        guard ProcessInfo.processInfo.environment["BAR_BOY_RENDER_SNAPSHOTS"] == "1" else {
+            throw XCTSkip("Set BAR_BOY_RENDER_SNAPSHOTS=1 to write dashboard snapshots to /tmp.")
+        }
+
         let now = Date()
         let sessions = [
             AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
