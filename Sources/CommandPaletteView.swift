@@ -7,7 +7,7 @@ struct CommandPaletteView: View {
     @Environment(\.dismiss) private var dismiss
 
     private var versionLabel: String {
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
+        let version = BarBoyAppInfo.marketingVersion
         return version == "Development" ? version.uppercased() : "V\(version)"
     }
 

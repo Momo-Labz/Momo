@@ -8,10 +8,6 @@ struct SettingsView: View {
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
-    private var appVersion: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "Development"
-    }
-
     private var refreshIntervalLabel: String {
         let seconds = Int(ActivityMonitor.refreshInterval)
         return "\(seconds) second\(seconds == 1 ? "" : "s")"
@@ -137,7 +133,7 @@ struct SettingsView: View {
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
             LabeledContent("Refresh interval", value: refreshIntervalLabel)
-            LabeledContent("Version", value: appVersion)
+            LabeledContent("Version", value: BarBoyAppInfo.marketingVersion)
         }
         .formStyle(.grouped)
         .padding(10)
