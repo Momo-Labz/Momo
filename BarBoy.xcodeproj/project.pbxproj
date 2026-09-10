@@ -8,14 +8,19 @@
 
 /* Begin PBXBuildFile section */
 		09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2244A22CE29B93DD607E1 /* SettingsView.swift */; };
+		136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */; };
 		187B6FDF407B0AB0E3907786 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D568DC6BE830956FA389F7D /* DashboardView.swift */; };
+		3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */; };
 		64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914544FD481DF77821FAFD11 /* Models.swift */; };
 		68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */; };
+		6E707731B52AB1AA7AFB7DE1 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97EABE168680367E8C4D28E /* CommandPaletteView.swift */; };
+		7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */; };
 		76F832EA656D975C3B04DDFF /* BarBoyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4636595E64156A63431C041 /* BarBoyTests.swift */; };
 		966A728AF138807269935D7E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */; };
 		AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */; };
 		D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA94527A39181A6696901C9 /* ActivityMonitor.swift */; };
 		E052D23FE428CEED342603E6 /* icon-source.png in Resources */ = {isa = PBXBuildFile; fileRef = D3D299542F8A6FB8744AAD52 /* icon-source.png */; };
+		E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */; };
 		F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */; };
 		FC8BE595DDA7B427681021BD /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 8CFC5B7008808730FE6A3D5E /* Assets.xcassets */; };
 /* End PBXBuildFile section */
@@ -33,6 +38,7 @@
 /* Begin PBXFileReference section */
 		1CB2244A22CE29B93DD607E1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskDisplayServer.swift; sourceTree = "<group>"; };
 		5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyApp.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
@@ -40,10 +46,14 @@
 		8CFC5B7008808730FE6A3D5E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		914544FD481DF77821FAFD11 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		9D568DC6BE830956FA389F7D /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
+		9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutService.swift; sourceTree = "<group>"; };
 		C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
 		CCA94527A39181A6696901C9 /* ActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitor.swift; sourceTree = "<group>"; };
 		D3D299542F8A6FB8744AAD52 /* icon-source.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "icon-source.png"; sourceTree = "<group>"; };
 		D4636595E64156A63431C041 /* BarBoyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyTests.swift; sourceTree = "<group>"; };
+		DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionNotifier.swift; sourceTree = "<group>"; };
+		E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeBridgeView.swift; sourceTree = "<group>"; };
+		E97EABE168680367E8C4D28E /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -51,12 +61,17 @@
 			isa = PBXGroup;
 			children = (
 				CCA94527A39181A6696901C9 /* ActivityMonitor.swift */,
+				DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */,
 				5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */,
+				E97EABE168680367E8C4D28E /* CommandPaletteView.swift */,
 				9D568DC6BE830956FA389F7D /* DashboardView.swift */,
 				67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */,
+				4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */,
+				9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */,
 				6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */,
 				914544FD481DF77821FAFD11 /* Models.swift */,
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
+				E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */,
 				1CB2244A22CE29B93DD607E1 /* SettingsView.swift */,
 			);
 			path = Sources;
@@ -202,12 +217,17 @@
 			buildActionMask = 2147483647;
 			files = (
 				D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */,
+				136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */,
 				68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */,
+				6E707731B52AB1AA7AFB7DE1 /* CommandPaletteView.swift in Sources */,
 				187B6FDF407B0AB0E3907786 /* DashboardView.swift in Sources */,
 				966A728AF138807269935D7E /* DesignSystem.swift in Sources */,
+				E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */,
+				3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */,
 				F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */,
 				64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */,
 				AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */,
+				7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */,
 				09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -258,7 +278,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -278,7 +298,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -346,6 +366,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Momo Labz";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "BAR BOY uses your local network only when you enable Desk Display, so your paired screen can read live session status from this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -390,7 +411,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -404,7 +425,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 0.1.0;
+				MARKETING_VERSION = 0.2.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "BAR BOY";
@@ -429,6 +450,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
 				INFOPLIST_KEY_LSUIElement = YES;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Momo Labz";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "BAR BOY uses your local network only when you enable Desk Display, so your paired screen can read live session status from this Mac.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

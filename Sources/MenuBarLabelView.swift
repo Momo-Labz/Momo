@@ -5,16 +5,21 @@ struct MenuBarLabelView: View {
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: compact ? 3 : 5) {
+        let urgent = snapshots.reduce(0) { $0 + $1.needsAttentionCount }
+        let active = snapshots.reduce(0) { $0 + $1.activeCount }
+        HStack(spacing: 3) {
             PixelBarBoyMark(size: 17)
-            if !compact {
-                ForEach(snapshots.filter { $0.activeCount > 0 || $0.localTokensToday > 0 }.prefix(3)) { snapshot in
-                    Text(snapshot.provider.monogram + " " + snapshot.usageText)
-                        .font(.system(size: 10, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                }
+            if urgent > 0 {
+                Text("!\(min(urgent, 9))")
+                    .foregroundStyle(BarBoyStyle.coral)
+                    .accessibilityLabel("\(urgent) sessions need attention")
+            } else if !compact, active > 0 {
+                Text("\(min(active, 9))")
+                    .accessibilityLabel("\(active) active agents")
             }
         }
+        .font(.system(size: 10, weight: .black, design: .monospaced))
+        .monospacedDigit()
         .accessibilityLabel("BAR BOY AI activity")
     }
 }

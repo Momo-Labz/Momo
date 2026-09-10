@@ -5,6 +5,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
     case codex
     case claude
     case gemini
+    case cursor
+    case grok
 
     var id: String { rawValue }
 
@@ -13,6 +15,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .codex: return "Codex"
         case .claude: return "Claude"
         case .gemini: return "Gemini"
+        case .cursor: return "Cursor"
+        case .grok: return "Grok"
         }
     }
 
@@ -21,6 +25,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .codex: return "◎"
         case .claude: return "A"
         case .gemini: return "✦"
+        case .cursor: return "C"
+        case .grok: return "X"
         }
     }
 
@@ -29,6 +35,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .codex: return ["codex"]
         case .claude: return ["claude"]
         case .gemini: return ["gemini"]
+        case .cursor: return ["cursor", "cursor-agent"]
+        case .grok: return ["grok", "grokbot", "grok-bot"]
         }
     }
 
@@ -37,6 +45,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .codex: return [".codex/sessions"]
         case .claude: return [".claude/projects"]
         case .gemini: return [".gemini/tmp"]
+        case .cursor: return [".cursor/projects", "Library/Application Support/Cursor/User/workspaceStorage"]
+        case .grok: return [".grok/sessions", ".xai/sessions"]
         }
     }
 
@@ -45,6 +55,18 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .codex: return URL(string: "https://chatgpt.com/codex/settings/usage")
         case .claude: return URL(string: "https://claude.ai/settings/usage")
         case .gemini: return URL(string: "https://aistudio.google.com/app/usage")
+        case .cursor: return URL(string: "https://cursor.com/dashboard/usage")
+        case .grok: return URL(string: "https://grok.com/")
+        }
+    }
+
+    var conversationURL: URL? {
+        switch self {
+        case .codex: return URL(string: "https://chatgpt.com/codex")
+        case .claude: return URL(string: "https://claude.ai/new")
+        case .gemini: return URL(string: "https://gemini.google.com/app")
+        case .cursor: return URL(string: "https://cursor.com/")
+        case .grok: return URL(string: "https://grok.com/")
         }
     }
 
@@ -64,6 +86,26 @@ enum AgentRole: String, Codable {
     case subagent = "Subagent"
 }
 
+enum AgentAttention: String, Codable {
+    case working
+    case needsInput
+    case completed
+    case failed
+    case idle
+
+    var label: String {
+        switch self {
+        case .working: return "WORKING"
+        case .needsInput: return "NEEDS YOU"
+        case .completed: return "DONE"
+        case .failed: return "FAILED"
+        case .idle: return "IDLE"
+        }
+    }
+
+    var isUrgent: Bool { self == .needsInput || self == .failed }
+}
+
 struct AgentSession: Identifiable, Hashable {
     let id: String
     let provider: AIProvider
@@ -75,6 +117,36 @@ struct AgentSession: Identifiable, Hashable {
     let isRunning: Bool
     let processID: Int?
     let tokens: Int?
+    let attention: AgentAttention
+    let attentionReason: String?
+
+    init(
+        id: String,
+        provider: AIProvider,
+        role: AgentRole,
+        title: String,
+        detail: String,
+        project: String,
+        updatedAt: Date,
+        isRunning: Bool,
+        processID: Int?,
+        tokens: Int?,
+        attention: AgentAttention = .working,
+        attentionReason: String? = nil
+    ) {
+        self.id = id
+        self.provider = provider
+        self.role = role
+        self.title = title
+        self.detail = detail
+        self.project = project
+        self.updatedAt = updatedAt
+        self.isRunning = isRunning
+        self.processID = processID
+        self.tokens = tokens
+        self.attention = attention
+        self.attentionReason = attentionReason
+    }
 
     var ageLabel: String {
         if isRunning { return "LIVE" }
@@ -92,8 +164,11 @@ struct ProviderSnapshot: Identifiable {
     let activeCount: Int
     let localTokensToday: Int
     let updatedAt: Date
+    let shortWindowPercent: Int? = nil
+    let weekWindowPercent: Int? = nil
 
     var id: AIProvider { provider }
+    var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
     var usageText: String {
         guard localTokensToday > 0 else { return activeCount > 0 ? "\(activeCount) live" : "Idle" }
         if localTokensToday >= 1_000_000 { return String(format: "%.1fM", Double(localTokensToday) / 1_000_000) }

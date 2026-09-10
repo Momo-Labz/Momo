@@ -1,0 +1,16 @@
+[Unit]
+Description=MOMO LABZ agent desk display
+After=graphical.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+Environment=BARBOY_URL_FILE=/home/barboy/.config/barboy/display-url
+ExecStart=/usr/local/bin/launch-barboy-display
+Restart=on-failure
+RestartSec=4
+User=barboy
+
+[Install]
+WantedBy=graphical.target

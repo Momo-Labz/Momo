@@ -2,10 +2,13 @@ import SwiftUI
 
 enum BarBoyStyle {
     static let panel = Color(nsColor: .windowBackgroundColor)
-    static let surface = Color.primary.opacity(0.055)
+    static let surface = Color.primary.opacity(0.045)
     static let raised = Color.primary.opacity(0.085)
-    static let hairline = Color.primary.opacity(0.11)
+    static let hairline = Color.primary.opacity(0.22)
     static let quiet = Color.secondary.opacity(0.72)
+    static let coral = Color(red: 0.88, green: 0.36, blue: 0.28)
+    static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
+    static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
 }
 
 struct ProviderMark: View {
@@ -15,14 +18,14 @@ struct ProviderMark: View {
 
     var body: some View {
         ZStack {
-            Circle()
+            Rectangle()
                 .fill(active ? Color.primary : BarBoyStyle.raised)
             Text(provider.monogram)
-                .font(.system(size: size * 0.43, weight: .bold, design: .rounded))
+                .font(.system(size: size * 0.40, weight: .black, design: .monospaced))
                 .foregroundStyle(active ? Color(nsColor: .windowBackgroundColor) : Color.primary)
         }
         .frame(width: size, height: size)
-        .overlay(Circle().stroke(BarBoyStyle.hairline, lineWidth: 0.5))
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityLabel(provider.name)
     }
 }
@@ -34,7 +37,7 @@ struct PixelBarBoyMark: View {
     var body: some View {
         ZStack {
             if tile {
-                RoundedRectangle(cornerRadius: size * 0.15, style: .continuous)
+                Rectangle()
                     .fill(Color.primary)
             }
             PixelBarBoyShape()
@@ -75,8 +78,8 @@ struct Surface<Content: View>: View {
     var body: some View {
         content
             .padding(12)
-            .background(BarBoyStyle.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(BarBoyStyle.hairline, lineWidth: 0.5))
+            .background(BarBoyStyle.surface, in: Rectangle())
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 }
 
@@ -85,6 +88,7 @@ extension View {
         self.buttonStyle(.plain)
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
-            .background(BarBoyStyle.raised, in: Capsule())
+            .background(BarBoyStyle.raised, in: Rectangle())
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 }

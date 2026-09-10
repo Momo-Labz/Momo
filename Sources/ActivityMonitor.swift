@@ -60,7 +60,9 @@ actor LocalActivityScanner {
                     updatedAt: .now,
                     isRunning: true,
                     processID: process.pid,
-                    tokens: nil
+                    tokens: nil,
+                    attention: .working,
+                    attentionReason: nil
                 )
             }
 
@@ -129,25 +131,37 @@ actor LocalActivityScanner {
                 updatedAt: modifiedDate(file),
                 isRunning: running && index == 0,
                 processID: nil,
-                tokens: metadata.tokens
+                tokens: metadata.tokens,
+                attention: metadata.attention,
+                attentionReason: metadata.attentionReason
             )
         }
     }
 
-    private func sessionMetadata(from url: URL) -> (title: String?, detail: String?, project: String?, tokens: Int?, isSubagent: Bool) {
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return (nil, nil, nil, nil, false) }
+    private func sessionMetadata(from url: URL) -> (title: String?, detail: String?, project: String?, tokens: Int?, isSubagent: Bool, attention: AgentAttention, attentionReason: String?) {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return (nil, nil, nil, nil, false, .working, nil) }
         defer { try? handle.close() }
-        let maxBytes = 512 * 1024
-        let data = (try? handle.read(upToCount: maxBytes)) ?? Data()
-        guard let text = String(data: data, encoding: .utf8) else { return (nil, nil, nil, nil, false) }
+        let maxBytes = 320 * 1024
+        let head = (try? handle.read(upToCount: maxBytes / 2)) ?? Data()
+        let size = (try? handle.seekToEnd()) ?? 0
+        if size > UInt64(maxBytes / 2) {
+            try? handle.seek(toOffset: size - UInt64(maxBytes / 2))
+        }
+        let tail = (try? handle.read(upToCount: maxBytes / 2)) ?? Data()
+        var data = head
+        data.append(Data("\n".utf8))
+        data.append(tail)
+        guard let text = String(data: data, encoding: .utf8) else { return (nil, nil, nil, nil, false, .working, nil) }
 
         var title: String?
         var detail: String?
         var project: String?
         var tokens = 0
         var isSubagent = false
+        var attention: AgentAttention = .working
+        var attentionReason: String?
 
-        for line in text.split(separator: "\n").prefix(400) {
+        for line in text.split(separator: "\n").suffix(500) {
             guard let data = line.data(using: .utf8),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
             if project == nil { project = findString(in: object, keys: ["cwd", "project_path"]).map { URL(fileURLWithPath: $0).lastPathComponent } }
@@ -161,8 +175,27 @@ actor LocalActivityScanner {
             if let role = findString(in: object, keys: ["role", "agent_role", "agent_type"])?.lowercased(), role.contains("sub") {
                 isSubagent = true
             }
+            if let signal = attentionSignal(in: object) {
+                attention = signal.state
+                attentionReason = signal.reason
+            }
         }
-        return (title, detail, project, tokens == 0 ? nil : tokens, isSubagent)
+        return (title, detail, project, tokens == 0 ? nil : tokens, isSubagent, attention, attentionReason)
+    }
+
+    private func attentionSignal(in object: [String: Any]) -> (state: AgentAttention, reason: String)? {
+        let type = findString(in: object, keys: ["type", "event", "event_type", "status", "state"])?.lowercased() ?? ""
+        let explicitNeedsInput = ["approval_request", "request_user_input", "requires_action", "waiting_for_user", "needs_input"]
+        if explicitNeedsInput.contains(where: { type.contains($0) }) {
+            return (.needsInput, "The agent is waiting for your response")
+        }
+        if ["failed", "error", "cancelled"].contains(where: { type == $0 || type.hasSuffix("_\($0)") }) {
+            return (.failed, "The latest agent event failed")
+        }
+        if ["completed", "complete", "finished", "done"].contains(type) {
+            return (.completed, "The latest task finished")
+        }
+        return nil
     }
 
     private func findString(in value: Any, keys: Set<String>) -> String? {
@@ -203,7 +236,7 @@ actor LocalActivityScanner {
 
     private func inferredTitle(from command: String, fallback: String) -> String {
         let components = command.split(separator: " ").map(String.init)
-        if let index = components.firstIndex(where: { ["codex", "claude", "gemini"].contains(URL(fileURLWithPath: $0).lastPathComponent.lowercased()) }), index + 1 < components.count {
+        if let index = components.firstIndex(where: { AIProvider.allCases.flatMap(\.processTerms).contains(URL(fileURLWithPath: $0).lastPathComponent.lowercased()) }), index + 1 < components.count {
             let candidate = components[(index + 1)...].filter { !$0.hasPrefix("-") }.joined(separator: " ")
             if !candidate.isEmpty { return clean(candidate, max: 62) }
         }
