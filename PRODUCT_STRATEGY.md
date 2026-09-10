@@ -32,6 +32,7 @@ Codex / Claude / Gemini / Cursor / Grok
 7. **Local-first by default.** Session titles and project context stay on the Mac; cloud sync is optional and encrypted if it is ever added.
 8. **Capability receipts.** Each return carries the model, MCP servers, plugins, and skills actually recorded in that session—not merely everything installed on the machine.
 9. **One permission map.** Momo grants access once per supported provider or MCP server, sees the scope, and can revoke it without hunting through individual agent apps.
+10. **Human-latency accounting.** Measure how long agents waited for a person, which questions caused the delay, and how much parallel work the return queue recovered. That makes BAR BOY an orchestration product rather than a decorative activity monitor.
 
 ## Authorization ladder
 
@@ -40,10 +41,11 @@ Codex / Claude / Gemini / Cursor / Grok
 3. **Remote MCP:** follow MCP OAuth discovery, OAuth 2.1, PKCE, resource binding, refresh-token rotation, and secure token storage.
 4. **Consumer accounts:** only add ChatGPT, Claude, Cursor, Gemini, or Grok subscription data when the provider publishes a supported delegated interface. Never scrape cookies or collect provider passwords.
 
-## What version 0.3 proves
+## What version 0.4 proves
 
-- The Mac return queue and capability provenance are implemented.
+- The Mac return queue, compact model strip, expandable tabs, and capability provenance are implemented.
 - The same queue is exposed to the 3D-print display and the buildable iOS companion.
+- Home, Agents, and Tools use one information model across Mac and iPhone.
 - iOS pairing data is stored in Keychain and local alerts fire when foreground polling discovers a new return.
 - Account access is mapped honestly; organization usage fetching, cloud relay, APNs, and write-back to source sessions remain next-stage work.
 
