@@ -273,15 +273,35 @@ private struct MobileCapabilitySection: View {
 }
 
 private struct RelayProviderIcon: View {
-    let provider: RelayProvider
+    let providerID: String
+    let providerName: String
+    let providerMark: String
+    let active: Bool
     let size: CGFloat
+
+    init(provider: RelayProvider, size: CGFloat) {
+        providerID = provider.id
+        providerName = provider.name
+        providerMark = provider.mark
+        active = provider.active > 0
+        self.size = size
+    }
+
+    init(session: RelaySession, size: CGFloat) {
+        providerID = session.provider.lowercased()
+        providerName = session.provider
+        providerMark = session.mark
+        active = session.live
+        self.size = size
+    }
+
     var body: some View {
         ZStack {
-            Rectangle().fill(provider.active > 0 ? Color.primary : RelayStyle.surface)
+            Rectangle().fill(active ? Color.primary : RelayStyle.surface)
             if let assetName {
                 Rectangle()
                     .fill(RelayStyle.paper)
-                    .padding(provider.active > 0 ? 2 : 1)
+                    .padding(active ? 2 : 1)
                 Image(assetName)
                     .resizable()
                     .interpolation(.high)
@@ -289,23 +309,23 @@ private struct RelayProviderIcon: View {
                     .padding(size * 0.13)
             } else {
                 Group {
-                    switch provider.id.lowercased() {
+                    switch providerID.lowercased() {
                     case "gemini": Text("✦")
                     case "grok": Text("𝕏")
-                    default: Text(provider.mark)
+                    default: Text(providerMark)
                     }
                 }
                 .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
-                .foregroundStyle(provider.active > 0 ? RelayStyle.panel : Color.primary)
+                .foregroundStyle(active ? RelayStyle.panel : Color.primary)
             }
         }
         .frame(width: size, height: size)
         .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
-        .accessibilityLabel(provider.name)
+        .accessibilityLabel(providerName)
     }
 
     private var assetName: String? {
-        switch provider.id.lowercased() {
+        switch providerID.lowercased() {
         case "codex": return "ProviderCodex"
         case "claude": return "ProviderClaude"
         case "cursor": return "ProviderCursor"
@@ -322,7 +342,7 @@ private struct SessionButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Text(session.mark).font(.headline).frame(width: 31, height: 31).foregroundStyle(Color(UIColor.systemBackground)).background(Color.primary)
+                RelayProviderIcon(session: session, size: 31)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                     Text(session.urgent ? (session.attentionReason ?? session.attentionLabel) : session.provenance)

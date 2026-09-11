@@ -5,12 +5,13 @@ BAR BOY now opens as a short, models-only menu popup and expands into a wider th
 ## New
 
 - Horizontal Home, Agents, and Tools views instead of one tall dashboard.
-- Official installed-app marks for Codex, Claude, and Cursor plus recognizable Gemini and Grok marks, all rendered in monochrome.
+- Owner-supplied Claude, Codex, Cursor, and Grok identity marks across Mac, iPhone, and the Desk Display, plus a recognizable Gemini fallback.
 - A compact model strip with one clear Expand action.
 - Momo Labz pixel styling and a restrained one-shot mascot entrance.
 - Matching Home, Agents, and Tools navigation in MOMO RELAY for iPhone.
 - A checked-in `DESIGN.md` contract for spacing, color, typography, components, and motion.
 - Provider-specific streaming adapters for Claude, Codex, and Cursor with main/subagent role, token, model, attention, and capability evidence where each schema supports it.
+- Every detected running process session is retained; only inactive history is bounded for refresh performance, and the relay payload no longer truncates the iPhone queue.
 - Installed MCP, plugin, marketplace, and skill inventory with a separate, evidence-based `USED` state.
 - Enabled-provider isolation: switching a provider off also stops its disk, process, and configuration scans.
 - A versioned relay JSON contract shared by macOS and iOS.

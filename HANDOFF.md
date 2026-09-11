@@ -32,7 +32,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 - `Models.swift`: providers, sessions, and snapshots.
 - `AttentionNotifier.swift`: opt-in user notifications for newly urgent sessions.
 - `GlobalShortcutService.swift` and `CommandPaletteView.swift`: global Quick Ask routing.
-- `DeskDisplayServer.swift`: token-paired local 480 × 320 status page and JSON endpoint with Bearer/cookie auth, Host validation, redaction, CSP, and dynamic-port fallback.
+- `DeskDisplayServer.swift`: token-paired local 480 × 320 status page and untruncated relay JSON endpoint with supplied provider-icon routes, Bearer/cookie auth, Host validation, redaction, CSP, and dynamic-port fallback.
 - `Shared/RelayContract.swift`: the versioned status/provider/session payload shared by Mac and iOS.
 - `iOS/Sources/`: MOMO RELAY pairing, separated Keychain credential storage, local polling, notifications, official provider icon assets, and iPhone return-queue UI.
 - `Hardware/`: kiosk setup, OpenSCAD source, STL exporter, and generated printable parts.

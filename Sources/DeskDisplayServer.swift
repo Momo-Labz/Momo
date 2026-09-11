@@ -1,4 +1,5 @@
 import Combine
+import AppKit
 import Foundation
 import Network
 
@@ -168,6 +169,15 @@ final class DeskDisplayServer: ObservableObject {
             return Self.httpResponse(status: "200 OK", type: "application/json; charset=utf-8", body: body)
         }
 
+        if components.path.hasPrefix("/provider-icon/") {
+            guard headerAuthorized || cookieAuthorized else { return Self.unauthorizedResponse() }
+            let providerID = String(components.path.dropFirst("/provider-icon/".count))
+            guard let body = Self.providerIconPNG(providerID: providerID) else {
+                return Self.httpResponse(status: "404 Not Found", type: "text/plain; charset=utf-8", body: Data("Not found".utf8))
+            }
+            return Self.httpResponse(status: "200 OK", type: "image/png", body: body)
+        }
+
         if components.path == "/" || components.path == "/display" {
             guard headerAuthorized || cookieAuthorized else { return Self.unauthorizedResponse() }
             return Self.httpResponse(
@@ -219,7 +229,6 @@ final class DeskDisplayServer: ObservableObject {
                 if $0.isRunning != $1.isRunning { return $0.isRunning }
                 return $0.updatedAt > $1.updatedAt
             }
-            .prefix(5)
             .map { session in
                 RelaySession(
                     id: session.id,
@@ -267,7 +276,7 @@ final class DeskDisplayServer: ObservableObject {
         body{padding:10px;display:grid;grid-template-rows:38px 1fr 12px;gap:7px}
         header{display:flex;align-items:center;gap:8px}.logo{width:31px;height:31px;border:2px solid var(--ink);display:grid;place-items:center;font-size:16px;font-weight:900}.brand{font-size:15px;font-weight:900;letter-spacing:1.5px}.sub{color:var(--muted);font-size:7px;letter-spacing:1px;margin-top:2px}.signal{margin-left:auto;border:1px solid var(--line);padding:6px 7px;font-size:8px;font-weight:900;letter-spacing:.7px}.signal.alert{border-color:var(--alert);color:var(--alert)}
         .board{min-height:0;display:grid;grid-template-columns:44% 56%;border:1px solid var(--line)}.pane{min-width:0;overflow:hidden}.pane+.pane{border-left:1px solid var(--line)}.heading,.provider-head{height:22px;display:grid;align-items:center;color:var(--muted);font-size:7px;font-weight:900;letter-spacing:.8px;border-bottom:1px solid var(--line);padding:0 7px}.provider-head{grid-template-columns:1fr 31px 31px 27px;text-align:right}.provider-head span:first-child{text-align:left}
-        .provider{height:38px;display:grid;grid-template-columns:1fr 31px 31px 27px;align-items:center;padding:0 7px;border-bottom:1px solid var(--line);font-size:8px;text-align:right}.provider:last-child{border:0}.provider-name{display:grid;grid-template-columns:22px 1fr;align-items:center;gap:6px;text-align:left;min-width:0}.mark{width:21px;height:21px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-weight:900}.pname{font-weight:900;white-space:nowrap}.local{font-size:6px;color:var(--muted);margin-top:2px}.urgent{color:var(--alert);font-weight:900}
+        .provider{height:38px;display:grid;grid-template-columns:1fr 31px 31px 27px;align-items:center;padding:0 7px;border-bottom:1px solid var(--line);font-size:8px;text-align:right}.provider:last-child{border:0}.provider-name{display:grid;grid-template-columns:22px 1fr;align-items:center;gap:6px;text-align:left;min-width:0}.mark{width:21px;height:21px;background:var(--ink);color:var(--bg);display:grid;place-items:center;font-weight:900}.mark[src]{background:#f3f2f2;object-fit:contain;padding:3px}.pname{font-weight:900;white-space:nowrap}.local{font-size:6px;color:var(--muted);margin-top:2px}.urgent{color:var(--alert);font-weight:900}
         .session{height:47px;display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:6px;padding:0 7px;border-bottom:1px solid var(--line)}.session:last-child{border:0}.title{font-size:8px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.meta{font-size:6px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:3px}.state{font-size:6px;font-weight:900;border:1px solid var(--line);padding:4px}.state.alert{border-color:var(--alert);color:var(--alert)}
         footer{display:flex;justify-content:space-between;color:var(--muted);font-size:7px;font-weight:800;letter-spacing:.6px}.offline{color:var(--alert)}
         @media(prefers-color-scheme:light){:root{--bg:#f3f2f2;--panel:#eae9e9;--line:#8b8581;--ink:#201e1d;--muted:#6c6663;--alert:#E25C48}}
@@ -280,12 +289,13 @@ final class DeskDisplayServer: ObservableObject {
         <script>
         const esc=s=>String(s??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
         const pct=n=>Number.isFinite(n)?`${n}%`:'—';
+        const providerMark=(id,fallback)=>{const key=String(id??'').toLowerCase();return ['codex','claude','cursor','grok'].includes(key)?`<img class="mark" src="/provider-icon/${encodeURIComponent(key)}" alt="">`:`<div class="mark">${esc(fallback)}</div>`};
         function render(data){
           document.getElementById('summary').textContent=data.activeCount?`${data.activeCount} AGENT${data.activeCount===1?'':'S'} WORKING`:'EVERYTHING IS QUIET';
           const signal=document.getElementById('signal');signal.textContent=data.attentionCount?`! ${data.attentionCount} NEED${data.attentionCount===1?'S':''} YOU`:'LIVE';signal.className=data.attentionCount?'signal alert':'signal';
-          document.getElementById('providers').innerHTML=data.providers.slice(0,5).map(p=>`<div class="provider"><div class="provider-name"><div class="mark">${esc(p.mark)}</div><div><div class="pname">${esc(p.name).toUpperCase()}</div><div class="local">${esc(p.usage).toUpperCase()}</div></div></div><span>${pct(p.short)}</span><span>${pct(p.week)}</span><span class="${p.needsAttention?'urgent':''}">${p.needsAttention?'!':''}${esc(p.sessionCount)}</span></div>`).join('');
+          document.getElementById('providers').innerHTML=data.providers.slice(0,5).map(p=>`<div class="provider"><div class="provider-name">${providerMark(p.id,p.mark)}<div><div class="pname">${esc(p.name).toUpperCase()}</div><div class="local">${esc(p.usage).toUpperCase()}</div></div></div><span>${pct(p.short)}</span><span>${pct(p.week)}</span><span class="${p.needsAttention?'urgent':''}">${p.needsAttention?'!':''}${esc(p.sessionCount)}</span></div>`).join('');
           const sessions=data.sessions.length?data.sessions:[{mark:'·',title:'Waiting for a session',role:'MOMO',project:'READY',age:'IDLE',urgent:false}];
-          document.getElementById('sessions').innerHTML=sessions.slice(0,5).map(s=>{const cap=[s.model,s.capabilityCount?`${s.capabilityCount} CAP`:null].filter(Boolean).join(' / ');return `<div class="session"><div class="mark">${esc(s.mark)}</div><div><div class="title">${esc(s.title)}</div><div class="meta">${esc(s.urgent?(s.attentionReason||s.attentionLabel):(cap||`${s.role} / ${s.project}`))}</div></div><div class="state ${s.urgent?'alert':''}">${esc(s.urgent?s.attentionLabel:s.age)}</div></div>`}).join('');
+          document.getElementById('sessions').innerHTML=sessions.slice(0,5).map(s=>{const cap=[s.model,s.capabilityCount?`${s.capabilityCount} CAP`:null].filter(Boolean).join(' / ');return `<div class="session">${providerMark(s.provider,s.mark)}<div><div class="title">${esc(s.title)}</div><div class="meta">${esc(s.urgent?(s.attentionReason||s.attentionLabel):(cap||`${s.role} / ${s.project}`))}</div></div><div class="state ${s.urgent?'alert':''}">${esc(s.urgent?s.attentionLabel:s.age)}</div></div>`}).join('');
         }
         async function poll(){try{const r=await fetch('/api/status',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw Error();render(await r.json())}catch(e){const s=document.getElementById('signal');s.textContent='OFFLINE';s.className='signal offline'}}
         setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);setInterval(poll,2500);poll();
@@ -296,6 +306,21 @@ final class DeskDisplayServer: ObservableObject {
 
     static func dashboardHTML(token _: String) -> String {
         dashboardHTML()
+    }
+
+    private static func providerIconPNG(providerID: String) -> Data? {
+        let assetName: String
+        switch providerID.lowercased() {
+        case "codex": assetName = "ProviderCodex"
+        case "claude": assetName = "ProviderClaude"
+        case "cursor": assetName = "ProviderCursor"
+        case "grok": assetName = "ProviderGrok"
+        default: return nil
+        }
+        guard let image = NSImage(named: assetName),
+              let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
+        return bitmap.representation(using: .png, properties: [:])
     }
 
     private static func httpResponse(status: String, type: String, body: Data, extraHeaders: [String] = []) -> Data {

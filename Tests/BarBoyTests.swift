@@ -211,6 +211,44 @@ final class BarBoyTests: XCTestCase {
             request: "GET /health HTTP/1.1\r\nHost: attacker.example:\(server.port)\r\nAuthorization: Bearer \(server.token)\r\nConnection: close\r\n\r\n"
         )
         XCTAssertTrue(foreignHost.hasPrefix("HTTP/1.1 421 Misdirected Request"))
+
+        let icon = try rawHTTPResponse(
+            port: server.port,
+            request: "GET /provider-icon/codex HTTP/1.1\r\nHost: 127.0.0.1:\(server.port)\r\nAuthorization: Bearer \(server.token)\r\nConnection: close\r\n\r\n"
+        )
+        XCTAssertTrue(icon.hasPrefix("HTTP/1.1 200 OK"))
+        XCTAssertTrue(icon.contains("Content-Type: image/png"))
+    }
+
+    func testRelayPayloadKeepsEveryRunningSession() throws {
+        let sessions = (0..<17).map { index in
+            AgentSession(
+                id: "session-\(index)",
+                provider: .codex,
+                role: .main,
+                title: "Session \(index)",
+                detail: "",
+                project: "Fixture",
+                updatedAt: .now,
+                isRunning: index < 14,
+                processID: index,
+                tokens: nil
+            )
+        }
+        let prioritized = LocalActivityScanner.prioritizedSessions(sessions, recentHistoryLimit: 2)
+        XCTAssertEqual(prioritized.filter(\.isRunning).count, 14)
+        XCTAssertEqual(prioritized.count, 16)
+
+        let snapshot = ProviderSnapshot(
+            provider: .codex,
+            sessions: prioritized,
+            activeCount: 14,
+            localTokensToday: 0,
+            updatedAt: .now
+        )
+        let data = DeskDisplayServer.makeStatusJSON(snapshots: [snapshot], includeTitles: true)
+        let decoded = try JSONDecoder().decode(RelayStatus.self, from: data)
+        XCTAssertEqual(decoded.sessions.count, 16)
     }
 
     func testDeskDisplayFallsBackWhenPreferredPortIsOccupied() async throws {
@@ -250,6 +288,7 @@ final class BarBoyTests: XCTestCase {
         XCTAssertFalse(html.contains("abc123"), "Pairing credentials must not be embedded in display HTML")
         XCTAssertTrue(html.contains("overflow:hidden"))
         XCTAssertTrue(html.contains("NEED"))
+        XCTAssertTrue(html.contains("/provider-icon/"))
     }
 
     func testCapabilityProvenanceInference() {

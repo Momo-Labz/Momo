@@ -143,9 +143,10 @@ actor LocalActivityScanner {
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
                 }
+            let visibleSessions = Self.prioritizedSessions(merged)
             snapshots.append(ProviderSnapshot(
                 provider: provider,
-                sessions: Array(merged.prefix(12)),
+                sessions: visibleSessions,
                 activeCount: providerProcesses.count,
                 localTokensToday: diskSessions
                     .filter { Calendar.current.isDateInToday($0.updatedAt) }
@@ -156,6 +157,15 @@ actor LocalActivityScanner {
             ))
         }
         return snapshots
+    }
+
+    /// Preserve every detected live process while bounding only inactive history.
+    /// This keeps the product's "all running at once" promise without re-parsing
+    /// an unbounded archive on every 15-second refresh.
+    static func prioritizedSessions(_ sessions: [AgentSession], recentHistoryLimit: Int = 12) -> [AgentSession] {
+        let running = sessions.filter(\.isRunning)
+        let history = sessions.filter { !$0.isRunning }.prefix(recentHistoryLimit)
+        return running + history
     }
 
     private func runningAIProcesses(for enabledProviders: Set<AIProvider>) -> [(pid: Int, command: String)] {

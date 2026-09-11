@@ -14,6 +14,7 @@ BAR BOY is a working title for a private, local-first Momo Labz return queue. It
 - User-supplied Claude, Codex, Cursor, and Grok identity marks on consistent paper tiles, with a recognizable Gemini fallback.
 - Restrained Momo entrance and tab motion that becomes instant when Reduce Motion is enabled.
 - Local detection of active Codex, Claude Code, Gemini CLI, Cursor, and Grok processes.
+- Every detected live process remains visible; the 12-session bound applies only to inactive history retained per provider.
 - Recent main-agent and subagent session summaries from local JSONL files.
 - Provider-specific Claude, Codex, and Cursor adapters that read their actual local schemas; Gemini and Grok retain conservative generic discovery until fixtures exist.
 - A priority `YOUR TURN` queue that separates human-blocked work from agents still moving.
