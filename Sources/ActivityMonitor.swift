@@ -138,7 +138,7 @@ actor LocalActivityScanner {
                 )
             }
 
-            let merged = deduplicated(processSessions + diskSessions)
+            let merged = Self.deduplicatedSessions(processSessions + diskSessions)
                 .sorted { lhs, rhs in
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
@@ -251,10 +251,16 @@ actor LocalActivityScanner {
         }
     }
 
-    private func deduplicated(_ sessions: [AgentSession]) -> [AgentSession] {
+    static func deduplicatedSessions(_ sessions: [AgentSession]) -> [AgentSession] {
         var seen = Set<String>()
         return sessions.filter { session in
-            let key = "\(session.provider.rawValue)|\(session.title.lowercased())|\(session.project.lowercased())"
+            let key: String
+            if session.isRunning {
+                key = session.processID.map { "live|\(session.provider.rawValue)|pid|\($0)" }
+                    ?? "live|\(session.provider.rawValue)|session|\(session.id)"
+            } else {
+                key = "history|\(session.provider.rawValue)|\(session.title.lowercased())|\(session.project.lowercased())"
+            }
             return seen.insert(key).inserted
         }
     }

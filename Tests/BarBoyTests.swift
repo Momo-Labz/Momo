@@ -251,6 +251,20 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(decoded.sessions.count, 16)
     }
 
+    func testLiveProcessesWithMatchingTitlesDoNotCollapse() {
+        let shared = (title: "Same command", project: "Fixture")
+        let sessions = [
+            AgentSession(id: "live-1", provider: .codex, role: .main, title: shared.title, detail: "", project: shared.project, updatedAt: .now, isRunning: true, processID: 101, tokens: nil),
+            AgentSession(id: "live-2", provider: .codex, role: .main, title: shared.title, detail: "", project: shared.project, updatedAt: .now, isRunning: true, processID: 102, tokens: nil),
+            AgentSession(id: "old-1", provider: .codex, role: .main, title: shared.title, detail: "", project: shared.project, updatedAt: .now, isRunning: false, processID: nil, tokens: nil),
+            AgentSession(id: "old-2", provider: .codex, role: .main, title: shared.title, detail: "", project: shared.project, updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
+        ]
+
+        let result = LocalActivityScanner.deduplicatedSessions(sessions)
+        XCTAssertEqual(result.filter(\.isRunning).count, 2)
+        XCTAssertEqual(result.count, 3)
+    }
+
     func testDeskDisplayFallsBackWhenPreferredPortIsOccupied() async throws {
         let firstSuiteName = "BarBoyDeskDisplayPortOne-\(UUID().uuidString)"
         let secondSuiteName = "BarBoyDeskDisplayPortTwo-\(UUID().uuidString)"
