@@ -53,7 +53,16 @@ struct ProviderMark: View {
         ZStack {
             Rectangle()
                 .fill(active ? Color.primary : BarBoyStyle.raised)
-            if let icon = applicationIcon {
+            if let bundledIconName {
+                Rectangle()
+                    .fill(BarBoyStyle.paper)
+                    .padding(active ? 2 : 1)
+                Image(bundledIconName)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(size * 0.14)
+            } else if let icon = applicationIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
@@ -69,6 +78,16 @@ struct ProviderMark: View {
         .frame(width: size, height: size)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityLabel(provider.name)
+    }
+
+    private var bundledIconName: String? {
+        switch provider {
+        case .codex: return "ProviderCodex"
+        case .claude: return "ProviderClaude"
+        case .cursor: return "ProviderCursor"
+        case .grok: return "ProviderGrok"
+        case .gemini: return nil
+        }
     }
 
     private var applicationIcon: NSImage? {

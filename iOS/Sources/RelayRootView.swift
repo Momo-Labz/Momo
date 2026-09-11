@@ -14,6 +14,7 @@ private enum RelayStyle {
     })
     static let surface = Color.primary.opacity(0.045)
     static let line = Color.primary.opacity(0.24)
+    static let paper = Color(red: 243.0 / 255.0, green: 242.0 / 255.0, blue: 242.0 / 255.0)
     static let coral = Color(red: 226.0 / 255.0, green: 92.0 / 255.0, blue: 72.0 / 255.0)
 }
 
@@ -278,11 +279,13 @@ private struct RelayProviderIcon: View {
         ZStack {
             Rectangle().fill(provider.active > 0 ? Color.primary : RelayStyle.surface)
             if let assetName {
+                Rectangle()
+                    .fill(RelayStyle.paper)
+                    .padding(provider.active > 0 ? 2 : 1)
                 Image(assetName)
                     .resizable()
+                    .interpolation(.high)
                     .scaledToFit()
-                    .saturation(0)
-                    .contrast(1.2)
                     .padding(size * 0.13)
             } else {
                 Group {
@@ -306,6 +309,7 @@ private struct RelayProviderIcon: View {
         case "codex": return "ProviderCodex"
         case "claude": return "ProviderClaude"
         case "cursor": return "ProviderCursor"
+        case "grok": return "ProviderGrok"
         default: return nil
         }
     }
