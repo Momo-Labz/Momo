@@ -11,7 +11,7 @@ BAR BOY is a working title for a private, local-first Momo Labz return queue. It
 
 - A compact models-only `MenuBarExtra` that expands into a resizable horizontal command window.
 - Three focused tabs: Home for returns and shortcuts, Agents for model/session activity, and Tools for MCP, plugin, and skill provenance.
-- Recognizable provider marks sourced from installed apps when available, rendered in the monochrome Momo Labz system.
+- User-supplied Claude, Codex, Cursor, and Grok identity marks on consistent paper tiles, with a recognizable Gemini fallback.
 - Restrained Momo entrance and tab motion that becomes instant when Reduce Motion is enabled.
 - Local detection of active Codex, Claude Code, Gemini CLI, Cursor, and Grok processes.
 - Recent main-agent and subagent session summaries from local JSONL files.
