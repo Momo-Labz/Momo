@@ -5,7 +5,7 @@ private enum RelayStyle {
     static let panel = Color(uiColor: .systemBackground)
     static let surface = Color.primary.opacity(0.045)
     static let line = Color.primary.opacity(0.24)
-    static let coral = Color(red: 0.91, green: 0.25, blue: 0.15)
+    static let coral = Color(red: 226.0 / 255.0, green: 92.0 / 255.0, blue: 72.0 / 255.0)
 }
 
 struct RelayRootView: View {
@@ -36,7 +36,7 @@ private struct PairView: View {
             Text("Your agents return here.")
                 .font(.title3.weight(.semibold))
                 .padding(.top, 6)
-            Text("Paste the pairing address from BAR BOY on your Mac. The address includes a private local key and stays in this iPhone's Keychain.")
+            Text("Paste the pairing address from BAR BOY on your Mac. Its one-time setup key is stored separately from the status address in this iPhone's Keychain.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)

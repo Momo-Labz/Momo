@@ -1,11 +1,18 @@
 import Foundation
 
+// Keep these CodingKeys aligned with Sources/DeskDisplayServer.swift. The
+// optional version preserves decoding of 0.3 payloads during migration.
 struct RelayStatus: Codable {
+    let schemaVersion: Int?
     let updated: String
     let activeCount: Int
     let attentionCount: Int
     let providers: [RelayProvider]
     let sessions: [RelaySession]
+
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, updated, activeCount, attentionCount, providers, sessions
+    }
 }
 
 struct RelayProvider: Codable, Identifiable {
@@ -19,6 +26,10 @@ struct RelayProvider: Codable, Identifiable {
     let week: Int?
     let sessionCount: Int
     let needsAttention: Int
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, mark, active, tokens, usage, short, week, sessionCount, needsAttention
+    }
 }
 
 struct RelaySession: Codable, Identifiable, Hashable {
@@ -40,6 +51,11 @@ struct RelaySession: Codable, Identifiable, Hashable {
     let plugins: [String]?
     let capabilityCount: Int?
 
+    enum CodingKeys: String, CodingKey {
+        case id, provider, mark, role, title, project, live, age, attention
+        case attentionLabel, attentionReason, urgent, model, mcpServers, skills, plugins, capabilityCount
+    }
+
     var provenance: String {
         var pieces: [String] = []
         if let model, !model.isEmpty { pieces.append(model.uppercased()) }
@@ -51,6 +67,7 @@ struct RelaySession: Codable, Identifiable, Hashable {
 
 extension RelayStatus {
     static let demo = RelayStatus(
+        schemaVersion: 1,
         updated: ISO8601DateFormatter().string(from: .now),
         activeCount: 4,
         attentionCount: 2,
