@@ -2,7 +2,16 @@ import SwiftUI
 
 private enum RelayStyle {
     static let ink = Color.primary
-    static let panel = Color(uiColor: .systemBackground)
+    static let panel = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : UIColor(red: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
+    static let inverseInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : UIColor(red: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
     static let surface = Color.primary.opacity(0.045)
     static let line = Color.primary.opacity(0.24)
     static let coral = Color(red: 226.0 / 255.0, green: 92.0 / 255.0, blue: 72.0 / 255.0)
@@ -52,7 +61,7 @@ private struct PairView: View {
                 .font(.system(size: 12, weight: .black, design: .monospaced))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .foregroundStyle(Color(UIColor.systemBackground))
+                .foregroundStyle(RelayStyle.inverseInk)
                 .background(Color.primary)
                 .padding(.top, 10)
             if case let .offline(message) = store.connection {
@@ -268,22 +277,37 @@ private struct RelayProviderIcon: View {
     var body: some View {
         ZStack {
             Rectangle().fill(provider.active > 0 ? Color.primary : RelayStyle.surface)
-            Group {
-                switch provider.id.lowercased() {
-                case "codex": Text("⌬")
-                case "claude": Text("✳")
-                case "gemini": Text("✦")
-                case "cursor": Image(systemName: "cursorarrow")
-                case "grok": Text("𝕏")
-                default: Text(provider.mark)
+            if let assetName {
+                Image(assetName)
+                    .resizable()
+                    .scaledToFit()
+                    .saturation(0)
+                    .contrast(1.2)
+                    .padding(size * 0.13)
+            } else {
+                Group {
+                    switch provider.id.lowercased() {
+                    case "gemini": Text("✦")
+                    case "grok": Text("𝕏")
+                    default: Text(provider.mark)
+                    }
                 }
+                .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
+                .foregroundStyle(provider.active > 0 ? RelayStyle.panel : Color.primary)
             }
-            .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
-            .foregroundStyle(provider.active > 0 ? RelayStyle.panel : Color.primary)
         }
         .frame(width: size, height: size)
         .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
         .accessibilityLabel(provider.name)
+    }
+
+    private var assetName: String? {
+        switch provider.id.lowercased() {
+        case "codex": return "ProviderCodex"
+        case "claude": return "ProviderClaude"
+        case "cursor": return "ProviderCursor"
+        default: return nil
+        }
     }
 }
 

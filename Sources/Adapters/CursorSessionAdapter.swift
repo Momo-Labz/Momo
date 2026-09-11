@@ -49,9 +49,13 @@ struct CursorSessionAdapter: ProviderSessionAdapter {
 
         while let chunk = try? handle.read(upToCount: 64 * 1024), !chunk.isEmpty {
             pending.append(chunk)
-            while let boundary = pending.firstIndex(of: newline) {
-                decode(pending[..<boundary], consume: consume)
-                pending.removeSubrange(...boundary)
+            var lineStart = pending.startIndex
+            while let boundary = pending[lineStart...].firstIndex(of: newline) {
+                decode(pending[lineStart..<boundary], consume: consume)
+                lineStart = pending.index(after: boundary)
+            }
+            if lineStart != pending.startIndex {
+                pending.removeSubrange(pending.startIndex..<lineStart)
             }
         }
         if !pending.isEmpty {
@@ -96,7 +100,7 @@ struct CursorSessionAdapter: ProviderSessionAdapter {
             .replacingOccurrences(of: "_", with: " ")
             .split(whereSeparator: \Character.isWhitespace)
             .joined(separator: " ")
-        return name.isEmpty ? nil : name
+        return name.isEmpty ? nil : name.capitalized
     }
 }
 

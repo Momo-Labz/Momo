@@ -130,13 +130,18 @@ struct CapabilityInventoryReader: Sendable {
         self.homeURL = homeURL.standardizedFileURL
     }
 
-    func read() -> CapabilityInventory {
+    func read(enabledProviders: Set<AIProvider> = Set(AIProvider.allCases)) -> CapabilityInventory {
         var accumulator = InventoryAccumulator()
-        readClaudeConfig(into: &accumulator)
-        readClaudePlugins(into: &accumulator)
-        readSkillDirectories(into: &accumulator)
-        readCodexConfig(into: &accumulator)
-        readCursorConfig(into: &accumulator)
+        if enabledProviders.contains(.claude) {
+            readClaudeConfig(into: &accumulator)
+            readClaudePlugins(into: &accumulator)
+        }
+        readSkillDirectories(
+            includeClaude: enabledProviders.contains(.claude),
+            into: &accumulator
+        )
+        if enabledProviders.contains(.codex) { readCodexConfig(into: &accumulator) }
+        if enabledProviders.contains(.cursor) { readCursorConfig(into: &accumulator) }
         return accumulator.inventory
     }
 
@@ -190,12 +195,17 @@ struct CapabilityInventoryReader: Sendable {
         }
     }
 
-    private func readSkillDirectories(into accumulator: inout InventoryAccumulator) {
-        addSkills(
-            at: homeURL.appendingPathComponent(".claude/skills", isDirectory: true),
-            owner: .provider(.claude),
-            to: &accumulator
-        )
+    private func readSkillDirectories(
+        includeClaude: Bool,
+        into accumulator: inout InventoryAccumulator
+    ) {
+        if includeClaude {
+            addSkills(
+                at: homeURL.appendingPathComponent(".claude/skills", isDirectory: true),
+                owner: .provider(.claude),
+                to: &accumulator
+            )
+        }
         addSkills(
             at: homeURL.appendingPathComponent(".agents/skills", isDirectory: true),
             owner: .shared,
@@ -245,7 +255,7 @@ struct CapabilityInventoryReader: Sendable {
         guard let entries = try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else { return }
 
         for entry in entries {

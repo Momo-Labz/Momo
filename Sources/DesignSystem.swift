@@ -3,14 +3,22 @@ import CoreImage
 import SwiftUI
 
 enum BarBoyStyle {
-    static let panel = Color(nsColor: .windowBackgroundColor)
+    static let panel = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : NSColor(srgbRed: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
     static let surface = Color.primary.opacity(0.045)
     static let raised = Color.primary.opacity(0.085)
     static let hairline = Color.primary.opacity(0.22)
     static let coral = Color(red: 226 / 255, green: 92 / 255, blue: 72 / 255)
     static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
     static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
-    static let inverseInk = Color(nsColor: .windowBackgroundColor)
+    static let inverseInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : NSColor(srgbRed: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
 
     static let display = Font.custom("Menlo-Bold", fixedSize: 15)
     static let navLabel = Font.custom("Menlo-Bold", fixedSize: 10)

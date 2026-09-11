@@ -20,6 +20,7 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Shared
       - path: Resources
         buildPhase: resources
     settings:
@@ -36,9 +37,6 @@ targets:
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
-    scheme:
-      testTargets:
-        - BarBoyTests
   BarBoyTests:
     type: bundle.unit-test
     platform: macOS
@@ -62,6 +60,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: iOS/Sources
+      - path: Shared
       - path: iOS/Resources
         buildPhase: resources
     info:
@@ -84,3 +83,14 @@ targets:
         SUPPORTS_MACCATALYST: NO
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
+schemes:
+  BarBoy:
+    build:
+      targets:
+        BarBoy: all
+    test:
+      targets:
+        - BarBoyTests
+      environmentVariables:
+        BAR_BOY_REAL_DATA_CHECK: "$(BAR_BOY_REAL_DATA_CHECK)"
+        BAR_BOY_RENDER_SNAPSHOTS: "$(BAR_BOY_RENDER_SNAPSHOTS)"

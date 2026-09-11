@@ -11,6 +11,7 @@ struct DashboardView: View {
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
+    @State private var inventoryScope: CapabilityInventoryScope?
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home) {
         self.refreshOnAppear = refreshOnAppear
@@ -39,9 +40,9 @@ struct DashboardView: View {
     private var urgentSessions: [AgentSession] { allSessions.filter { $0.attention.isUrgent } }
     private var urgentCount: Int { urgentSessions.count }
     private var liveCount: Int { allSessions.filter(\.isRunning).count }
-    private var skillTiles: [CapabilityTile] { capabilityTiles(kind: .skill) { $0.skills } }
+    private var skillTiles: [CapabilityTile] { capabilityTiles(kind: .skill) }
     private var integrationTiles: [CapabilityTile] {
-        capabilityTiles(kind: .mcp) { $0.mcpServers } + capabilityTiles(kind: .plugin) { $0.plugins }
+        capabilityTiles(kind: .mcpServer) + capabilityTiles(kind: .plugin)
     }
 
     var body: some View {
@@ -56,6 +57,7 @@ struct DashboardView: View {
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
         .sheet(item: $inspectedSession) { SessionInspectorView(session: $0) }
+        .sheet(item: $inventoryScope) { CapabilityInventoryView(initialScope: $0) }
     }
 
     private var header: some View {
@@ -148,7 +150,7 @@ struct DashboardView: View {
                     HStack(spacing: 11) {
                         Rectangle().fill(Color.primary).frame(width: 6, height: 32)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("NO ONE IS WAITING").font(BarBoyStyle.rowTitle)
+                            Text("MOMO CHECKED. NO ONE IS WAITING.").font(BarBoyStyle.rowTitle)
                             Text("The queue interrupts only when an agent needs you.")
                                 .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
                         }
@@ -172,15 +174,19 @@ struct DashboardView: View {
 
     private var skillSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "SKILLS IN USE", note: skillTiles.isEmpty ? "NOT RECORDED" : "\(skillTiles.count) DETECTED")
-            if skillTiles.isEmpty {
-                EmptyCapabilityRow(text: "Skills appear when a local session records them.")
-            } else {
-                HStack(spacing: 8) {
-                    ForEach(skillTiles.prefix(4)) { CapabilitySquare(tile: $0) }
-                    if skillTiles.count > 4 { MoreCapabilitySquare(count: skillTiles.count - 4) }
-                    Spacer(minLength: 0)
+            SectionHeader(
+                title: "SKILLS",
+                note: skillTiles.isEmpty ? "NONE INSTALLED" : "\(skillTiles.filter(\.isUsed).count) USED / \(skillTiles.count) INSTALLED"
+            )
+            HStack(spacing: 8) {
+                if skillTiles.isEmpty {
+                    EmptyCapabilityRow(text: "No installed skills found in enabled providers.")
+                } else {
+                    ForEach(skillTiles.prefix(3)) { CapabilitySquare(tile: $0) }
+                    if skillTiles.count > 3 { MoreCapabilitySquare(count: skillTiles.count - 3) }
                 }
+                InventoryButtonSquare(label: "SKILLS") { inventoryScope = .skills }
+                Spacer(minLength: 0)
             }
         }
     }
@@ -190,16 +196,23 @@ struct DashboardView: View {
             SectionHeader(title: "ACTIVE INTEGRATIONS", note: "MCP + PLUGINS")
             HStack(spacing: 7) {
                 if integrationTiles.isEmpty {
-                    Text("NONE RECORDED IN LIVE SESSIONS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    Text("NONE INSTALLED FOR ENABLED PROVIDERS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 } else {
-                    ForEach(integrationTiles.prefix(6)) { IntegrationMark(tile: $0) }
-                    if integrationTiles.count > 6 {
-                        Text("+\(integrationTiles.count - 6)")
+                    ForEach(integrationTiles.prefix(5)) { IntegrationMark(tile: $0) }
+                    if integrationTiles.count > 5 {
+                        Text("+\(integrationTiles.count - 5)")
                             .font(BarBoyStyle.microLabel).frame(width: 30, height: 30)
                             .background(BarBoyStyle.raised)
                             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                     }
                 }
+                Button { inventoryScope = .integrations } label: {
+                    Image(systemName: "plus").font(.system(size: 11, weight: .bold)).frame(width: 30, height: 30)
+                }
+                .buttonStyle(.plain)
+                .background(BarBoyStyle.raised)
+                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                .help("Open installed integrations")
                 Spacer(minLength: 0)
             }
             .padding(9)
@@ -263,29 +276,34 @@ struct DashboardView: View {
     private var toolsPage: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "SKILL CATALOG", note: "USED BY LIVE SESSIONS")
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
-                    if skillTiles.isEmpty { EmptyCapabilityRow(text: "No skills recorded yet.") }
-                    else { ForEach(skillTiles) { CapabilitySquare(tile: $0) } }
+                SectionHeader(title: "SKILL CATALOG", note: "INSTALLED / USED MARKED")
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
+                        if skillTiles.isEmpty { EmptyCapabilityRow(text: "No installed skills found.") }
+                        else { ForEach(skillTiles) { CapabilitySquare(tile: $0) } }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
             Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeader(title: "INTEGRATIONS", note: "MCP + PLUGINS")
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(integrationTiles) { tile in
-                        HStack(spacing: 10) {
-                            IntegrationMark(tile: tile)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle)
-                                Text("\(tile.kind.label) / \(tile.provider.name.uppercased())")
-                                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(integrationTiles) { tile in
+                            HStack(spacing: 10) {
+                                IntegrationMark(tile: tile)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle)
+                                    Text(tile.provenanceLabel)
+                                        .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                if tile.isUsed { Text("USED").font(BarBoyStyle.microLabel).padding(4).overlay(Rectangle().stroke(BarBoyStyle.hairline)) }
                             }
-                            Spacer()
                         }
+                        if integrationTiles.isEmpty { EmptyCapabilityRow(text: "No installed integrations found.") }
                     }
-                    if integrationTiles.isEmpty { EmptyCapabilityRow(text: "No integrations recorded yet.") }
                 }
                 Button("MANAGE PROVIDER ACCESS") { openSettings() }
                     .barBoyButton()
@@ -332,7 +350,7 @@ struct DashboardView: View {
                         HStack(spacing: 12) {
                             PixelBarBoyMark(size: 28)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("QUIET RIGHT NOW").font(BarBoyStyle.rowTitle)
+                                Text("MOMO CHECKED. QUIET RIGHT NOW.").font(BarBoyStyle.rowTitle)
                                 Text("New local sessions appear here.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -387,15 +405,13 @@ struct DashboardView: View {
         else { NotificationCenter.default.post(name: .showCommandPalette, object: nil) }
     }
 
-    private func capabilityTiles(kind: CapabilityKind, values: (AgentSession) -> [String]) -> [CapabilityTile] {
-        var seen = Set<String>()
-        return allSessions.flatMap { session in
-            values(session).compactMap { name in
-                let key = "\(kind.rawValue):\(name.lowercased())"
-                guard seen.insert(key).inserted else { return nil }
-                return CapabilityTile(name: name, kind: kind, provider: session.provider)
+    private func capabilityTiles(kind: InstalledCapabilityKind) -> [CapabilityTile] {
+        monitor.capabilityInventory.items(of: kind)
+            .map(CapabilityTile.init)
+            .sorted {
+                if $0.isUsed != $1.isUsed { return $0.isUsed }
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
             }
-        }
     }
 
     private var lastUpdateLabel: String {
@@ -498,17 +514,28 @@ enum DashboardTab: String, CaseIterable, Identifiable {
     }
 }
 
-private enum CapabilityKind: String {
-    case skill, mcp, plugin
-    var label: String { self == .skill ? "SKILL" : (self == .mcp ? "MCP" : "PLUGIN") }
-}
-
 private struct CapabilityTile: Identifiable {
     let name: String
-    let kind: CapabilityKind
-    let provider: AIProvider
+    let kind: InstalledCapabilityKind
+    let provider: AIProvider?
+    let isUsed: Bool
+    let isShared: Bool
     var id: String { "\(kind.rawValue):\(name.lowercased())" }
     var monogram: String { String(name.prefix(2)).uppercased() }
+    var provenanceLabel: String {
+        let owner = provider?.name.uppercased() ?? (isShared ? "SHARED" : "LOCAL")
+        return "\(kind.label) / \(owner)"
+    }
+
+    init(_ capability: InstalledCapability) {
+        name = capability.name
+        kind = capability.kind
+        isUsed = capability.isUsed
+        isShared = capability.isShared
+        let owner = capability.usedBy.sorted { $0.rawValue < $1.rawValue }.first
+            ?? capability.providerOwners.sorted { $0.rawValue < $1.rawValue }.first
+        provider = owner.flatMap { AIProvider(rawValue: $0.rawValue) }
+    }
 }
 
 private struct SectionHeader: View {
@@ -530,18 +557,42 @@ private struct CapabilitySquare: View {
             HStack {
                 Text(tile.monogram).font(BarBoyStyle.capabilityMark)
                 Spacer()
-                ProviderMark(provider: tile.provider, size: 18, active: true)
+                if let provider = tile.provider {
+                    ProviderMark(provider: provider, size: 18, active: tile.isUsed)
+                } else {
+                    Image(systemName: "square.stack.3d.up").font(.system(size: 11, weight: .bold))
+                }
             }
             Spacer()
             Text(tile.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(2)
-            Text(tile.kind.label).font(.system(size: 7, weight: .black, design: .monospaced)).foregroundStyle(.secondary)
+            Text(tile.isUsed ? "USED / \(tile.kind.label)" : "INSTALLED / \(tile.kind.label)")
+                .font(.system(size: 7, weight: .black, design: .monospaced)).foregroundStyle(.secondary)
         }
         .padding(9)
         .frame(width: 82, height: 78, alignment: .leading)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(tile.name), \(tile.kind.label), used by \(tile.provider.name)")
+        .accessibilityLabel("\(tile.name), \(tile.kind.label), \(tile.isUsed ? "used in a session" : "installed")")
+    }
+}
+
+private struct InventoryButtonSquare: View {
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: "plus").font(.system(size: 17, weight: .bold))
+                Text(label).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            }
+            .frame(width: 62, height: 78)
+            .background(BarBoyStyle.raised)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help("Open installed \(label.lowercased())")
     }
 }
 
@@ -577,13 +628,13 @@ private struct IntegrationMark: View {
     var body: some View {
         VStack(spacing: 1) {
             Text(tile.monogram).font(BarBoyStyle.rowTitle)
-            Text(tile.kind == .mcp ? "M" : "P")
+            Text(tile.kind == .mcpServer ? "M" : "P")
                 .font(.system(size: 6, weight: .black, design: .monospaced)).foregroundStyle(.secondary)
         }
         .frame(width: 30, height: 30)
         .background(BarBoyStyle.raised)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-        .help("\(tile.name) / \(tile.kind.label) / \(tile.provider.name)")
+        .help("\(tile.name) / \(tile.provenanceLabel) / \(tile.isUsed ? "used" : "installed")")
         .accessibilityLabel("\(tile.name), \(tile.kind.label)")
     }
 }

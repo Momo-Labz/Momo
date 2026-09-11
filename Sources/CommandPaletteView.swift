@@ -5,6 +5,7 @@ struct CommandPaletteView: View {
     @State private var provider: AIProvider = .codex
     @State private var prompt = ""
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var versionLabel: String {
         let version = BarBoyAppInfo.marketingVersion
@@ -28,7 +29,7 @@ struct CommandPaletteView: View {
             HStack(spacing: 0) {
                 ForEach(AIProvider.allCases) { item in
                     Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { provider = item }
+                        withAnimation(reduceMotion ? nil : BarBoyStyle.pageAnimation) { provider = item }
                     } label: {
                         Text(item.name.uppercased())
                             .font(.system(size: 9, weight: .black, design: .monospaced))

@@ -199,7 +199,7 @@ final class DeskDisplayServer: ObservableObject {
 
     static func makeStatusJSON(snapshots: [ProviderSnapshot], includeTitles: Bool) -> Data {
         let providers = snapshots.map { snapshot in
-            DeskProviderPayload(
+            RelayProvider(
                 id: snapshot.provider.rawValue,
                 name: snapshot.provider.name,
                 mark: snapshot.provider.monogram,
@@ -221,7 +221,7 @@ final class DeskDisplayServer: ObservableObject {
             }
             .prefix(5)
             .map { session in
-                DeskSessionPayload(
+                RelaySession(
                     id: session.id,
                     provider: session.provider.name,
                     mark: session.provider.monogram,
@@ -241,8 +241,8 @@ final class DeskDisplayServer: ObservableObject {
                     capabilityCount: session.capabilityCount
                 )
             }
-        let payload = DeskStatusPayload(
-            schemaVersion: DeskStatusPayload.currentSchemaVersion,
+        let payload = RelayStatus(
+            schemaVersion: RelayStatus.currentSchemaVersion,
             updated: ISO8601DateFormatter().string(from: .now),
             activeCount: snapshots.reduce(0) { $0 + $1.activeCount },
             attentionCount: snapshots.reduce(0) { $0 + $1.needsAttentionCount },
@@ -436,63 +436,5 @@ final class DeskDisplayServer: ObservableObject {
         components.path = "/display"
         components.queryItems = [URLQueryItem(name: "key", value: token)]
         return components.url
-    }
-}
-
-// Keep these CodingKeys aligned with iOS/Sources/RelayModels.swift. Explicit
-// transport types make additions deliberate and prevent dictionary-key drift.
-private struct DeskStatusPayload: Encodable {
-    static let currentSchemaVersion = 1
-    let schemaVersion: Int
-    let updated: String
-    let activeCount: Int
-    let attentionCount: Int
-    let providers: [DeskProviderPayload]
-    let sessions: [DeskSessionPayload]
-
-    enum CodingKeys: String, CodingKey {
-        case schemaVersion, updated, activeCount, attentionCount, providers, sessions
-    }
-}
-
-private struct DeskProviderPayload: Encodable {
-    let id: String
-    let name: String
-    let mark: String
-    let active: Int
-    let tokens: Int
-    let usage: String
-    let short: Int?
-    let week: Int?
-    let sessionCount: Int
-    let needsAttention: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, mark, active, tokens, usage, short, week, sessionCount, needsAttention
-    }
-}
-
-private struct DeskSessionPayload: Encodable {
-    let id: String
-    let provider: String
-    let mark: String
-    let role: String
-    let title: String
-    let project: String
-    let live: Bool
-    let age: String
-    let attention: String
-    let attentionLabel: String
-    let attentionReason: String?
-    let urgent: Bool
-    let model: String?
-    let mcpServers: [String]
-    let skills: [String]
-    let plugins: [String]
-    let capabilityCount: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, provider, mark, role, title, project, live, age, attention
-        case attentionLabel, attentionReason, urgent, model, mcpServers, skills, plugins, capabilityCount
     }
 }

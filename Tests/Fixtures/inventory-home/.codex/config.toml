@@ -1,0 +1,8 @@
+[mcp_servers.github]
+command = "sanitized"
+
+[plugins."security@official"]
+enabled = true
+
+[marketplaces.community]
+source = "sanitized"

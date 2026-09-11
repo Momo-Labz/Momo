@@ -7,24 +7,42 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		009909D80F56BE20EC7E27D3 /* RelayContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */; };
 		09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2244A22CE29B93DD607E1 /* SettingsView.swift */; };
 		136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */; };
+		13EB764724C7F3A1628831EE /* claude-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = 5375940CB8F7866FFBA3446F /* claude-session.jsonl */; };
+		17307F56295C41FC490603CC /* RelayContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */; };
+		183991540BDA6768A32500D9 /* CapabilityInventoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2182EBD0728CDF9DA9E5EAD /* CapabilityInventoryView.swift */; };
 		187B6FDF407B0AB0E3907786 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9D568DC6BE830956FA389F7D /* DashboardView.swift */; };
 		36D7CE2F6C0AB347E86D2AFB /* RelayRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */; };
 		3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */; };
+		3F67CAAAEEEFC2CBF61C2626 /* config.toml in Resources */ = {isa = PBXBuildFile; fileRef = F95FF5C03D51270D6F53B0FF /* config.toml */; };
+		3F97AEB0CE7404E954AB8FC0 /* installed_plugins.json in Resources */ = {isa = PBXBuildFile; fileRef = DDE35C7070ABC2BF180A85FB /* installed_plugins.json */; };
+		44FDD058CD91C0C60D55576D /* codex-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = F8F744DA44565866EDA3D383 /* codex-session.jsonl */; };
+		4E279FE8392513B5524EBFBE /* known_marketplaces.json in Resources */ = {isa = PBXBuildFile; fileRef = 374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */; };
+		5F0F2D999AA09D95B2C98B2B /* ProviderSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */; };
 		64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914544FD481DF77821FAFD11 /* Models.swift */; };
 		68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */; };
 		6E707731B52AB1AA7AFB7DE1 /* CommandPaletteView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E97EABE168680367E8C4D28E /* CommandPaletteView.swift */; };
 		7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */; };
+		74F7AFD2374B1C1409092407 /* ClaudeSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B3D59EDD2FC692CDE82DE3D /* ClaudeSessionAdapter.swift */; };
 		76F832EA656D975C3B04DDFF /* BarBoyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4636595E64156A63431C041 /* BarBoyTests.swift */; };
+		7882380E753C1D32CCCB3D4E /* mcp.json in Resources */ = {isa = PBXBuildFile; fileRef = 1E40F78C9E6FDDAEFC05B8A5 /* mcp.json */; };
+		7B9EDC7D9C229953EDD39DDD /* CodexSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */; };
 		854A48BAD75E91A6E9AE7AEB /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */; };
+		8D8CE207E25B42D4B67C7365 /* CursorSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */; };
 		966A728AF138807269935D7E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */; };
 		AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */; };
 		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
+		D4433E46CD15BD9E26D3872C /* BRAND_FIXTURE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3020B8662144C4584146E42E /* BRAND_FIXTURE.txt */; };
+		D5DB3FA170DA801EBF4E69A8 /* QA_FIXTURE.txt in Resources */ = {isa = PBXBuildFile; fileRef = C415EF7F72FD46DB1A05F65D /* QA_FIXTURE.txt */; };
 		D652487A4920533FC7F1137A /* BarBoyMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */; };
 		D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCA94527A39181A6696901C9 /* ActivityMonitor.swift */; };
+		D9B52594539D9492393074C1 /* .claude.json in Resources */ = {isa = PBXBuildFile; fileRef = A80F4CD2A60C6ABF98C794EF /* .claude.json */; };
+		DC8B8CBBCD85907533A1CC95 /* CapabilityInventory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53603012CFC4861E36CD1B24 /* CapabilityInventory.swift */; };
 		E052D23FE428CEED342603E6 /* icon-source.png in Resources */ = {isa = PBXBuildFile; fileRef = D3D299542F8A6FB8744AAD52 /* icon-source.png */; };
 		E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */; };
+		E8074D2914582CC7BF9D7902 /* sanitized-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = 565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */; };
 		F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479945A2B783FEEB67F51BD8 /* RelayModels.swift */; };
 		F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */; };
 		F8912305CB95E1F9EFD74818 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 532B6989DEC8AFDE334B990F /* Assets.xcassets */; };
@@ -45,31 +63,56 @@
 		02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayRootView.swift; sourceTree = "<group>"; };
 		0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayStore.swift; sourceTree = "<group>"; };
 		1CB2244A22CE29B93DD607E1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		1E40F78C9E6FDDAEFC05B8A5 /* mcp.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = mcp.json; sourceTree = "<group>"; };
 		1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayKeychain.swift; sourceTree = "<group>"; };
+		3020B8662144C4584146E42E /* BRAND_FIXTURE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BRAND_FIXTURE.txt; sourceTree = "<group>"; };
+		374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = known_marketplaces.json; sourceTree = "<group>"; };
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BarBoyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		479945A2B783FEEB67F51BD8 /* RelayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayModels.swift; sourceTree = "<group>"; };
 		4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskDisplayServer.swift; sourceTree = "<group>"; };
 		532B6989DEC8AFDE334B990F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		53603012CFC4861E36CD1B24 /* CapabilityInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityInventory.swift; sourceTree = "<group>"; };
+		5375940CB8F7866FFBA3446F /* claude-session.jsonl */ = {isa = PBXFileReference; path = "claude-session.jsonl"; sourceTree = "<group>"; };
+		565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */ = {isa = PBXFileReference; path = "sanitized-session.jsonl"; sourceTree = "<group>"; };
 		5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyApp.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
+		7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSessionAdapter.swift; sourceTree = "<group>"; };
 		85FA579C0D401BBE1ED8A9E9 /* BarBoy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BarBoy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8CFC5B7008808730FE6A3D5E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		914544FD481DF77821FAFD11 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		9B3D59EDD2FC692CDE82DE3D /* ClaudeSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSessionAdapter.swift; sourceTree = "<group>"; };
 		9D568DC6BE830956FA389F7D /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalShortcutService.swift; sourceTree = "<group>"; };
+		A2182EBD0728CDF9DA9E5EAD /* CapabilityInventoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityInventoryView.swift; sourceTree = "<group>"; };
 		A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyMobileApp.swift; sourceTree = "<group>"; };
+		A80F4CD2A60C6ABF98C794EF /* .claude.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = .claude.json; sourceTree = "<group>"; };
+		AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSessionAdapter.swift; sourceTree = "<group>"; };
 		C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
+		C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CursorSessionAdapter.swift; sourceTree = "<group>"; };
+		C415EF7F72FD46DB1A05F65D /* QA_FIXTURE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = QA_FIXTURE.txt; sourceTree = "<group>"; };
 		CCA94527A39181A6696901C9 /* ActivityMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityMonitor.swift; sourceTree = "<group>"; };
 		D3D299542F8A6FB8744AAD52 /* icon-source.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "icon-source.png"; sourceTree = "<group>"; };
 		D4636595E64156A63431C041 /* BarBoyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyTests.swift; sourceTree = "<group>"; };
 		DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionNotifier.swift; sourceTree = "<group>"; };
+		DDE35C7070ABC2BF180A85FB /* installed_plugins.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = installed_plugins.json; sourceTree = "<group>"; };
 		E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeBridgeView.swift; sourceTree = "<group>"; };
 		E97EABE168680367E8C4D28E /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
+		F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayContract.swift; sourceTree = "<group>"; };
+		F8F744DA44565866EDA3D383 /* codex-session.jsonl */ = {isa = PBXFileReference; path = "codex-session.jsonl"; sourceTree = "<group>"; };
+		F95FF5C03D51270D6F53B0FF /* config.toml */ = {isa = PBXFileReference; path = config.toml; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		0243E77CC761590E1C59A556 /* projects */ = {
+			isa = PBXGroup;
+			children = (
+				760939F4187383FF00291718 /* sanitized-project */,
+			);
+			path = projects;
+			sourceTree = "<group>";
+		};
 		028BB257D7B210C33D829CAF /* Sources */ = {
 			isa = PBXGroup;
 			children = (
@@ -82,12 +125,56 @@
 			path = Sources;
 			sourceTree = "<group>";
 		};
+		137DCE725AB54B13CCBC7BE5 /* qa */ = {
+			isa = PBXGroup;
+			children = (
+				C415EF7F72FD46DB1A05F65D /* QA_FIXTURE.txt */,
+			);
+			path = qa;
+			sourceTree = "<group>";
+		};
+		18C3506B51651F4E05EC6AB7 /* Fixtures */ = {
+			isa = PBXGroup;
+			children = (
+				5375940CB8F7866FFBA3446F /* claude-session.jsonl */,
+				F8F744DA44565866EDA3D383 /* codex-session.jsonl */,
+				192A6E5F2A90910959408EE2 /* Cursor */,
+				90DA443BFAE21EB4DEDFEF14 /* inventory-home */,
+			);
+			path = Fixtures;
+			sourceTree = "<group>";
+		};
+		192A6E5F2A90910959408EE2 /* Cursor */ = {
+			isa = PBXGroup;
+			children = (
+				0243E77CC761590E1C59A556 /* projects */,
+			);
+			path = Cursor;
+			sourceTree = "<group>";
+		};
+		1CE6372936B5F03DD780BC4F /* sanitized-session */ = {
+			isa = PBXGroup;
+			children = (
+				565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */,
+			);
+			path = "sanitized-session";
+			sourceTree = "<group>";
+		};
+		22EEA10551859C486DA2AC50 /* agent-transcripts */ = {
+			isa = PBXGroup;
+			children = (
+				1CE6372936B5F03DD780BC4F /* sanitized-session */,
+			);
+			path = "agent-transcripts";
+			sourceTree = "<group>";
+		};
 		24D8A908600E79271809B94C /* Sources */ = {
 			isa = PBXGroup;
 			children = (
 				CCA94527A39181A6696901C9 /* ActivityMonitor.swift */,
 				DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */,
 				5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */,
+				A2182EBD0728CDF9DA9E5EAD /* CapabilityInventoryView.swift */,
 				E97EABE168680367E8C4D28E /* CommandPaletteView.swift */,
 				9D568DC6BE830956FA389F7D /* DashboardView.swift */,
 				67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */,
@@ -98,16 +185,50 @@
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
 				E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */,
 				1CB2244A22CE29B93DD607E1 /* SettingsView.swift */,
+				670F0E4384D32C6842843F47 /* Adapters */,
 			);
 			path = Sources;
+			sourceTree = "<group>";
+		};
+		2BAFBD8EA29F1E6B0F83832A /* .codex */ = {
+			isa = PBXGroup;
+			children = (
+				F95FF5C03D51270D6F53B0FF /* config.toml */,
+			);
+			path = .codex;
+			sourceTree = "<group>";
+		};
+		3C046D7E4159657C1440AF7A /* skills */ = {
+			isa = PBXGroup;
+			children = (
+				9BC7D247698E79759A80ABCD /* brand */,
+			);
+			path = skills;
 			sourceTree = "<group>";
 		};
 		51FCE9378B6CA151B99CC03B /* Tests */ = {
 			isa = PBXGroup;
 			children = (
 				D4636595E64156A63431C041 /* BarBoyTests.swift */,
+				18C3506B51651F4E05EC6AB7 /* Fixtures */,
 			);
 			path = Tests;
+			sourceTree = "<group>";
+		};
+		579297670D71FE898FCCA1CF /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		64EF3904856B7FEDD20A3C06 /* skills */ = {
+			isa = PBXGroup;
+			children = (
+				137DCE725AB54B13CCBC7BE5 /* qa */,
+			);
+			path = skills;
 			sourceTree = "<group>";
 		};
 		667FCD703AFFB8783FC50472 = {
@@ -115,10 +236,23 @@
 			children = (
 				C543E80AA745DD72ABAA7E34 /* iOS */,
 				8043E9ABF527E479EC6F3EFD /* Resources */,
+				579297670D71FE898FCCA1CF /* Shared */,
 				24D8A908600E79271809B94C /* Sources */,
 				51FCE9378B6CA151B99CC03B /* Tests */,
 				6891C9836B3E88E912D007F8 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		670F0E4384D32C6842843F47 /* Adapters */ = {
+			isa = PBXGroup;
+			children = (
+				53603012CFC4861E36CD1B24 /* CapabilityInventory.swift */,
+				9B3D59EDD2FC692CDE82DE3D /* ClaudeSessionAdapter.swift */,
+				AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */,
+				C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */,
+				7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */,
+			);
+			path = Adapters;
 			sourceTree = "<group>";
 		};
 		6891C9836B3E88E912D007F8 /* Products */ = {
@@ -131,6 +265,14 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		760939F4187383FF00291718 /* sanitized-project */ = {
+			isa = PBXGroup;
+			children = (
+				22EEA10551859C486DA2AC50 /* agent-transcripts */,
+			);
+			path = "sanitized-project";
+			sourceTree = "<group>";
+		};
 		8043E9ABF527E479EC6F3EFD /* Resources */ = {
 			isa = PBXGroup;
 			children = (
@@ -140,6 +282,51 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		90DA443BFAE21EB4DEDFEF14 /* inventory-home */ = {
+			isa = PBXGroup;
+			children = (
+				A80F4CD2A60C6ABF98C794EF /* .claude.json */,
+				B53EAEE892C51FFA68154CE7 /* .agents */,
+				9F3CCFD171F862BDB736E25E /* .claude */,
+				2BAFBD8EA29F1E6B0F83832A /* .codex */,
+				9424D81B85EF9E47C2E3DC2E /* .cursor */,
+			);
+			path = "inventory-home";
+			sourceTree = "<group>";
+		};
+		9424D81B85EF9E47C2E3DC2E /* .cursor */ = {
+			isa = PBXGroup;
+			children = (
+				1E40F78C9E6FDDAEFC05B8A5 /* mcp.json */,
+			);
+			path = .cursor;
+			sourceTree = "<group>";
+		};
+		9BC7D247698E79759A80ABCD /* brand */ = {
+			isa = PBXGroup;
+			children = (
+				3020B8662144C4584146E42E /* BRAND_FIXTURE.txt */,
+			);
+			path = brand;
+			sourceTree = "<group>";
+		};
+		9F3CCFD171F862BDB736E25E /* .claude */ = {
+			isa = PBXGroup;
+			children = (
+				F117CAE38322A961E4E9FB39 /* plugins */,
+				3C046D7E4159657C1440AF7A /* skills */,
+			);
+			path = .claude;
+			sourceTree = "<group>";
+		};
+		B53EAEE892C51FFA68154CE7 /* .agents */ = {
+			isa = PBXGroup;
+			children = (
+				64EF3904856B7FEDD20A3C06 /* skills */,
+			);
+			path = .agents;
+			sourceTree = "<group>";
+		};
 		C543E80AA745DD72ABAA7E34 /* iOS */ = {
 			isa = PBXGroup;
 			children = (
@@ -147,6 +334,15 @@
 				028BB257D7B210C33D829CAF /* Sources */,
 			);
 			path = iOS;
+			sourceTree = "<group>";
+		};
+		F117CAE38322A961E4E9FB39 /* plugins */ = {
+			isa = PBXGroup;
+			children = (
+				DDE35C7070ABC2BF180A85FB /* installed_plugins.json */,
+				374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */,
+			);
+			path = plugins;
 			sourceTree = "<group>";
 		};
 		F5C4924FD9A66995BF652888 /* Resources */ = {
@@ -183,6 +379,7 @@
 			buildConfigurationList = CA19AF513441DF8480778C3C /* Build configuration list for PBXNativeTarget "BarBoyTests" */;
 			buildPhases = (
 				4872BFF2D243B7C2E8ACFF6C /* Sources */,
+				93B233B583F76DB0B1A893AA /* Resources */,
 			);
 			buildRules = (
 			);
@@ -276,6 +473,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		93B233B583F76DB0B1A893AA /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D9B52594539D9492393074C1 /* .claude.json in Resources */,
+				D4433E46CD15BD9E26D3872C /* BRAND_FIXTURE.txt in Resources */,
+				D5DB3FA170DA801EBF4E69A8 /* QA_FIXTURE.txt in Resources */,
+				13EB764724C7F3A1628831EE /* claude-session.jsonl in Resources */,
+				44FDD058CD91C0C60D55576D /* codex-session.jsonl in Resources */,
+				3F67CAAAEEEFC2CBF61C2626 /* config.toml in Resources */,
+				3F97AEB0CE7404E954AB8FC0 /* installed_plugins.json in Resources */,
+				4E279FE8392513B5524EBFBE /* known_marketplaces.json in Resources */,
+				7882380E753C1D32CCCB3D4E /* mcp.json in Resources */,
+				E8074D2914582CC7BF9D7902 /* sanitized-session.jsonl in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -284,6 +498,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D652487A4920533FC7F1137A /* BarBoyMobileApp.swift in Sources */,
+				009909D80F56BE20EC7E27D3 /* RelayContract.swift in Sources */,
 				BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */,
 				F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */,
 				36D7CE2F6C0AB347E86D2AFB /* RelayRootView.swift in Sources */,
@@ -306,7 +521,12 @@
 				D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */,
 				136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */,
 				68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */,
+				DC8B8CBBCD85907533A1CC95 /* CapabilityInventory.swift in Sources */,
+				183991540BDA6768A32500D9 /* CapabilityInventoryView.swift in Sources */,
+				74F7AFD2374B1C1409092407 /* ClaudeSessionAdapter.swift in Sources */,
+				7B9EDC7D9C229953EDD39DDD /* CodexSessionAdapter.swift in Sources */,
 				6E707731B52AB1AA7AFB7DE1 /* CommandPaletteView.swift in Sources */,
+				8D8CE207E25B42D4B67C7365 /* CursorSessionAdapter.swift in Sources */,
 				187B6FDF407B0AB0E3907786 /* DashboardView.swift in Sources */,
 				966A728AF138807269935D7E /* DesignSystem.swift in Sources */,
 				E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */,
@@ -314,6 +534,8 @@
 				F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */,
 				64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */,
 				AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */,
+				5F0F2D999AA09D95B2C98B2B /* ProviderSessionAdapter.swift in Sources */,
+				17307F56295C41FC490603CC /* RelayContract.swift in Sources */,
 				7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */,
 				09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */,
 			);

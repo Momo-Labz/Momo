@@ -1,61 +1,6 @@
 import Foundation
 
-// Keep these CodingKeys aligned with Sources/DeskDisplayServer.swift. The
-// optional version preserves decoding of 0.3 payloads during migration.
-struct RelayStatus: Codable {
-    let schemaVersion: Int?
-    let updated: String
-    let activeCount: Int
-    let attentionCount: Int
-    let providers: [RelayProvider]
-    let sessions: [RelaySession]
-
-    enum CodingKeys: String, CodingKey {
-        case schemaVersion, updated, activeCount, attentionCount, providers, sessions
-    }
-}
-
-struct RelayProvider: Codable, Identifiable {
-    let id: String
-    let name: String
-    let mark: String
-    let active: Int
-    let tokens: Int
-    let usage: String
-    let short: Int?
-    let week: Int?
-    let sessionCount: Int
-    let needsAttention: Int
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, mark, active, tokens, usage, short, week, sessionCount, needsAttention
-    }
-}
-
-struct RelaySession: Codable, Identifiable, Hashable {
-    let id: String
-    let provider: String
-    let mark: String
-    let role: String
-    let title: String
-    let project: String
-    let live: Bool
-    let age: String
-    let attention: String
-    let attentionLabel: String
-    let attentionReason: String?
-    let urgent: Bool
-    let model: String?
-    let mcpServers: [String]?
-    let skills: [String]?
-    let plugins: [String]?
-    let capabilityCount: Int?
-
-    enum CodingKeys: String, CodingKey {
-        case id, provider, mark, role, title, project, live, age, attention
-        case attentionLabel, attentionReason, urgent, model, mcpServers, skills, plugins, capabilityCount
-    }
-
+extension RelaySession {
     var provenance: String {
         var pieces: [String] = []
         if let model, !model.isEmpty { pieces.append(model.uppercased()) }

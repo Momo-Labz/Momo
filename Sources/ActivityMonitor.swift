@@ -7,22 +7,28 @@ final class ActivityMonitor: ObservableObject {
     static let refreshInterval: TimeInterval = 15
 
     @Published private(set) var snapshots: [ProviderSnapshot] = .placeholder
+    @Published private(set) var capabilityInventory: CapabilityInventory
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastUpdated: Date?
 
     private var timer: Timer?
     private let scanner: LocalActivityScanner
+    private let inventoryScanner: CapabilityInventoryScanner
     private let enabledProviders: @MainActor () -> Set<AIProvider>
 
     init(
         autoRefresh: Bool = true,
         snapshots: [ProviderSnapshot] = .placeholder,
+        capabilityInventory: CapabilityInventory = .empty,
         enabledProviders: @escaping @MainActor () -> Set<AIProvider> = ActivityMonitor.persistedEnabledProviders,
-        sessionAdapters: [any ProviderSessionAdapter] = []
+        sessionAdapters: [any ProviderSessionAdapter]? = nil,
+        capabilityReader: CapabilityInventoryReader = CapabilityInventoryReader()
     ) {
         self.snapshots = snapshots
+        self.capabilityInventory = capabilityInventory
         self.enabledProviders = enabledProviders
-        scanner = LocalActivityScanner(adapters: sessionAdapters)
+        scanner = LocalActivityScanner(adapters: sessionAdapters ?? Self.productionSessionAdapters)
+        inventoryScanner = CapabilityInventoryScanner(reader: capabilityReader)
         if autoRefresh {
             refresh()
             timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
@@ -36,8 +42,11 @@ final class ActivityMonitor: ObservableObject {
         isRefreshing = true
         let enabledProviders = enabledProviders()
         Task {
-            let latest = await scanner.scan(enabledProviders: enabledProviders)
+            async let scanResult = scanner.scan(enabledProviders: enabledProviders)
+            async let inventoryResult = inventoryScanner.read(enabledProviders: enabledProviders)
+            let (latest, installed) = await (scanResult, inventoryResult)
             snapshots = latest
+            capabilityInventory = installed.markingUsed(by: latest.flatMap(\.sessions))
             lastUpdated = .now
             isRefreshing = false
         }
@@ -61,6 +70,22 @@ final class ActivityMonitor: ObservableObject {
         }
         return Set(saved.compactMap(AIProvider.init(rawValue:)))
     }
+
+    private static var productionSessionAdapters: [any ProviderSessionAdapter] {
+        [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter()]
+    }
+}
+
+private actor CapabilityInventoryScanner {
+    private let reader: CapabilityInventoryReader
+
+    init(reader: CapabilityInventoryReader) {
+        self.reader = reader
+    }
+
+    func read(enabledProviders: Set<AIProvider>) -> CapabilityInventory {
+        reader.read(enabledProviders: enabledProviders)
+    }
 }
 
 actor LocalActivityScanner {
@@ -72,17 +97,18 @@ actor LocalActivityScanner {
         self.adapters = ProviderSessionAdapterRegistry(overrides: adapters)
     }
 
-    func scan(enabledProviders: Set<AIProvider> = Set(AIProvider.allCases)) -> [ProviderSnapshot] {
+    func scan(enabledProviders: Set<AIProvider> = Set(AIProvider.allCases)) async -> [ProviderSnapshot] {
         let providers = AIProvider.allCases.filter(enabledProviders.contains)
         guard !providers.isEmpty else { return [] }
 
         let now = Date()
         let processes = runningAIProcesses(for: enabledProviders)
-        return providers.map { provider in
+        var snapshots: [ProviderSnapshot] = []
+        for provider in providers {
             let providerProcesses = processes.filter { process in
                 provider.matchesProcessCommand(process.command)
             }
-            let diskSessions = recentSessions(
+            let diskSessions = await recentSessions(
                 for: provider,
                 running: !providerProcesses.isEmpty,
                 now: now
@@ -117,7 +143,7 @@ actor LocalActivityScanner {
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
                 }
-            return ProviderSnapshot(
+            snapshots.append(ProviderSnapshot(
                 provider: provider,
                 sessions: Array(merged.prefix(12)),
                 activeCount: providerProcesses.count,
@@ -127,8 +153,9 @@ actor LocalActivityScanner {
                     .reduce(0, +),
                 updatedAt: now,
                 isInstalled: !providerProcesses.isEmpty || hasSessionRoot(for: provider)
-            )
+            ))
         }
+        return snapshots
     }
 
     private func runningAIProcesses(for enabledProviders: Set<AIProvider>) -> [(pid: Int, command: String)] {
@@ -140,8 +167,10 @@ actor LocalActivityScanner {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
-        do { try process.run(); process.waitUntilExit() } catch { return [] }
+        do { try process.run() } catch { return [] }
+        // Drain before waiting: a large process table can fill the pipe and deadlock both sides.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         guard let output = String(data: data, encoding: .utf8) else { return [] }
         let ownPID = ProcessInfo.processInfo.processIdentifier
         return output.split(separator: "\n").compactMap { line in
@@ -155,7 +184,34 @@ actor LocalActivityScanner {
         }
     }
 
-    private func recentSessions(for provider: AIProvider, running: Bool, now: Date) -> [AgentSession] {
+    private func recentSessions(for provider: AIProvider, running: Bool, now: Date) async -> [AgentSession] {
+        let files = recentSessionFiles(for: provider, now: now)
+        let context = ProviderSessionContext(now: now, isProviderRunning: running)
+        let adapter = adapters.adapter(for: provider)
+        let selectedFiles = files
+            .sorted { $0.modifiedAt > $1.modifiedAt }
+            .prefix(12)
+        return await withTaskGroup(of: (Int, AgentSession?).self) { group in
+            for (index, file) in selectedFiles.enumerated() {
+                group.addTask {
+                    (
+                        index,
+                        adapter.session(
+                            from: ProviderSessionFile(url: file.url, modifiedAt: file.modifiedAt, index: index),
+                            context: context
+                        )
+                    )
+                }
+            }
+            var parsed: [(Int, AgentSession)] = []
+            for await (index, session) in group {
+                if let session { parsed.append((index, session)) }
+            }
+            return parsed.sorted { $0.0 < $1.0 }.map(\.1)
+        }
+    }
+
+    private func recentSessionFiles(for provider: AIProvider, now: Date) -> [(url: URL, modifiedAt: Date)] {
         let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
         var files: [(url: URL, modifiedAt: Date)] = []
         for relativeRoot in provider.sessionRoots {
@@ -174,19 +230,7 @@ actor LocalActivityScanner {
                 files.append((file, modified))
             }
         }
-
-        let context = ProviderSessionContext(now: now, isProviderRunning: running)
-        let adapter = adapters.adapter(for: provider)
         return files
-            .sorted { $0.modifiedAt > $1.modifiedAt }
-            .prefix(20)
-            .enumerated()
-            .compactMap { index, file in
-                adapter.session(
-                    from: ProviderSessionFile(url: file.url, modifiedAt: file.modifiedAt, index: index),
-                    context: context
-                )
-            }
     }
 
     private func hasSessionRoot(for provider: AIProvider) -> Bool {

@@ -55,13 +55,17 @@ struct CodexSessionAdapter: ProviderSessionAdapter {
             guard !chunk.isEmpty else { break }
             buffer.append(chunk)
 
-            while let newline = buffer.firstIndex(of: 0x0A) {
-                let line = Data(buffer[..<newline])
-                buffer.removeSubrange(...newline)
+            var lineStart = buffer.startIndex
+            while let newline = buffer[lineStart...].firstIndex(of: 0x0A) {
+                let line = Data(buffer[lineStart..<newline])
+                lineStart = buffer.index(after: newline)
                 if let object = decodeObject(line) {
                     foundObject = true
                     consume(object)
                 }
+            }
+            if lineStart != buffer.startIndex {
+                buffer.removeSubrange(buffer.startIndex..<lineStart)
             }
         }
 
