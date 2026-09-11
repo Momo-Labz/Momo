@@ -357,10 +357,10 @@ struct DashboardView: View {
                         }
                         .padding(13)
                     } else {
-                        ForEach(Array(visibleSessions.prefix(6).enumerated()), id: \.element.id) { index, session in
+                        ForEach(Array(visibleSessions.enumerated()), id: \.element.id) { index, session in
                             Button { inspectedSession = session } label: { SessionRow(session: session) }
                                 .buttonStyle(.plain)
-                            if index < min(visibleSessions.count, 6) - 1 {
+                            if index < visibleSessions.count - 1 {
                                 Rectangle().fill(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.35) : BarBoyStyle.hairline.opacity(0.7))
                                     .frame(height: 1).padding(.leading, 45)
                             }
