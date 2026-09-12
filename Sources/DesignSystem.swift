@@ -88,7 +88,7 @@ struct ProviderMark: View {
         case .claude: return "ProviderClaude"
         case .cursor: return "ProviderCursor"
         case .grok: return "ProviderGrok"
-        case .gemini: return nil
+        case .gemini: return "ProviderGemini"
         }
     }
 
