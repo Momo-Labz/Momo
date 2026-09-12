@@ -319,9 +319,11 @@ struct ProviderSnapshot: Identifiable {
 
     func quotaLabels(now: Date) -> [String] {
         let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
-        guard !windows.isEmpty else { return [quotaLabel, "LONG —"] }
+        guard !windows.isEmpty else { return ["USAGE —", "LIMIT —"] }
         let labels = windows.sorted { $0.minutes < $1.minutes }.prefix(2).map { $0.label(now: now) }
-        return labels.count == 1 ? labels + ["LONG —"] : labels
+        guard labels.count == 1 else { return labels }
+        let missingWindow = windows[0].minutes >= 10080 ? "SHORT —" : "LONG —"
+        return labels + [missingWindow]
     }
 
     var quotaLabel: String {
@@ -360,6 +362,26 @@ struct ProviderSnapshot: Identifiable {
     var waitingCount: Int { sessions.filter { $0.attention == .needsInput }.count }
     /// Something actually failed.
     var failedCount: Int { sessions.filter { $0.attention == .failed }.count }
+    var statusLabel: String {
+        if let urgent = sessions.first(where: { $0.attention.isUrgent }) {
+            return "ISSUE · \(urgent.title)"
+        }
+        if sessions.contains(where: { $0.attention == .working }) { return "WORKING" }
+        if sessions.contains(where: { $0.attention == .completed }) { return "DONE" }
+        if activeCount > 0 { return "LIVE · \(activeCount)" }
+        if sessions.isEmpty { return "STATUS —" }
+        return "STATUS · UNKNOWN"
+    }
+
+    var tokenLabel: String {
+        localTokensToday > 0 ? "TOKENS · \(usageText.uppercased())" : "TOKENS —"
+    }
+
+    func resetLabel(now: Date) -> String {
+        let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
+        guard let reset = windows.compactMap(\.resetsAt).filter({ $0 > now }).min() else { return "RESET —" }
+        return "RESET · \(windows.first(where: { $0.resetsAt == reset })?.remainingLabel(now: now) ?? "—")"
+    }
     var usageText: String {
         guard isInstalled else { return "Not installed" }
         guard localTokensToday > 0 else { return activeCount > 0 ? "\(activeCount) live" : "Idle" }

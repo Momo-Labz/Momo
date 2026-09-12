@@ -38,7 +38,7 @@ final class BarBoyTests: XCTestCase {
         XCTAssertTrue(snapshot.quotaLabels[0].hasPrefix("5HR 76%"), snapshot.quotaLabels[0])
         XCTAssertTrue(snapshot.quotaLabels[1].hasPrefix("WEEK 32%"), snapshot.quotaLabels[1])
         snapshot.recordedQuotas = [RecordedQuotaWindow(percent: 100, minutes: 300, resetsAt: .distantPast, observedAt: .distantPast)]
-        XCTAssertEqual(snapshot.quotaLabels, ["QUOTA —", "LONG —"])
+        XCTAssertEqual(snapshot.quotaLabels, ["USAGE —", "LIMIT —"])
     }
 
     func testVoicePopupRendersWithoutMicrophoneAccess() throws {

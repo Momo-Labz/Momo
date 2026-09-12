@@ -628,18 +628,25 @@ private struct CompactProviderCell: View {
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                 .help(runningHelp)
             TimelineView(.periodic(from: .now, by: 30)) { context in
+                Text(snapshot.tokenLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary).lineLimit(1)
                 ForEach(Array(snapshot.quotaLabels(now: context.date).enumerated()), id: \.offset) { _, label in
                     Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
                         .foregroundStyle(.secondary).lineLimit(1)
                         .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
                 }
+                Text(snapshot.statusLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
+                    .lineLimit(1).truncationMode(.tail)
+                Text(snapshot.resetLabel(now: context.date)).font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary).lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 104)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabels.joined(separator: ", ")), \(snapshot.activeCount) active")
+        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabels.joined(separator: ", ")), \(snapshot.statusLabel), \(snapshot.resetLabel(now: .now)), \(snapshot.activeCount) active")
     }
 }
 
