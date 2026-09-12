@@ -26,6 +26,7 @@ final class PreferencesStore: ObservableObject {
     }
     @Published private(set) var conversationLabels: [String: ConversationLabel]
     @Published private(set) var enabledProviders: Set<AIProvider>
+    @Published private(set) var localProviderRoots: [AIProvider: [String]]
 
     private let defaults: UserDefaults
 
@@ -42,6 +43,11 @@ final class PreferencesStore: ObservableObject {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         conversationLabels = defaults.data(forKey: "conversationLabels.v1").flatMap { try? JSONDecoder().decode([String: ConversationLabel].self, from: $0) } ?? [:]
+        let savedRoots = defaults.dictionary(forKey: "localProviderRoots.v1") as? [String: [String]] ?? [:]
+        localProviderRoots = Dictionary(uniqueKeysWithValues: savedRoots.compactMap { key, paths in
+            guard let provider = AIProvider(rawValue: key) else { return nil }
+            return (provider, paths)
+        })
         autoResumeAfterReset = defaults.bool(forKey: "autoResumeAfterReset")
         compactMenuBar = defaults.object(forKey: Keys.compactMenuBar) as? Bool ?? false
         hideIdleProviders = defaults.object(forKey: Keys.hideIdleProviders) as? Bool ?? false
@@ -69,6 +75,20 @@ final class PreferencesStore: ObservableObject {
     }
 
     func isEnabled(_ provider: AIProvider) -> Bool { enabledProviders.contains(provider) }
+
+    func roots(for provider: AIProvider) -> [String] { localProviderRoots[provider] ?? [] }
+
+    func setLocalRoot(_ path: String, for provider: AIProvider) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        localProviderRoots[provider] = [trimmed]
+        defaults.set(Dictionary(uniqueKeysWithValues: localProviderRoots.map { ($0.key.rawValue, $0.value) }), forKey: "localProviderRoots.v1")
+    }
+
+    func clearLocalRoots(for provider: AIProvider) {
+        localProviderRoots.removeValue(forKey: provider)
+        defaults.set(Dictionary(uniqueKeysWithValues: localProviderRoots.map { ($0.key.rawValue, $0.value) }), forKey: "localProviderRoots.v1")
+    }
 
     func setEnabled(_ enabled: Bool, for provider: AIProvider) {
         if enabled { enabledProviders.insert(provider) } else { enabledProviders.remove(provider) }

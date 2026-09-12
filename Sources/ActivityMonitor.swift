@@ -52,6 +52,14 @@ final class ActivityMonitor: ObservableObject {
         refresh()
     }
 
+    func setAuthorizedRoots(_ roots: [AIProvider: [URL]]) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await scanner.setAuthorizedRoots(roots)
+            refresh()
+        }
+    }
+
     func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
@@ -111,12 +119,16 @@ actor LocalActivityScanner {
     private let home: URL
     private let detectProcesses: Bool
     private let adapters: ProviderSessionAdapterRegistry
+    private var authorizedRoots: [AIProvider: [URL]]
 
-    init(adapters: [any ProviderSessionAdapter] = [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter()], home: URL = FileManager.default.homeDirectoryForCurrentUser, detectProcesses: Bool = true) {
+    init(adapters: [any ProviderSessionAdapter] = [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter(), GrokSessionAdapter()], home: URL = FileManager.default.homeDirectoryForCurrentUser, detectProcesses: Bool = true, authorizedRoots: [AIProvider: [URL]] = [:]) {
         self.home = home
         self.detectProcesses = detectProcesses
         self.adapters = ProviderSessionAdapterRegistry(overrides: adapters)
+        self.authorizedRoots = authorizedRoots
     }
+
+    func setAuthorizedRoots(_ roots: [AIProvider: [URL]]) { authorizedRoots = roots }
 
     func scan(providers: Set<AIProvider>) async -> [ProviderSnapshot] { await scan(enabledProviders: providers) }
 
@@ -262,8 +274,8 @@ actor LocalActivityScanner {
     private func recentSessionFiles(for provider: AIProvider, now: Date) -> [(url: URL, modifiedAt: Date)] {
         let sevenDaysAgo = now.addingTimeInterval(-7 * 86_400)
         var files: [(url: URL, modifiedAt: Date)] = []
-        for relativeRoot in provider.sessionRoots {
-            let root = home.appendingPathComponent(relativeRoot, isDirectory: true)
+        let roots = authorizedRoots[provider] ?? provider.sessionRoots.map { home.appendingPathComponent($0, isDirectory: true) }
+        for root in roots {
             guard let enumerator = fileManager.enumerator(
                 at: root,
                 includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
@@ -282,9 +294,9 @@ actor LocalActivityScanner {
     }
 
     private func hasSessionRoot(for provider: AIProvider) -> Bool {
-        provider.sessionRoots.contains { relativeRoot in
+        let roots = authorizedRoots[provider] ?? provider.sessionRoots.map { home.appendingPathComponent($0, isDirectory: true) }
+        return roots.contains { root in
             var isDirectory: ObjCBool = false
-            let root = home.appendingPathComponent(relativeRoot, isDirectory: true)
             return fileManager.fileExists(atPath: root.path, isDirectory: &isDirectory) && isDirectory.boolValue
         }
     }

@@ -118,7 +118,8 @@ struct SettingsView: View {
 
     private func providerRow(_ provider: AIProvider) -> some View {
         let snapshot = monitor.snapshot(for: provider)
-        return HStack(spacing: 12) {
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
             ProviderMark(provider: provider, size: 34, active: snapshot.activeCount > 0)
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.name).font(.headline)
@@ -141,10 +142,35 @@ struct SettingsView: View {
                 }
             ))
             .labelsHidden()
+            }
+            HStack(spacing: 8) {
+                Button("Choose local session folder") { chooseLocalRoot(for: provider) }
+                    .barBoyButton()
+                if let path = preferences.roots(for: provider).first {
+                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        .help(path)
+                } else {
+                    Text("Default: \(provider.sessionRoots.joined(separator: ", "))")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
         }
         .padding(11)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private func chooseLocalRoot(for provider: AIProvider) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose the (provider.name) session folder MOMO may read."
+        panel.prompt = "Use Folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        preferences.setLocalRoot(url.path, for: provider)
+        pendingProvider = provider
     }
 
     private var general: some View {
