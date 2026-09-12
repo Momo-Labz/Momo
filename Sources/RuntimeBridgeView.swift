@@ -26,7 +26,13 @@ struct RuntimeBridgeView: View {
             .onChange(of: preferences.showDeskDisplayTitles) { _, _ in syncServer() }
             .onReceive(monitor.$snapshots) { snapshots in
                 deskDisplay.update(snapshots: snapshots, includeTitles: preferences.showDeskDisplayTitles)
-                attentionNotifier.update(snapshots: snapshots, enabled: preferences.attentionAlertsEnabled)
+                attentionNotifier.update(
+                    snapshots: snapshots.map { snapshot in
+                        var result = snapshot
+                        result.sessions = snapshot.sessions.map(preferences.presented)
+                        return result
+                    },
+                    enabled: preferences.attentionAlertsEnabled)
                 autoResume.update(snapshots: snapshots, enabled: preferences.autoResumeAfterReset, authorized: preferences.enabledProviders)
             }
             .onReceive(NotificationCenter.default.publisher(for: .momoShortcut)) { notification in

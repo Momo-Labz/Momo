@@ -88,7 +88,7 @@ struct DashboardView: View {
                             ForEach(Array(Set(snapshot.sessions.map(\.project))).sorted(), id: \.self) { folder in
                                 Label(folder, systemImage: "folder").font(.headline).padding(.top, 6)
                                 ForEach(snapshot.sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
-                                    Button { openReply(session) } label: { SessionRow(session: session) }
+                                    Button { openReply(session) } label: { SessionRow(session: session, showsFolder: false) }
                                         .buttonStyle(MomoActionButtonStyle())
                                         .background(BarBoyStyle.surface)
                                         .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
@@ -478,7 +478,11 @@ struct CompactDashboardView: View {
     @Environment(\.openSettings) private var openSettings
 
     private var snapshots: [ProviderSnapshot] {
-        monitor.snapshots.filter { preferences.isEnabled($0.provider) }
+        monitor.snapshots.map { snapshot in
+            var result = snapshot
+            result.sessions = snapshot.sessions.map(preferences.presented)
+            return result
+        }.filter { preferences.isEnabled($0.provider) }
     }
 
     private var urgentCount: Int { snapshots.reduce(0) { $0 + $1.needsAttentionCount } }
@@ -541,6 +545,23 @@ struct CompactDashboardView: View {
 private struct CompactProviderCell: View {
     let snapshot: ProviderSnapshot
 
+    /// The conversation actually running for this provider, if any.
+    private var running: AgentSession? {
+        snapshot.sessions.first { $0.isRunning && $0.processID == nil }
+            ?? snapshot.sessions.first { $0.isRunning }
+    }
+
+    /// Name the running chat rather than a generic activity count.
+    private var runningLine: String {
+        guard let running else { return snapshot.usageText.uppercased() }
+        return running.title.uppercased()
+    }
+
+    private var runningHelp: String {
+        guard let running else { return "No running conversation recorded for \(snapshot.provider.name)." }
+        return "\(running.title)\nFolder: \(running.project)"
+    }
+
     var body: some View {
         VStack(spacing: 5) {
             ZStack(alignment: .topTrailing) {
@@ -550,8 +571,9 @@ private struct CompactProviderCell: View {
                 }
             }
             Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
-            Text(snapshot.usageText.uppercased()).font(.system(size: 7, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary).lineLimit(1)
+            Text(runningLine).font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                .help(runningHelp)
             ForEach(Array(snapshot.quotaLabels.enumerated()), id: \.offset) { _, label in
                 Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
@@ -741,14 +763,31 @@ private struct ProviderUsageRow: View {
 private struct SessionRow: View {
     @ObservedObject private var autoResume = AutoResumeService.shared
     let session: AgentSession
+    /// Off when the surrounding list already groups rows under a folder header.
+    var showsFolder = true
     var body: some View {
         HStack(spacing: 9) {
             ProviderMark(provider: session.provider, size: 28, active: session.isRunning)
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(2).help(session.title)
-                Text(session.processID == nil ? "\(session.role.rawValue.uppercased()) / \(session.project)" : "PROCESS / UNLINKED TO A CHAT")
-                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
-                Text("AUTO · \(autoResume.state(for: session))").font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary).lineLimit(2)
+                if session.processID == nil {
+                    HStack(spacing: 4) {
+                        if showsFolder {
+                            Image(systemName: "folder").font(.system(size: 8))
+                            Text(session.project).lineLimit(1).truncationMode(.middle)
+                            Text("/").foregroundStyle(.tertiary)
+                        }
+                        Text(session.role.rawValue.uppercased())
+                    }
+                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    .help("Folder: \(session.project)")
+                } else {
+                    Text("PROCESS / UNLINKED TO A CHAT")
+                        .font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
+                }
+                // The state already says whether it is automatic; no "AUTO" prefix
+                // in front of a state that reads "Manual".
+                Text(autoResume.state(for: session)).font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary).lineLimit(2)
                 if !session.capabilitySummary.isEmpty {
                     Text(session.capabilitySummary).font(.system(size: 7, weight: .bold, design: .monospaced))
                         .foregroundStyle(.tertiary).lineLimit(1)

@@ -505,8 +505,22 @@ struct RecordedQuotaWindow: Hashable {
 
     func label(now: Date) -> String {
         if let resetsAt, now >= resetsAt { return "QUOTA —" }
-        let duration = minutes == 10080 ? "WEEK" : minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
-        return "\(String(format: "%.0f", percent))% / \(duration)"
+        let base = "\(durationLabel) \(String(format: "%.0f", percent))%"
+        guard let remaining = remainingLabel(now: now) else { return base }
+        return "\(base) · \(remaining)"
+    }
+
+    var durationLabel: String {
+        minutes == 10080 ? "WEEK" : minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
+    }
+
+    /// Coarse time until this window resets. nil when no reset was recorded.
+    func remainingLabel(now: Date) -> String? {
+        guard let resetsAt, resetsAt > now else { return nil }
+        let seconds = resetsAt.timeIntervalSince(now)
+        if seconds < 3600 { return "\(max(1, Int(seconds / 60)))M" }
+        if seconds < 86_400 { return "\(Int(seconds / 3600))H" }
+        return "\(Int(seconds / 86_400))D"
     }
 
     var explanation: String {

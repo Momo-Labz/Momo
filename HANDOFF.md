@@ -129,3 +129,35 @@ Combined verification: 40 macOS tests, 1 explicitly skipped live-account check, 
 - Quick Ask → Edit Name / Folder stores MOMO-only labels keyed by provider and task ID. This does not rename provider chats or move working directories. Each conversation shows auto-resume state, including unsupported connections, reset waiting and attempts. The global setting still controls future verified Codex CLI continuations only. Universal desktop/provider automatic continuation remains unfinished and is explicitly marked unavailable.
 
 Primary API/schema references: https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition and https://github.com/openai/codex/blob/main/codex-rs/rollout/src/session_index.rs . No real microphone recording, speech accuracy, physical haptic sensation, or external-account continuation was exercised by automated tests. The installed app must be replaced/relaunched to use this build.
+
+## Conversation identity and reset countdowns (2026-09-12)
+
+Fixed a failing baseline test: `testAutoResumeSettingPersistsAndDefaultsOff` authorized every
+provider and then asserted the status mentioned authorization, which only happens when Codex is
+*not* authorized. It now checks both directions with an injected executable.
+
+The user's MOMO-only name/folder labels were saved but only applied in Quick Ask. `presented(_:)`
+is now also applied in the compact popup and in notification content, so a renamed chat reads the
+same on every surface.
+
+Recorded quota windows render image-3 style: `5HR 76% · 59M`, `WEEK 32% · 23H`. A window with no
+recorded reset shows percent only; an expired or invalid one stays `QUOTA —`, never zero.
+
+Per-conversation auto-continue state now names the countdown. A recorded Codex CLI rollout reads
+`Resumes in 4H`; everything else reads `Manual · resets in 4H`, or `Manual · desktop control not
+connected` / `Manual · <Provider> control not connected` when no window is recorded. No provider
+without a supported unattended path is ever described as automatic, and a regression test asserts
+those states never contain "Resumes", "Continuing" or "automatic".
+
+Notifications carry the chat name and folder as the subtitle, declare a visible action button
+("Open reply" / "Continue chat"), and a new alert fires once when a recorded window has reopened
+within the last 30 minutes — saying MOMO will continue it automatically only when that is true.
+
+The compact provider cell names the running conversation instead of a generic activity count, with
+the folder in its tooltip. Session rows drop the folder line when the surrounding list already
+groups by folder header.
+
+Verification: 50 macOS tests, 1 skipped, 0 failures (baseline was 47 with 1 failure). Compact and
+expanded snapshots inspected in light and dark at `/tmp/barboy-compact-{light,dark}.png` and
+`/tmp/barboy-{light,dark}.png`. Notification delivery, the action button, and live countdown
+behaviour still need interactive validation on an installed build.

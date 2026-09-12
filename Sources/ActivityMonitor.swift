@@ -410,14 +410,38 @@ final class AutoResumeService: ObservableObject {
         attempted = Set(defaults.stringArray(forKey: "autoResume.attempted.v1") ?? [])
     }
 
-    func state(for session: AgentSession) -> String {
+    /// The soonest recorded window that has not reset yet, if any.
+    static func pendingWindow(for session: AgentSession, now: Date = .now) -> RecordedQuotaWindow? {
+        session.recordedQuotaWindows
+            .filter { ($0.resetsAt ?? .distantPast) > now }
+            .min { ($0.resetsAt ?? .distantFuture) < ($1.resetsAt ?? .distantFuture) }
+    }
+
+    /// Whether MOMO can actually resume this session without the person.
+    /// Only recorded Codex CLI rollouts have a supported unattended path.
+    static func supportsUnattendedResume(_ session: AgentSession) -> Bool {
+        session.provider == .codex && session.recordedSource == "cli"
+    }
+
+    func state(for session: AgentSession, now: Date = .now) -> String {
         if runningSessionID == session.id { return "Continuing now" }
         if let state = sessionStatuses[session.id] { return state }
         guard monitoringEnabled else { return "Off" }
-        guard resumeAuthorized.contains(session.provider) else { return "Authorization required" }
-        if session.provider != .codex { return "Unsupported · \(session.provider.name) control not connected" }
-        if session.recordedSource != "cli" { return "Unsupported · desktop control not connected" }
+        guard resumeAuthorized.contains(session.provider) else { return "Authorize to continue" }
+
+        let remaining = Self.pendingWindow(for: session, now: now)?.remainingLabel(now: now)
+
+        guard Self.supportsUnattendedResume(session) else {
+            // No supported unattended path. Say exactly when the window opens
+            // and that the person finishes it, rather than implying automation.
+            if let remaining { return "Manual · resets in \(remaining)" }
+            let reason = session.provider == .codex
+                ? "desktop control not connected"
+                : "\(session.provider.name) control not connected"
+            return "Manual · \(reason)"
+        }
         guard executable != nil else { return "Codex CLI unavailable" }
+        if let remaining { return "Resumes in \(remaining)" }
         return "Watching for a recorded usage-limit stop"
     }
 

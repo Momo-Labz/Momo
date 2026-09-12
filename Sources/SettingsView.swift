@@ -410,8 +410,11 @@ struct CodexOnboardingView: View {
             Button(preferences.attentionAlertsEnabled ? "Notifications enabled" : "Enable task notifications") {
                 Task { preferences.attentionAlertsEnabled = await notifier.requestAuthorization() }
             }.barBoyButton().disabled(preferences.attentionAlertsEnabled || !preferences.isEnabled(.codex))
-            Button("Set up voice & understand usage") { showVoiceGuide = true }.barBoyButton()
-            Text("Desktop auto-resume is unavailable. CLI auto-resume is a separate setting.")
+            Text("4. Voice, usage and continuing after a reset").font(.headline)
+            Text("How voice permission works, what the two usage rows mean, and which chats continue on their own.")
+                .font(.callout).foregroundStyle(.secondary)
+            Button("Set up voice & continuing") { showVoiceGuide = true }.barBoyButton()
+            Text("Codex desktop chats cannot be continued unattended. CLI auto-resume is a separate setting.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text("No password, browser cookies or Accessibility permission needed.").font(.caption).foregroundStyle(.secondary)
@@ -455,6 +458,10 @@ struct VoiceSetupGuide: View {
             Divider()
             Text("5HR + WEEK, when recorded").font(.headline)
             Text("The two rows beneath tokens show the provider’s recorded short and long usage windows. Other durations keep their own labels. A dash means missing or expired data, never zero usage.")
+            Divider()
+            Text("Continuing after a reset").font(.headline)
+            Text("Every conversation shows its own line: how long until its recorded window resets, named by the chat and folder you gave it.")
+            Text("Codex CLI chats continue on their own once the window opens, if Settings → General → Auto-resume after usage reset is on. Other providers have no supported way to send a turn unattended, so MOMO notifies you the moment the window opens and one click reopens that exact chat. MOMO never claims to have continued something it did not.")
             Text("Edit keys and turn haptics on or off in Settings → Shortcuts.").font(.caption).foregroundStyle(.secondary)
             HStack {
                 Button("Done") { dismiss() }.barBoyButton()

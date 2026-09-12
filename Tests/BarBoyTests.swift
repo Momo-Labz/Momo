@@ -35,7 +35,8 @@ final class BarBoyTests: XCTestCase {
             RecordedQuotaWindow(percent: 32, minutes: 10080, resetsAt: .now.addingTimeInterval(600), observedAt: .now),
             RecordedQuotaWindow(percent: 76, minutes: 300, resetsAt: .now.addingTimeInterval(600), observedAt: .now)
         ]
-        XCTAssertEqual(snapshot.quotaLabels, ["76% / 5HR", "32% / WEEK"])
+        XCTAssertTrue(snapshot.quotaLabels[0].hasPrefix("5HR 76%"), snapshot.quotaLabels[0])
+        XCTAssertTrue(snapshot.quotaLabels[1].hasPrefix("WEEK 32%"), snapshot.quotaLabels[1])
         snapshot.recordedQuotas = [RecordedQuotaWindow(percent: 100, minutes: 300, resetsAt: .distantPast, observedAt: .distantPast)]
         XCTAssertEqual(snapshot.quotaLabels, ["QUOTA —", "LONG —"])
     }
@@ -85,8 +86,54 @@ final class BarBoyTests: XCTestCase {
         service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
         for provider in AIProvider.allCases {
             let session = AgentSession(id: provider.rawValue, provider: provider, role: .main, title: "Fixture", detail: "", project: "", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
-            XCTAssertTrue(service.state(for: session).contains("Unsupported"))
+            let state = service.state(for: session)
+            // Without a recorded CLI rollout nothing here can continue unattended,
+            // so the state must read as manual and never imply automation.
+            XCTAssertTrue(state.hasPrefix("Manual"), "\(provider.name): \(state)")
+            for claim in ["Resumes", "Continuing", "automatic"] {
+                XCTAssertFalse(state.contains(claim), "\(provider.name) claimed \(claim): \(state)")
+            }
         }
+    }
+
+    func testQuotaLabelShowsResetCountdownAndDashesWhenExpired() {
+        let now = Date()
+        let live = RecordedQuotaWindow(percent: 31, minutes: 300, resetsAt: now.addingTimeInterval(4 * 3600), observedAt: now)
+        XCTAssertEqual(live.label(now: now), "5HR 31% · 4H")
+        let week = RecordedQuotaWindow(percent: 91, minutes: 10080, resetsAt: now.addingTimeInterval(2 * 86_400), observedAt: now)
+        XCTAssertEqual(week.label(now: now), "WEEK 91% · 2D")
+        // No recorded reset: report the window without inventing a countdown.
+        let noReset = RecordedQuotaWindow(percent: 50, minutes: 300, resetsAt: nil, observedAt: now)
+        XCTAssertEqual(noReset.label(now: now), "5HR 50%")
+        // Expired data is a dash, never a zero.
+        let expired = RecordedQuotaWindow(percent: 99, minutes: 300, resetsAt: now.addingTimeInterval(-60), observedAt: now)
+        XCTAssertEqual(expired.label(now: now), "QUOTA —")
+    }
+
+    func testAutoResumeStateCountsDownPerConversation() {
+        let now = Date()
+        let window = RecordedQuotaWindow(percent: 100, minutes: 300, resetsAt: now.addingTimeInterval(4 * 3600), observedAt: now)
+        let service = AutoResumeService(defaults: UserDefaults(suiteName: "MomoResumeCountdown")!,
+                                        executableURL: URL(fileURLWithPath: "/usr/bin/true"))
+        service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
+
+        let cli = AgentSession(id: "cli", provider: .codex, role: .main, title: "A", detail: "", project: "F", updatedAt: now, isRunning: false, processID: nil, tokens: nil, recordedQuotaWindows: [window], recordedSource: "cli")
+        XCTAssertEqual(service.state(for: cli, now: now), "Resumes in 4H")
+
+        // A provider with no supported unattended path still gets the exact countdown.
+        let claude = AgentSession(id: "cl", provider: .claude, role: .main, title: "B", detail: "", project: "F", updatedAt: now, isRunning: false, processID: nil, tokens: nil, recordedQuotaWindows: [window], recordedSource: nil)
+        XCTAssertEqual(service.state(for: claude, now: now), "Manual · resets in 4H")
+    }
+
+    func testNotifierDetectsARecentlyReopenedWindowOnce() {
+        let now = Date()
+        func session(reset: TimeInterval) -> AgentSession {
+            AgentSession(id: "s", provider: .claude, role: .main, title: "A", detail: "", project: "F", updatedAt: now, isRunning: false, processID: nil, tokens: nil,
+                         recordedQuotaWindows: [RecordedQuotaWindow(percent: 10, minutes: 300, resetsAt: now.addingTimeInterval(reset), observedAt: now)])
+        }
+        XCTAssertNotNil(AttentionNotifier.justReset(session(reset: -60), now: now))
+        XCTAssertNil(AttentionNotifier.justReset(session(reset: -7200), now: now), "a window that reset hours ago is stale")
+        XCTAssertNil(AttentionNotifier.justReset(session(reset: 3600), now: now), "a window that has not reset yet")
     }
 
     func testDesktopTaskLinksRequireRecordedIdentity() {
@@ -318,9 +365,12 @@ final class BarBoyTests: XCTestCase {
         XCTAssertFalse(preferences.autoResumeAfterReset)
         preferences.autoResumeAfterReset = true
         XCTAssertTrue(PreferencesStore(defaults: defaults).autoResumeAfterReset)
-        let service = AutoResumeService(defaults: defaults)
-        service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
+        let service = AutoResumeService(defaults: defaults, executableURL: URL(fileURLWithPath: "/usr/bin/true"))
+        // Codex local-provider authorization is what gates automatic continuation.
+        service.update(snapshots: [], enabled: true, authorized: [.claude, .cursor, .gemini, .grok])
         XCTAssertTrue(service.status.contains("authorization"))
+        service.update(snapshots: [], enabled: true, authorized: [.codex])
+        XCTAssertFalse(service.status.contains("authorization"))
         service.update(snapshots: [], enabled: false, authorized: [.codex])
         XCTAssertTrue(service.status.hasPrefix("Off"))
     }
@@ -365,7 +415,7 @@ final class BarBoyTests: XCTestCase {
     func testRecordedQuotaExpiresWithoutInventingZero() throws {
         let event: [String: Any] = ["type": "event_msg", "timestamp": "2026-09-12T00:00:00Z", "payload": ["type": "token_count", "rate_limits": ["primary": ["used_percent": 76, "window_minutes": 300, "resets_at": 2_000_000_000]]]]
         let quota = try XCTUnwrap(RecordedQuotaWindow.codex(in: event)?.first)
-        XCTAssertEqual(quota.label(now: Date(timeIntervalSince1970: 1_999_999_999)), "76% / 5HR")
+        XCTAssertEqual(quota.label(now: Date(timeIntervalSince1970: 1_999_999_999)), "5HR 76% · 1M")
         XCTAssertEqual(quota.label(now: Date(timeIntervalSince1970: 2_000_000_000)), "QUOTA —")
         let injected: [String: Any] = ["type": "user", "payload": event]
         XCTAssertNil(RecordedQuotaWindow.codex(in: injected))
@@ -387,7 +437,7 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(result.sessions.count, 1)
         XCTAssertEqual(result.sessions.first?.recordedQuotaWindows.first?.percent, 76)
         XCTAssertEqual(result.recordedQuota?.minutes, 300)
-        XCTAssertEqual(result.quotaLabel, "76% / 5HR")
+        XCTAssertTrue(result.quotaLabel.hasPrefix("5HR 76%"), result.quotaLabel)
         XCTAssertEqual(result.activeCount, 0)
     }
 

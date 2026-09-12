@@ -7,20 +7,34 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
     private var notified = Set<String>()
     private var currentSessions: [String: AgentSession] = [:]
 
+    private enum Category {
+        static let ret = "MOMO_RETURN"
+        static let reset = "MOMO_RESET"
+        static let open = "MOMO_OPEN_REPLY"
+    }
+
     override init() {
         super.init()
-        UNUserNotificationCenter.current().delegate = self
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        // A visible button so the alert states the action it performs.
+        let open = UNNotificationAction(identifier: Category.open, title: "Open reply", options: [.foreground])
+        let cont = UNNotificationAction(identifier: Category.open, title: "Continue chat", options: [.foreground])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Category.ret, actions: [open], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: Category.reset, actions: [cont], intentIdentifiers: [], options: [])
+        ])
     }
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let identifier = response.notification.request.identifier
-        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        let action = response.actionIdentifier
+        guard action == UNNotificationDefaultActionIdentifier || action == Category.open else { return }
         await MainActor.run {
             guard let session = self.currentSessions[identifier] else { return }
             NotificationCenter.default.post(name: .showCommandPalette, object: session)
         }
     }
-
 
     func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
@@ -29,7 +43,7 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
         return granted
     }
 
-    func update(snapshots: [ProviderSnapshot], enabled: Bool) {
+    func update(snapshots: [ProviderSnapshot], enabled: Bool, now: Date = .now) {
         guard enabled else {
             currentSessions.removeAll()
             notified.removeAll()
@@ -37,22 +51,52 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
             return
         }
         authorizationLabel = "On"
-        let urgent = snapshots.flatMap(\.sessions).filter {
-            $0.attention.isUrgent && ($0.isRunning || Date().timeIntervalSince($0.updatedAt) < 300)
+
+        let sessions = snapshots.flatMap(\.sessions)
+        let urgent = sessions.filter {
+            $0.attention.isUrgent && ($0.isRunning || now.timeIntervalSince($0.updatedAt) < 300)
         }
-        currentSessions = Dictionary(urgent.map { ("\($0.id)|\($0.attention.rawValue)", $0) }, uniquingKeysWith: { _, latest in latest })
-        let currentIDs = Set(urgent.map { "\($0.id)|\($0.attention.rawValue)" })
-        notified.formIntersection(currentIDs)
-        for session in urgent {
-            let notificationID = "\(session.id)|\(session.attention.rawValue)"
-            guard notified.insert(notificationID).inserted else { continue }
+        // A recorded window that reset within the last half hour: the chat can move again.
+        let reopened = sessions.filter { session in
+            guard !session.isRunning else { return false }
+            return Self.justReset(session, now: now) != nil
+        }
+
+        var live: [String: AgentSession] = [:]
+        for session in urgent { live["\(session.id)|\(session.attention.rawValue)"] = session }
+        for session in reopened {
+            guard let reset = Self.justReset(session, now: now) else { continue }
+            live["\(session.id)|reset|\(Int(reset.timeIntervalSince1970))"] = session
+        }
+        currentSessions = live
+        notified.formIntersection(Set(live.keys))
+
+        for (identifier, session) in live {
+            guard notified.insert(identifier).inserted else { continue }
             let content = UNMutableNotificationContent()
-            content.title = session.attention == .failed ? "\(session.provider.name) hit a problem" : "\(session.provider.name) needs you"
-            content.subtitle = session.project
-            content.body = session.attentionReason ?? session.title
+            if identifier.contains("|reset|") {
+                let auto = AutoResumeService.supportsUnattendedResume(session)
+                content.title = "\(session.provider.name) usage window reset"
+                content.body = auto
+                    ? "\(session.title) can continue. MOMO continues it automatically when auto-resume is on."
+                    : "\(session.title) can continue. Open it to send the next turn."
+                content.categoryIdentifier = Category.reset
+            } else {
+                content.title = session.attention == .failed ? "\(session.provider.name) hit a problem" : "\(session.provider.name) needs you"
+                content.body = session.attentionReason ?? session.title
+                content.categoryIdentifier = Category.ret
+            }
+            // Folder is the second half of a conversation's identity.
+            content.subtitle = "\(session.title) · \(session.project)"
             content.sound = .default
-            let request = UNNotificationRequest(identifier: notificationID, content: content, trigger: nil)
-            UNUserNotificationCenter.current().add(request)
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
         }
+    }
+
+    /// The reset time of a recorded window that opened within the last 30 minutes.
+    static func justReset(_ session: AgentSession, now: Date) -> Date? {
+        session.recordedQuotaWindows.compactMap(\.resetsAt)
+            .filter { $0 <= now && now.timeIntervalSince($0) < 1_800 }
+            .max()
     }
 }
