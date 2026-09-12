@@ -170,3 +170,12 @@ behaviour still need interactive validation on an installed build.
 - Quick Ask keeps a separate draft per conversation, supports changing the MOMO-only name/folder, and offers a provider target picker. Claude continuation copies a validated `claude --resume <session-id>` command; Codex opens a validated `codex://threads/<uuid>` task link. Neither path sends a message automatically.
 
 Static validation after this change: `swiftc -parse Sources/*.swift Sources/Adapters/*.swift` and `git diff --check` passed. The full Xcode test run was not repeated because the environment's automatic approval review rejected the build after the account usage limit was reached. The local commit is `4bc12e4`; publishing it to `origin/main` still requires a later push when the usage limit permits.
+
+## Gemini and Grok schema adapters (2026-09-12)
+
+- Gemini continues to use the documented `ConversationRecord` adapter and public-schema fixtures. The authorized default `.gemini/tmp` folder is absent, so no real Gemini account data was copied.
+- Grok now has a schema-specific `GrokSessionAdapter` for the documented Grok Build layout: sibling `summary.json` metadata plus `updates.jsonl` ACP `system/init`, `assistant`, and terminal `result` records. It records only source-backed title, folder, model, tokens, MCP names, skills, session state, and session ID; omitted plugins, account quota, and liveness remain unavailable.
+- Synthetic Grok fixtures and malformed-input tests cover the adapter. They are explicitly non-account fixtures. `Docs/grok-capture-status.json` records that Grok authorization has not been granted and no local account files were read.
+- A recorded Grok chat can now copy `grok --resume <session-id>` for manual continuation. MOMO does not claim unattended Grok continuation or send a message automatically.
+
+Verification after adding the adapter: the focused Grok fixture test and the full macOS suite passed (`54 tests`, `2 skipped`, `0 failures`); the app target also built successfully.

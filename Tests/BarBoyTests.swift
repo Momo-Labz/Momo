@@ -360,6 +360,31 @@ final class BarBoyTests: XCTestCase {
         XCTAssertNil(GeminiSessionAdapter.parse(Data("{\"messages\": []}".utf8), source: source))
     }
 
+    func testGrokDocumentedSessionFixtureIsSchemaDirected() throws {
+        let source = fixtureURL(named: "grok-session/updates.jsonl")
+        let session = try XCTUnwrap(GrokSessionAdapter().session(
+            from: ProviderSessionFile(url: source, modifiedAt: .now, index: 0),
+            context: ProviderSessionContext(now: .now, isProviderRunning: false)
+        ))
+        XCTAssertEqual(session.id, "grok-fixture-grok-01")
+        XCTAssertEqual(session.title, "Review the provider dashboard")
+        XCTAssertEqual(session.model, "grok-fixture")
+        XCTAssertEqual(session.tokens, 30)
+        XCTAssertEqual(session.attention, .completed)
+        XCTAssertEqual(session.mcpServers, ["fixture-files"])
+        XCTAssertEqual(session.skills, ["fixture-review"])
+        XCTAssertTrue(session.plugins.isEmpty, "Grok omits plugins from this documented stream")
+        XCTAssertFalse(session.isRunning)
+    }
+
+    func testGrokMalformedOrNonUpdateFilesFailClosed() throws {
+        let source = URL(fileURLWithPath: "/tmp/grok-summary.json")
+        XCTAssertNil(GrokSessionAdapter().session(
+            from: ProviderSessionFile(url: source, modifiedAt: .now, index: 0),
+            context: ProviderSessionContext(now: .now, isProviderRunning: false)
+        ))
+    }
+
     func testStoppedAfterUsageRequiresObservedWorkingTransition() {
         var tracker = SessionProgressTracker()
         func snapshot(_ tokens: Int, _ state: AgentAttention) -> [ProviderSnapshot] {

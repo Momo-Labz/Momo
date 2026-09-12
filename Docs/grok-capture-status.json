@@ -1,0 +1,8 @@
+{
+  "provider": "grok",
+  "authorization": "Not granted",
+  "sessionRoots": [".grok/sessions", ".xai/sessions"],
+  "status": "Schema adapter and synthetic fixture are ready; no local account files were read",
+  "adapterValidation": "Documented Grok Build summary.json + updates.jsonl schema fixture only",
+  "sensitiveContentCollected": false
+}

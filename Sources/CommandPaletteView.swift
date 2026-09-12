@@ -184,6 +184,7 @@ struct CommandPaletteView: View {
     private func continueLabel(for session: AgentSession) -> String {
         if context.targetProvider == .codex { return "OPEN CODEX TASK" }
         if context.targetProvider == .claude { return "RESUME CLAUDE" }
+        if context.targetProvider == .grok { return "RESUME GROK" }
         return "COPY + OPEN \(context.targetProvider.name.uppercased())"
     }
 
@@ -205,6 +206,19 @@ struct CommandPaletteView: View {
                 routingMessage = "Claude resume command copied. Paste it in Terminal, then paste your reply."
             } else {
                 routingMessage = "Claude resume command copied: \(command)"
+            }
+        case .grok:
+            guard let id = session.conversationID, !id.isEmpty else {
+                routingMessage = "Grok session ID was not recorded; reply copied."
+                return
+            }
+            let command = "grok --resume \(id)"
+            NSPasteboard.general.setString(command, forType: .string)
+            if let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+                NSWorkspace.shared.open(terminal)
+                routingMessage = "Grok resume command copied. Paste it in Terminal, then paste your reply."
+            } else {
+                routingMessage = "Grok resume command copied: \(command)"
             }
         default:
             if let url = context.targetProvider.conversationURL { NSWorkspace.shared.open(url) }

@@ -20,8 +20,10 @@
 		3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */; };
 		3F67CAAAEEEFC2CBF61C2626 /* config.toml in Resources */ = {isa = PBXBuildFile; fileRef = F95FF5C03D51270D6F53B0FF /* config.toml */; };
 		3F97AEB0CE7404E954AB8FC0 /* installed_plugins.json in Resources */ = {isa = PBXBuildFile; fileRef = DDE35C7070ABC2BF180A85FB /* installed_plugins.json */; };
+		42CA1C97F34A6F5C889E18BC /* updates.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = DFA88FAF21DD058E0841EFFB /* updates.jsonl */; };
 		44FDD058CD91C0C60D55576D /* codex-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = F8F744DA44565866EDA3D383 /* codex-session.jsonl */; };
 		4E279FE8392513B5524EBFBE /* known_marketplaces.json in Resources */ = {isa = PBXBuildFile; fileRef = 374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */; };
+		56A95288FD83024D3460F4AF /* summary.json in Resources */ = {isa = PBXBuildFile; fileRef = 7EA9A055EA14DEF66F3E29D5 /* summary.json */; };
 		5F0F2D999AA09D95B2C98B2B /* ProviderSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */; };
 		64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 914544FD481DF77821FAFD11 /* Models.swift */; };
 		68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */; };
@@ -39,6 +41,7 @@
 		AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */; };
 		B0AACF60083AC3E5004B6BB3 /* gemini-public-conversation.json in Resources */ = {isa = PBXBuildFile; fileRef = BCAC7F7450275946880E2540 /* gemini-public-conversation.json */; };
 		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
+		C2A73E0109B10AA59A4608BB /* GrokSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4837B97EA42724002AA98C64 /* GrokSessionAdapter.swift */; };
 		D4433E46CD15BD9E26D3872C /* BRAND_FIXTURE.txt in Resources */ = {isa = PBXBuildFile; fileRef = 3020B8662144C4584146E42E /* BRAND_FIXTURE.txt */; };
 		D5DB3FA170DA801EBF4E69A8 /* QA_FIXTURE.txt in Resources */ = {isa = PBXBuildFile; fileRef = C415EF7F72FD46DB1A05F65D /* QA_FIXTURE.txt */; };
 		D652487A4920533FC7F1137A /* BarBoyMobileApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */; };
@@ -76,6 +79,7 @@
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BarBoyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		479945A2B783FEEB67F51BD8 /* RelayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayModels.swift; sourceTree = "<group>"; };
+		4837B97EA42724002AA98C64 /* GrokSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrokSessionAdapter.swift; sourceTree = "<group>"; };
 		4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeskDisplayServer.swift; sourceTree = "<group>"; };
 		532965453BA4B1CA197C8333 /* gemini-public-revisions.jsonl */ = {isa = PBXFileReference; path = "gemini-public-revisions.jsonl"; sourceTree = "<group>"; };
 		532B6989DEC8AFDE334B990F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -88,6 +92,7 @@
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
 		6F8BBDBA397DACEB28BE4C94 /* momo-index-frames.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "momo-index-frames.json"; sourceTree = "<group>"; };
 		7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderSessionAdapter.swift; sourceTree = "<group>"; };
+		7EA9A055EA14DEF66F3E29D5 /* summary.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = summary.json; sourceTree = "<group>"; };
 		85FA579C0D401BBE1ED8A9E9 /* BarBoy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BarBoy.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		8CFC5B7008808730FE6A3D5E /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		914544FD481DF77821FAFD11 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
@@ -109,6 +114,7 @@
 		D4636595E64156A63431C041 /* BarBoyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyTests.swift; sourceTree = "<group>"; };
 		DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AttentionNotifier.swift; sourceTree = "<group>"; };
 		DDE35C7070ABC2BF180A85FB /* installed_plugins.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = installed_plugins.json; sourceTree = "<group>"; };
+		DFA88FAF21DD058E0841EFFB /* updates.jsonl */ = {isa = PBXFileReference; path = updates.jsonl; sourceTree = "<group>"; };
 		E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeBridgeView.swift; sourceTree = "<group>"; };
 		E97EABE168680367E8C4D28E /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 		F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayContract.swift; sourceTree = "<group>"; };
@@ -155,6 +161,7 @@
 				6F8BBDBA397DACEB28BE4C94 /* momo-index-frames.json */,
 				98FE083AC1D1EA0A6CA61476 /* README.md */,
 				192A6E5F2A90910959408EE2 /* Cursor */,
+				AAEC473358188E6BAC8609F6 /* grok-session */,
 				90DA443BFAE21EB4DEDFEF14 /* inventory-home */,
 			);
 			path = Fixtures;
@@ -268,6 +275,7 @@
 				9B3D59EDD2FC692CDE82DE3D /* ClaudeSessionAdapter.swift */,
 				AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */,
 				C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */,
+				4837B97EA42724002AA98C64 /* GrokSessionAdapter.swift */,
 				7930C4BDB7D37CE62E98B4A5 /* ProviderSessionAdapter.swift */,
 			);
 			path = Adapters;
@@ -335,6 +343,15 @@
 				3C046D7E4159657C1440AF7A /* skills */,
 			);
 			path = .claude;
+			sourceTree = "<group>";
+		};
+		AAEC473358188E6BAC8609F6 /* grok-session */ = {
+			isa = PBXGroup;
+			children = (
+				7EA9A055EA14DEF66F3E29D5 /* summary.json */,
+				DFA88FAF21DD058E0841EFFB /* updates.jsonl */,
+			);
+			path = "grok-session";
 			sourceTree = "<group>";
 		};
 		B53EAEE892C51FFA68154CE7 /* .agents */ = {
@@ -509,6 +526,8 @@
 				7882380E753C1D32CCCB3D4E /* mcp.json in Resources */,
 				0802C41ACA287566BC7D56FE /* momo-index-frames.json in Resources */,
 				E8074D2914582CC7BF9D7902 /* sanitized-session.jsonl in Resources */,
+				56A95288FD83024D3460F4AF /* summary.json in Resources */,
+				42CA1C97F34A6F5C889E18BC /* updates.jsonl in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -553,6 +572,7 @@
 				966A728AF138807269935D7E /* DesignSystem.swift in Sources */,
 				E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */,
 				3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */,
+				C2A73E0109B10AA59A4608BB /* GrokSessionAdapter.swift in Sources */,
 				F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */,
 				64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */,
 				AA2E8342A7F784656E2CB139 /* MomoSurface.swift in Sources */,

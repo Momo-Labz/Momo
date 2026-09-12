@@ -90,7 +90,7 @@ final class ActivityMonitor: ObservableObject {
     }
 
     private static var productionSessionAdapters: [any ProviderSessionAdapter] {
-        [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter()]
+        [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter(), GrokSessionAdapter()]
     }
 }
 
@@ -229,7 +229,6 @@ actor LocalActivityScanner {
     }
 
     private func recentSessions(for provider: AIProvider, running: Bool, now: Date) async -> [AgentSession] {
-        guard provider != .grok else { return [] }
         let files = recentSessionFiles(for: provider, now: now)
         let context = ProviderSessionContext(now: now, isProviderRunning: running)
         let adapter = adapters.adapter(for: provider)
