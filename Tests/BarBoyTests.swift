@@ -515,6 +515,23 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(result.activeCount, 0)
     }
 
+    func testScannerUsesGrokAdapterForAuthorizedSessionRoot() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let sessionFolder = root.appendingPathComponent(".grok/sessions/project/fixture-grok-01")
+        try FileManager.default.createDirectory(at: sessionFolder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fixtures = fixtureURL(named: "grok-session")
+        try FileManager.default.copyItem(at: fixtures.appendingPathComponent("summary.json"), to: sessionFolder.appendingPathComponent("summary.json"))
+        try FileManager.default.copyItem(at: fixtures.appendingPathComponent("updates.jsonl"), to: sessionFolder.appendingPathComponent("updates.jsonl"))
+        let scanner = LocalActivityScanner(home: root, detectProcesses: false)
+        let snapshots = await scanner.scan(providers: [.grok])
+        let session = try XCTUnwrap(snapshots.first?.sessions.first)
+        XCTAssertEqual(session.provider, .grok)
+        XCTAssertEqual(session.title, "Review the provider dashboard")
+        XCTAssertEqual(session.mcpServers, ["fixture-files"])
+        XCTAssertEqual(session.skills, ["fixture-review"])
+    }
+
     func testMenuBarStatusIconIsVisibleTemplateArtwork() {
         let icon = MenuBarLabelView.statusIcon
 
