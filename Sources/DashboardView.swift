@@ -651,7 +651,7 @@ struct CompactDashboardView: View {
                 }
                 ForEach(snapshots) { snapshot in
                     Button { selectedProvider = snapshot.provider; openProvider(snapshot) } label: {
-                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails)
+                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded)
                     }
                     .buttonStyle(.plain)
                     .help(snapshot.needsAttentionCount > 0
@@ -716,6 +716,12 @@ private struct CompactProviderCell: View {
         return values.isEmpty ? nil : values.joined(separator: " · ").uppercased()
     }
 
+    private var conciseStatus: String {
+        if snapshot.hasRecordedLimit() { return "LIMIT" }
+        if snapshot.hasErrorOrApproval { return "ACTION NEEDED" }
+        return snapshot.statusLabel.split(separator: "·", maxSplits: 1).first.map(String.init) ?? snapshot.statusLabel
+    }
+
     var body: some View {
         VStack(spacing: 5) {
             ZStack(alignment: .topTrailing) {
@@ -741,10 +747,11 @@ private struct CompactProviderCell: View {
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
                     .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
-                Text("\(snapshot.statusLabel) · \(snapshot.resetLabel(now: context.date))")
+                Text("\(conciseStatus.trimmingCharacters(in: .whitespaces)) · \(snapshot.resetLabel(now: context.date))")
                     .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : .secondary))
                     .lineLimit(1).truncationMode(.tail)
+                    .help("\(snapshot.statusLabel) · \(snapshot.resetLabel(now: context.date))")
             }
         }
         .frame(maxWidth: .infinity, minHeight: 104)
