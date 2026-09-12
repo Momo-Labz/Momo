@@ -3,22 +3,29 @@ import SwiftUI
 
 struct DashboardView: View {
     var refreshOnAppear = true
+    var showsOverview = false
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
+    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
 
-    init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home) {
+    init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
+        self.showsOverview = showsOverview
         _tab = State(initialValue: initialTab)
     }
 
     private var enabledSnapshots: [ProviderSnapshot] {
-        monitor.snapshots.filter {
+        monitor.snapshots.map { snapshot in
+            var result = snapshot
+            result.sessions = snapshot.sessions.map(preferences.presented)
+            return result
+        }.filter {
             preferences.isEnabled($0.provider)
                 && (!preferences.hideIdleProviders || $0.activeCount > 0 || !$0.sessions.isEmpty)
         }
@@ -45,6 +52,18 @@ struct DashboardView: View {
     }
 
     var body: some View {
+        if showsOverview {
+            VStack(spacing: 0) {
+                header
+                Divider()
+                page
+                footer
+            }.frame(width: 860, height: 570).background(BarBoyStyle.panel)
+                .task { if refreshOnAppear { monitor.refresh() } }
+        } else { compactExpansion }
+    }
+
+    private var compactExpansion: some View {
         VStack(spacing: 0) {
             CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
@@ -52,6 +71,7 @@ struct DashboardView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text("SESSIONS").font(BarBoyStyle.sectionLabel)
+                        Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
                         Spacer()
                         Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
                             .barBoyIconButton().help("Refresh sessions")
@@ -65,11 +85,14 @@ struct DashboardView: View {
                                 Text("No sessions recorded. Process activity alone cannot identify a chat.")
                                     .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
                             }
-                            ForEach(snapshot.sessions.sorted { $0.updatedAt > $1.updatedAt }) { session in
-                                Button { openReply(session) } label: { SessionRow(session: session) }
-                                    .buttonStyle(.plain)
-                                    .background(BarBoyStyle.surface)
-                                    .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                            ForEach(Array(Set(snapshot.sessions.map(\.project))).sorted(), id: \.self) { folder in
+                                Label(folder, systemImage: "folder").font(.headline).padding(.top, 6)
+                                ForEach(snapshot.sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
+                                    Button { openReply(session) } label: { SessionRow(session: session) }
+                                        .buttonStyle(MomoActionButtonStyle())
+                                        .background(BarBoyStyle.surface)
+                                        .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                                }
                             }
                         }
                     }
@@ -245,10 +268,11 @@ struct DashboardView: View {
     private var shortcutsPanel: some View {
         VStack(alignment: .leading, spacing: 11) {
             Label("SHORTCUTS", systemImage: "command").font(BarBoyStyle.sectionLabel).foregroundStyle(.secondary)
-            ShortcutRow(label: "Quick Ask", keys: ["⌃", "⌥", "SPACE"])
-            ShortcutRow(label: "Talk", keys: ["NEXT"], disabled: true)
-            ShortcutRow(label: "Dictate", keys: ["NEXT"], disabled: true)
-            ShortcutRow(label: "Hands-free", keys: ["NEXT"], disabled: true)
+            ForEach(ShortcutAction.allCases) { action in
+                Button { NotificationCenter.default.post(name: .momoShortcut, object: action) } label: {
+                    ShortcutRow(label: action.title, keys: [GlobalShortcutService.shared.bindings[action]?.label ?? "—"])
+                }.buttonStyle(MomoActionButtonStyle())
+            }
         }
         .padding(12)
         .background(BarBoyStyle.surface)
@@ -285,7 +309,7 @@ struct DashboardView: View {
 
     private var agentsPage: some View {
         HStack(alignment: .top, spacing: 16) {
-            usageTable.frame(width: 328)
+            usageTable.frame(width: 390)
             Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
             activitySection.frame(maxWidth: .infinity)
         }
@@ -335,8 +359,8 @@ struct DashboardView: View {
             VStack(spacing: 0) {
                 HStack(spacing: 6) {
                     Text("PROVIDER").frame(maxWidth: .infinity, alignment: .leading)
-                    Text("SHORT").frame(width: 40, alignment: .trailing)
-                    Text("WEEK").frame(width: 40, alignment: .trailing)
+                    Text("SHORT").frame(width: 70, alignment: .trailing)
+                    Text("LONG").frame(width: 70, alignment: .trailing)
                     Text("SESS").frame(width: 34, alignment: .trailing)
                 }
                 .font(BarBoyStyle.tableHeader).foregroundStyle(.secondary)
@@ -443,7 +467,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
-    static let canvasSize = CGSize(width: 430, height: 174)
+    static let canvasSize = CGSize(width: 430, height: 220)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -481,6 +505,12 @@ struct CompactDashboardView: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 52)
+            HStack {
+                Button("+ PROVIDER") { openSettings() }.barBoyButton()
+                Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton()
+                Spacer()
+                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
+            }.font(BarBoyStyle.microLabel).padding(.horizontal, 12).padding(.bottom, 8)
 
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
 
@@ -496,7 +526,7 @@ struct CompactDashboardView: View {
             }
             .padding(12)
         }
-        .frame(width: 430, height: 174)
+        .frame(width: 430, height: 220)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
@@ -522,15 +552,17 @@ private struct CompactProviderCell: View {
             Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
             Text(snapshot.usageText.uppercased()).font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1)
-            Text(snapshot.quotaLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary).lineLimit(1)
-                .help(snapshot.recordedQuota?.explanation ?? "No recorded account usage window. A dash means the source did not report a valid percentage and duration.")
+            ForEach(Array(snapshot.quotaLabels.enumerated()), id: \.offset) { _, label in
+                Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary).lineLimit(1)
+                    .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 92)
+        .frame(maxWidth: .infinity, minHeight: 104)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabel), \(snapshot.activeCount) active")
+        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabels.joined(separator: ", ")), \(snapshot.activeCount) active")
     }
 }
 
@@ -685,8 +717,8 @@ private struct ProviderUsageRow: View {
                     Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Text(percent(snapshot.shortWindowPercent)).frame(width: 40, alignment: .trailing)
-                Text(percent(snapshot.weekWindowPercent)).frame(width: 40, alignment: .trailing)
+                Text(snapshot.quotaLabels[0]).font(.system(size: 8)).frame(width: 70, alignment: .trailing)
+                Text(snapshot.quotaLabels[1]).font(.system(size: 8)).frame(width: 70, alignment: .trailing)
                 ZStack(alignment: .topTrailing) {
                     Text("\(snapshot.sessions.count)").frame(width: 34, alignment: .trailing)
                     if snapshot.needsAttentionCount > 0 {
@@ -707,14 +739,16 @@ private struct ProviderUsageRow: View {
 }
 
 private struct SessionRow: View {
+    @ObservedObject private var autoResume = AutoResumeService.shared
     let session: AgentSession
     var body: some View {
         HStack(spacing: 9) {
             ProviderMark(provider: session.provider, size: 28, active: session.isRunning)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(1)
-                Text("\(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
+                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(2).help(session.title)
+                Text(session.processID == nil ? "\(session.role.rawValue.uppercased()) / \(session.project)" : "PROCESS / UNLINKED TO A CHAT")
                     .font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
+                Text("AUTO · \(autoResume.state(for: session))").font(.system(size: 8, weight: .medium)).foregroundStyle(.secondary).lineLimit(2)
                 if !session.capabilitySummary.isEmpty {
                     Text(session.capabilitySummary).font(.system(size: 7, weight: .bold, design: .monospaced))
                         .foregroundStyle(.tertiary).lineLimit(1)

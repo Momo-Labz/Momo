@@ -129,9 +129,9 @@ struct AgentSession: Identifiable, Hashable {
     let id: String
     let provider: AIProvider
     let role: AgentRole
-    let title: String
+    var title: String
     let detail: String
-    let project: String
+    var project: String
     let updatedAt: Date
     let isRunning: Bool
     let processID: Int?
@@ -145,6 +145,7 @@ struct AgentSession: Identifiable, Hashable {
     let sourceURL: URL?
     var stoppedAfterUsageGrowth = false
     let recordedQuotaWindows: [RecordedQuotaWindow]
+    let recordedSource: String?
 
     init(
         id: String,
@@ -164,7 +165,8 @@ struct AgentSession: Identifiable, Hashable {
         skills: [String] = [],
         plugins: [String] = [],
         sourceURL: URL? = nil,
-        recordedQuotaWindows: [RecordedQuotaWindow] = []
+        recordedQuotaWindows: [RecordedQuotaWindow] = [],
+        recordedSource: String? = nil
     ) {
         self.id = id
         self.provider = provider
@@ -184,6 +186,7 @@ struct AgentSession: Identifiable, Hashable {
         self.plugins = plugins
         self.sourceURL = sourceURL
         self.recordedQuotaWindows = recordedQuotaWindows
+        self.recordedSource = recordedSource
     }
 
     var ageLabel: String {
@@ -306,6 +309,13 @@ struct ProviderSnapshot: Identifiable {
     var weekWindowPercent: Int? = nil
     var shortWindowMinutes: Int? = nil
     var recordedQuota: RecordedQuotaWindow? = nil
+    var recordedQuotas: [RecordedQuotaWindow] = []
+    var quotaLabels: [String] {
+        let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
+        guard !windows.isEmpty else { return [quotaLabel, "LONG —"] }
+        let labels = windows.sorted { $0.minutes < $1.minutes }.prefix(2).map { $0.label(now: .now) }
+        return labels.count == 1 ? labels + ["LONG —"] : labels
+    }
 
     var quotaLabel: String {
         if let recordedQuota { return recordedQuota.label(now: .now) }
@@ -495,7 +505,7 @@ struct RecordedQuotaWindow: Hashable {
 
     func label(now: Date) -> String {
         if let resetsAt, now >= resetsAt { return "QUOTA —" }
-        let duration = minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
+        let duration = minutes == 10080 ? "WEEK" : minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
         return "\(String(format: "%.0f", percent))% / \(duration)"
     }
 

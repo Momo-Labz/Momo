@@ -10,6 +10,11 @@ struct SettingsView: View {
 
     @ObservedObject private var autoResume = AutoResumeService.shared
     @Environment(\.openWindow) private var openWindow
+    @ObservedObject private var shortcutService = GlobalShortcutService.shared
+    @State private var recordingShortcut: ShortcutAction?
+    @State private var shortcutError: String?
+    @State private var shortcutNotice: String?
+    @AppStorage("hapticFeedback") private var hapticFeedback = true
     @State private var pendingProvider: AIProvider?
     private var refreshIntervalLabel: String {
         let seconds = Int(ActivityMonitor.refreshInterval)
@@ -156,6 +161,10 @@ struct SettingsView: View {
             Text("Automatically continue authorized local Codex CLI chats after a recorded usage reset. No confirmation per chat. One attempt per reset; manual stops and other errors are excluded. Desktop chats and other providers are not supported yet.")
                 .font(.caption).foregroundStyle(.secondary)
             Text(autoResume.status).font(.caption).foregroundStyle(.secondary)
+            ForEach(AIProvider.allCases) { provider in
+                LabeledContent(provider.name, value: provider == .codex ? "CLI supported · desktop unavailable" : "Auto-resume unavailable")
+                    .font(.caption)
+            }
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
@@ -241,22 +250,35 @@ struct SettingsView: View {
                 Text("Get back into an AI workflow without hunting through windows.")
                     .foregroundStyle(.secondary)
             }
-            VStack(spacing: 0) {
-                ShortcutRow(name: "Quick Ask", keys: ["⌃", "⌥", "SPACE"], state: "ACTIVE")
-                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-                ShortcutRow(name: "Talk", keys: ["⌃", "⌥", "T"], state: "VOICE NEXT")
-                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-                ShortcutRow(name: "Dictate", keys: ["FN", "⌃", "D"], state: "VOICE NEXT")
-                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-                ShortcutRow(name: "Hands-free", keys: ["FN", "⌃", "H"], state: "VOICE NEXT")
+            ForEach(ShortcutAction.allCases) { action in
+                HStack {
+                    Text(action.title).font(.headline)
+                    Spacer()
+                    Button(shortcutService.bindings[action]?.label ?? "Set shortcut") { recordingShortcut = action; shortcutError = nil }.barBoyButton()
+                    Text(shortcutService.errors[action] ?? "ACTIVE").font(.caption).foregroundStyle(.secondary)
+                }
             }
-            .background(BarBoyStyle.surface)
-            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-            Text("Quick Ask works now: it copies your request and opens Codex, Claude, Gemini, Cursor, or Grok. Voice modes are deliberately marked as next-stage until microphone permission, transcription, and action confirmations are implemented.")
-                .font(.caption).foregroundStyle(.secondary)
+            Toggle("Haptic feedback", isOn: $hapticFeedback)
+            Text("Talk stops after a pause. Dictate and Hands-free listen until stopped. Voice stays on this Mac and requires supported on-device speech recognition. Haptics require a compatible trackpad.").font(.caption).foregroundStyle(.secondary)
+            if let shortcutNotice { Text(shortcutNotice).font(.caption).foregroundStyle(.green) }
+            if let shortcutError { Text(shortcutError).font(.caption).foregroundStyle(.red) }
             Spacer()
         }
         .padding(24)
+        .sheet(item: $recordingShortcut) { action in
+            VStack(spacing: 16) {
+                Text("Press a new shortcut for \(action.title)").font(.headline)
+                Text("Include Control, Option or Command. Escape cancels.").font(.caption)
+                ShortcutRecorder { binding in
+                    if let binding {
+                        shortcutError = shortcutService.update(binding, for: action)
+                        shortcutNotice = shortcutError == nil ? "Saved \(action.title): \(binding.label)" : nil
+                    }
+                    recordingShortcut = nil
+                }.frame(width: 350, height: 35)
+                Button("Cancel") { recordingShortcut = nil }
+            }.padding(24)
+        }
     }
 
     private func copyDisplayAddress() {
@@ -347,25 +369,34 @@ private struct QRCodeView: View {
 
 /// Connection setup deliberately separates observation from sending a turn.
 struct CodexOnboardingView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var notifier: AttentionNotifier
     @Environment(\.dismiss) private var dismiss
     @AppStorage("codexOnboardingSeen.v1") private var seen = false
     @State private var confirmAccess = false
+    @State private var celebrating = false
+    @State private var showVoiceGuide = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 12) {
-                AnimatedMomoMark(size: 44, motion: .wave)
+                AnimatedMomoMark(size: 44, animated: celebrating, motion: .wave)
                 VStack(alignment: .leading) {
                     Text("MOMO / CONNECT CODEX").font(BarBoyStyle.sectionLabel)
                     Text("Keep your task within reach.").foregroundStyle(.secondary)
                 }
             }
             Text(CodexDesktopConnection.applicationURL == nil ? "1. Install Codex desktop to open tasks." : "1. Codex desktop detected.").font(.headline)
-            Text("2. Authorize local access").font(.headline)
-            Text("MOMO reads task metadata, recorded usage and errors from ~/.codex/sessions, plus installed tool and skill configuration. These folders can contain more than one account. This permission covers every account stored there; it does not sign you in or verify account identity.")
+            HStack {
+                Image(systemName: preferences.isEnabled(.codex) ? "checkmark.circle.fill" : "lock.circle")
+                Text(preferences.isEnabled(.codex) ? "Local access authorized" : "2. Authorize local access").font(.headline)
+            }
+            .foregroundStyle(preferences.isEnabled(.codex) ? Color.green : Color.primary)
+            .id(preferences.isEnabled(.codex))
+            .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.96)))
+            Text("Read local tasks, recorded usage and tool configuration. This covers all accounts saved in your local Codex folders; it does not sign in to an account.")
                 .font(.callout).foregroundStyle(.secondary)
             Button(preferences.isEnabled(.codex) ? "Revoke Codex access" : "Authorize Codex local access") {
                 if preferences.isEnabled(.codex) {
@@ -374,12 +405,13 @@ struct CodexOnboardingView: View {
                 } else { confirmAccess = true }
             }.barBoyButton()
             Text("3. Open the exact task").font(.headline)
-            Text("Click a recorded task in MOMO, then Open Codex Task. Copy + Open carries your reply on the clipboard for you to paste. MOMO does not send it automatically.")
+            Text("Choose a task in MOMO. Copy + Open takes you to that task with your reply ready to paste.")
                 .font(.callout).foregroundStyle(.secondary)
             Button(preferences.attentionAlertsEnabled ? "Notifications enabled" : "Enable task notifications") {
                 Task { preferences.attentionAlertsEnabled = await notifier.requestAuthorization() }
             }.barBoyButton().disabled(preferences.attentionAlertsEnabled || !preferences.isEnabled(.codex))
-            Text("Desktop auto-resume: unavailable. The installed app exposes task links, but MOMO has no verified desktop turn-control connection. CLI auto-resume is a separate setting.")
+            Button("Set up voice & understand usage") { showVoiceGuide = true }.barBoyButton()
+            Text("Desktop auto-resume is unavailable. CLI auto-resume is a separate setting.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Text("No password, browser cookies or Accessibility permission needed.").font(.caption).foregroundStyle(.secondary)
@@ -388,6 +420,13 @@ struct CodexOnboardingView: View {
             }
         }
         .padding(24).frame(width: 500).background(BarBoyStyle.panel)
+        .fixedSize(horizontal: false, vertical: true)
+        .animation(reduceMotion ? nil : .timingCurve(0.16, 1, 0.3, 1, duration: 0.22), value: preferences.isEnabled(.codex))
+         .onChange(of: preferences.isEnabled(.codex)) { _, enabled in
+            MomoFeedback.perform(); celebrating = enabled
+            Task { try? await Task.sleep(for: .seconds(1.2)); celebrating = false }
+        }
+        .sheet(isPresented: $showVoiceGuide) { VoiceSetupGuide() }
         .alert("Allow local Codex access?", isPresented: $confirmAccess) {
             Button("Authorize") {
                 preferences.setEnabled(true, for: .codex)
@@ -397,5 +436,34 @@ struct CodexOnboardingView: View {
         } message: {
             Text("Authorize MOMO to read session metadata and capability configuration for all Codex accounts saved in this Mac user's local session folders and detect Codex processes. Revoke anytime in Settings. This does not authorize automatic desktop messages.")
         }
+    }
+}
+
+
+struct VoiceSetupGuide: View {
+    @Environment(\.dismiss) private var dismiss
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                AnimatedMomoMark(size: 40, animated: false)
+                Text("MOMO / VOICE & USAGE").font(BarBoyStyle.sectionLabel)
+            }
+            Text("Ready → Listening → Draft ready").font(.headline)
+            Text("Start voice input to request Microphone and Speech Recognition permissions. Nothing records when you simply open onboarding.")
+            Text("See your words live. Hands-free recognizes “MOMO stop” to finish and “MOMO use draft” to return to the composer. Talk ends after a pause; Dictate stops with its shortcut or Stop. Each recording lasts up to 55 seconds.")
+            Text("Speech runs on this Mac when supported. If your language or device is unavailable, MOMO offers typed input. Voice never sends a provider message.")
+            Divider()
+            Text("5HR + WEEK, when recorded").font(.headline)
+            Text("The two rows beneath tokens show the provider’s recorded short and long usage windows. Other durations keep their own labels. A dash means missing or expired data, never zero usage.")
+            Text("Edit keys and turn haptics on or off in Settings → Shortcuts.").font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Button("Done") { dismiss() }.barBoyButton()
+                Spacer()
+                Button("Try Hands-free") {
+                    dismiss()
+                    NotificationCenter.default.post(name: .momoShortcut, object: ShortcutAction.handsFree)
+                }.barBoyButton()
+            }
+        }.padding(24).frame(width: 460).fixedSize(horizontal: false, vertical: true)
     }
 }

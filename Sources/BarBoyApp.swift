@@ -6,7 +6,7 @@ struct BarBoyApp: App {
     @StateObject private var preferences = PreferencesStore()
     @StateObject private var deskDisplay = DeskDisplayServer()
     @StateObject private var attentionNotifier = AttentionNotifier()
-    @StateObject private var shortcuts = GlobalShortcutService()
+    @StateObject private var shortcuts = GlobalShortcutService.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -51,6 +51,18 @@ struct BarBoyApp: App {
         }
         .defaultPosition(.center)
         .windowResizability(.contentSize)
+
+        Window("MOMO Overview", id: "overview") {
+            DashboardView(showsOverview: true)
+                .environmentObject(monitor)
+                .environmentObject(preferences)
+                .environmentObject(deskDisplay)
+                .environmentObject(attentionNotifier)
+        }.defaultPosition(.center).windowResizability(.contentSize)
+
+        Window("MOMO Voice", id: "voice") { VoicePopup() }
+            .defaultPosition(.center)
+            .windowResizability(.contentSize)
 
         Window("Quick Ask", id: "command-palette") {
             CommandPaletteView().environmentObject(preferences)

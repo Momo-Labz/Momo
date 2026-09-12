@@ -24,6 +24,7 @@ final class PreferencesStore: ObservableObject {
     @Published var autoResumeAfterReset: Bool {
         didSet { defaults.set(autoResumeAfterReset, forKey: "autoResumeAfterReset") }
     }
+    @Published private(set) var conversationLabels: [String: ConversationLabel]
     @Published private(set) var enabledProviders: Set<AIProvider>
 
     private let defaults: UserDefaults
@@ -40,6 +41,7 @@ final class PreferencesStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        conversationLabels = defaults.data(forKey: "conversationLabels.v1").flatMap { try? JSONDecoder().decode([String: ConversationLabel].self, from: $0) } ?? [:]
         autoResumeAfterReset = defaults.bool(forKey: "autoResumeAfterReset")
         compactMenuBar = defaults.object(forKey: Keys.compactMenuBar) as? Bool ?? false
         hideIdleProviders = defaults.object(forKey: Keys.hideIdleProviders) as? Bool ?? false
@@ -51,6 +53,21 @@ final class PreferencesStore: ObservableObject {
         enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
     }
 
+    func setLabel(name: String, folder: String, for session: AgentSession) {
+        let key = "\(session.provider.rawValue):\(session.id)"
+        let label = ConversationLabel(name: String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)), folder: String(folder.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)))
+        conversationLabels[key] = label.name.isEmpty && label.folder.isEmpty ? nil : label
+        if let data = try? JSONEncoder().encode(conversationLabels) { defaults.set(data, forKey: "conversationLabels.v1") }
+    }
+
+    func presented(_ session: AgentSession) -> AgentSession {
+        guard let label = conversationLabels["\(session.provider.rawValue):\(session.id)"] else { return session }
+        var result = session
+        if !label.name.isEmpty { result.title = label.name }
+        if !label.folder.isEmpty { result.project = label.folder }
+        return result
+    }
+
     func isEnabled(_ provider: AIProvider) -> Bool { enabledProviders.contains(provider) }
 
     func setEnabled(_ enabled: Bool, for provider: AIProvider) {
@@ -58,3 +75,5 @@ final class PreferencesStore: ObservableObject {
         defaults.set(enabledProviders.map(\.rawValue).sorted(), forKey: Keys.enabledProviders)
     }
 }
+
+struct ConversationLabel: Codable, Equatable { let name: String; let folder: String }

@@ -125,27 +125,29 @@ actor LocalActivityScanner {
         guard !providers.isEmpty else { return [] }
 
         let now = Date()
+        let codexNames = enabledProviders.contains(.codex) ? CodexChatNames.read(home: home) : [:]
         let processes = detectProcesses ? runningAIProcesses(for: enabledProviders) : []
         var snapshots: [ProviderSnapshot] = []
         for provider in providers {
             let providerProcesses = processes.filter { process in
                 provider.matchesProcessCommand(process.command)
             }
-            let diskSessions = await recentSessions(
+            var diskSessions = await recentSessions(
                 for: provider,
                 running: !providerProcesses.isEmpty,
                 now: now
             )
+            if provider == .codex {
+                for index in diskSessions.indices {
+                    diskSessions[index].title = codexNames[diskSessions[index].id] ?? (UUID(uuidString: diskSessions[index].id) == nil ? "Unnamed Codex task" : "Codex task · \(diskSessions[index].id.prefix(8))")
+                }
+            }
             let processSessions = providerProcesses.enumerated().map { index, process in
                 AgentSession(
                     id: "process-\(process.pid)",
                     provider: provider,
-                    role: index == 0 ? .main : .subagent,
-                    title: inferredTitle(
-                        from: process.command,
-                        provider: provider,
-                        fallback: "Active \(provider.name) session"
-                    ),
+                    role: .main,
+                    title: "\(provider.name) process · PID \(process.pid)",
                     detail: "Local process · PID \(process.pid)",
                     project: inferredProject(from: process.command),
                     updatedAt: now,
@@ -181,6 +183,11 @@ actor LocalActivityScanner {
                 if $0.observedAt != $1.observedAt { return $0.observedAt > $1.observedAt }
                 return $0.minutes < $1.minutes
             }.first
+            if let latest = snapshot.recordedQuota?.observedAt {
+                var durations = Set<Int>()
+                snapshot.recordedQuotas = diskSessions.flatMap(\.recordedQuotaWindows)
+                    .filter { $0.observedAt == latest && durations.insert($0.minutes).inserted }
+            }
             snapshots.append(snapshot)
         }
         return snapshots
@@ -388,6 +395,10 @@ struct CodexResumeCandidate: Equatable {
 final class AutoResumeService: ObservableObject {
     static let shared = AutoResumeService()
     @Published private(set) var status = "Off"
+    @Published private(set) var sessionStatuses: [String: String] = [:]
+    private var monitoringEnabled = false
+    private var resumeAuthorized: Set<AIProvider> = []
+    private var runningSessionID: String?
     private let defaults: UserDefaults
     private var attempted: Set<String>
     private var process: Process?
@@ -399,7 +410,25 @@ final class AutoResumeService: ObservableObject {
         attempted = Set(defaults.stringArray(forKey: "autoResume.attempted.v1") ?? [])
     }
 
+    func state(for session: AgentSession) -> String {
+        if runningSessionID == session.id { return "Continuing now" }
+        if let state = sessionStatuses[session.id] { return state }
+        guard monitoringEnabled else { return "Off" }
+        guard resumeAuthorized.contains(session.provider) else { return "Authorization required" }
+        if session.provider != .codex { return "Unsupported · \(session.provider.name) control not connected" }
+        if session.recordedSource != "cli" { return "Unsupported · desktop control not connected" }
+        guard executable != nil else { return "Codex CLI unavailable" }
+        return "Watching for a recorded usage-limit stop"
+    }
+
     func update(snapshots: [ProviderSnapshot], enabled: Bool, authorized: Set<AIProvider>, now: Date = .now) {
+        monitoringEnabled = enabled
+        resumeAuthorized = authorized
+        if process == nil { sessionStatuses = [:] }
+        let ids = Set(snapshots.flatMap(\.sessions).map(\.id))
+        sessionStatuses = sessionStatuses.filter { ids.contains($0.key) }
+        if !enabled { sessionStatuses = Dictionary(uniqueKeysWithValues: ids.map { ($0, "Off") }) }
+        else { sessionStatuses = sessionStatuses.filter { $0.value != "Off" } }
         guard enabled else { status = "Off · no new automatic continuations"; return }
         guard authorized.contains(.codex) else { status = "Waiting for Codex local-provider authorization"; return }
         guard process == nil else { return }
@@ -407,10 +436,14 @@ final class AutoResumeService: ObservableObject {
         status = "Watching for recorded Codex CLI usage stops"
         for session in snapshots.filter({ $0.provider == .codex }).flatMap(\.sessions) {
             guard let source = session.sourceURL,
-                  let data = boundedRead(source), let candidate = CodexResumeCandidate.parse(data),
-                  !attempted.contains(candidate.key) else { continue }
+                  let data = boundedRead(source), let candidate = CodexResumeCandidate.parse(data) else { continue }
+            if attempted.contains(candidate.key) {
+                sessionStatuses[session.id] = "Attempted this reset · no duplicate retry"
+                continue
+            }
             guard now >= candidate.resetAt.addingTimeInterval(5) else {
                 status = "Waiting for reset: \(candidate.resetAt.formatted(date: .omitted, time: .shortened))"
+                sessionStatuses[session.id] = status
                 continue
             }
             // Re-read immediately before dispatch. A new user turn, manual stop,
@@ -418,7 +451,7 @@ final class AutoResumeService: ObservableObject {
             guard let fresh = boundedRead(source), CodexResumeCandidate.parse(fresh) == candidate else { continue }
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: candidate.directory, isDirectory: &isDirectory), isDirectory.boolValue else {
-                status = "Cannot resume: the recorded project folder is unavailable"; continue
+                status = "Cannot resume: the recorded project folder is unavailable"; sessionStatuses[session.id] = status; continue
             }
             // Persist before launching: app restart or uncertain exit cannot
             // send a second continuation for this same session/reset pair.
@@ -435,12 +468,15 @@ final class AutoResumeService: ObservableObject {
                 let succeeded = child.terminationStatus == 0
                 Task { @MainActor in
                     self?.status = succeeded ? "Automatic continuation finished" : "Automatic continuation stopped with an error; no repeated retry"
+                    self?.sessionStatuses[session.id] = succeeded ? "Continuation finished" : "Attempt failed · no duplicate retry"
+                    self?.runningSessionID = nil
                     self?.process = nil
                 }
             }
             process = child
-            do { try child.run(); status = "Automatically continuing a Codex CLI chat" }
-            catch { process = nil; status = "Could not start Codex; no repeated retry" }
+            runningSessionID = session.id
+            do { try child.run(); status = "Automatically continuing a Codex CLI chat"; sessionStatuses[session.id] = "Continuing now" }
+            catch { process = nil; runningSessionID = nil; status = "Could not start Codex; no repeated retry"; sessionStatuses[session.id] = status }
             return
         }
     }
@@ -456,5 +492,30 @@ final class AutoResumeService: ObservableObject {
         defer { try? handle.close() }
         guard let data = try? handle.read(upToCount: 16 * 1024 * 1024 + 1), data.count <= 16 * 1024 * 1024 else { return nil }
         return data
+    }
+}
+
+
+/// Codex's append-only session_index.jsonl records names separately from prompts.
+enum CodexChatNames {
+    static func read(home: URL) -> [String: String] {
+        let url = home.appendingPathComponent(".codex/session_index.jsonl")
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return [:] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > 2_000_000 ? size - 2_000_000 : 0)
+        return parse((try? handle.read(upToCount: 2_000_000)) ?? Data())
+    }
+    static func parse(_ data: Data) -> [String: String] {
+        var names: [String: String] = [:]
+        for line in data.split(separator: 10) {
+            guard let record = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+                  let id = record["id"] as? String, UUID(uuidString: id) != nil,
+                  let name = record["thread_name"] as? String else { continue }
+            let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+            // Reject prompt blobs rather than disguising them as chat names.
+            names[id] = !title.isEmpty && title.count <= 200 && !title.hasPrefix("<") && !title.hasPrefix("#") ? title : nil
+        }
+        return names
     }
 }

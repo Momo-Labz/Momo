@@ -31,6 +31,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: MOMO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: MOMO uses your microphone only when you start voice input.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: MOMO transcribes your voice into a draft using on-device speech recognition.
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: MOMO uses your local network only when you enable Desk Display, so your paired screen can read live session status from this Mac.
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 Momo Labz
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

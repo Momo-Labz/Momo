@@ -33,7 +33,8 @@ struct CodexSessionAdapter: ProviderSessionAdapter {
             skills: [],
             plugins: metadata.plugins.sorted(),
             sourceURL: file.url,
-            recordedQuotaWindows: metadata.quotaWindows
+            recordedQuotaWindows: metadata.quotaWindows,
+            recordedSource: metadata.source
         )
     }
 
@@ -87,6 +88,7 @@ struct CodexSessionAdapter: ProviderSessionAdapter {
 
 private extension CodexSessionAdapter {
     struct Metadata {
+        var source: String?
         var quotaWindows: [RecordedQuotaWindow] = []
         var sessionID: String?
         var title: String?
@@ -123,6 +125,7 @@ private extension CodexSessionAdapter {
         }
 
         private mutating func consumeSessionMetadata(_ payload: [String: Any]) {
+            source = payload["source"] as? String
             sessionID = nonemptyString(payload["session_id"])
                 ?? nonemptyString(payload["id"])
                 ?? sessionID

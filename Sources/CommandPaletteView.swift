@@ -6,6 +6,7 @@ import SwiftUI
 final class QuickAskContext: ObservableObject {
     static let shared = QuickAskContext()
     @Published private(set) var session: AgentSession?
+    @Published var activationLabel: String?
     @Published var provider: AIProvider = .codex
     @Published private var drafts: [String: String] = [:]
 
@@ -30,6 +31,10 @@ struct CommandPaletteView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @State private var routingMessage: String?
     @State private var showDetails = false
+    @State private var editingLabel = false
+    @State private var editedName = ""
+    @State private var editedFolder = ""
+    @ObservedObject private var autoResume = AutoResumeService.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -42,7 +47,7 @@ struct CommandPaletteView: View {
                         .font(BarBoyStyle.bodySmall).lineLimit(2)
                 }
                 Spacer()
-                Text("⌃⌥SPACE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                Text(GlobalShortcutService.shared.bindings[.quickAsk]?.label ?? "").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
 
             if let session = context.session {
@@ -59,6 +64,17 @@ struct CommandPaletteView: View {
                 }.pickerStyle(.segmented)
             }
 
+            if let session = context.session {
+                HStack {
+                    Label(session.project, systemImage: "folder").lineLimit(1)
+                    Spacer()
+                    Button("EDIT NAME / FOLDER") {
+                        editedName = session.title; editedFolder = session.project; editingLabel = true
+                    }.barBoyButton()
+                }.font(.caption)
+                Text("Auto-resume: \(autoResume.state(for: session))").font(.caption).foregroundStyle(.secondary)
+            }
+
             TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
                 .font(.system(size: 14, design: .monospaced))
                 .scrollContentBackground(.hidden)
@@ -69,12 +85,13 @@ struct CommandPaletteView: View {
                 .frame(height: 90)
                 .accessibilityLabel(context.session.map { "Reply to \($0.title)" } ?? "New prompt")
 
-            Text(routingMessage ?? (context.session == nil
+            Text(routingMessage ?? context.activationLabel ?? (context.session == nil
                 ? "Copies your text, then opens the provider."
                 : "Draft for this chat. Use your Mac’s Dictation shortcut to speak."))
                 .font(.caption).foregroundStyle(.secondary)
 
             HStack {
+                Button("VOICE") { NotificationCenter.default.post(name: .momoShortcut, object: ShortcutAction.handsFree) }.barBoyButton()
                 if context.session != nil {
                     Button("DETAILS") { showDetails = true }.barBoyButton()
                 }
@@ -94,10 +111,34 @@ struct CommandPaletteView: View {
         .padding(16)
         .frame(width: 520)
         .background(BarBoyStyle.panel)
+        .sheet(isPresented: $editingLabel) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Organize this conversation").font(.headline)
+                TextField("Name in MOMO", text: $editedName)
+                TextField("Folder label in MOMO", text: $editedFolder)
+                Text("These labels organize MOMO. They do not rename the provider’s chat or change its working directory.").font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Cancel") { editingLabel = false }
+                    Spacer()
+                    Button("Save") {
+                        if let session = context.session {
+                            preferences.setLabel(name: editedName, folder: editedFolder, for: session)
+                            context.select(preferences.presented(session))
+                        }
+                        editingLabel = false; MomoFeedback.perform()
+                    }.barBoyButton().disabled(editedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || editedFolder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }.padding(24).frame(width: 390)
+        }
         .sheet(isPresented: $showDetails) {
             if let session = context.session { SessionInspectorView(session: session) }
         }
         .onAppear { editorFocused = true }
+        .task(id: context.activationLabel) {
+            guard context.activationLabel != nil else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            if !Task.isCancelled { context.activationLabel = nil }
+        }
         .onChange(of: context.session?.id) { _, _ in editorFocused = true; routingMessage = nil }
         .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { _ in editorFocused = true }
     }

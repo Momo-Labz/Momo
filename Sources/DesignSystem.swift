@@ -294,7 +294,7 @@ struct Surface<Content: View>: View {
 
 extension View {
     func barBoyButton() -> some View {
-        self.buttonStyle(.plain)
+        self.buttonStyle(MomoActionButtonStyle())
             .padding(.horizontal, 11)
             .padding(.vertical, 7)
             .background(BarBoyStyle.raised, in: Rectangle())
@@ -302,7 +302,7 @@ extension View {
     }
 
     func barBoyIconButton() -> some View {
-        self.buttonStyle(.plain)
+        self.buttonStyle(MomoActionButtonStyle())
             .frame(width: 32, height: 32)
             .background(BarBoyStyle.raised)
             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
@@ -317,5 +317,18 @@ struct BarBoyPressButtonStyle: ButtonStyle {
             .opacity(configuration.isPressed ? 0.82 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.98 : 1)
             .animation(reduceMotion ? nil : .timingCurve(0.32, 0.72, 0, 1, duration: 0.08), value: configuration.isPressed)
+    }
+}
+
+
+struct MomoActionButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(configuration.isPressed ? BarBoyStyle.coral : Color.primary)
+            .opacity(enabled ? 1 : 0.4)
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .onChange(of: configuration.isPressed) { _, pressed in if pressed && enabled { MomoFeedback.perform() } }
     }
 }

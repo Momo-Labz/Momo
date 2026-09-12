@@ -29,9 +29,25 @@ struct RuntimeBridgeView: View {
                 attentionNotifier.update(snapshots: snapshots, enabled: preferences.attentionAlertsEnabled)
                 autoResume.update(snapshots: snapshots, enabled: preferences.autoResumeAfterReset, authorized: preferences.enabledProviders)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .momoShortcut)) { notification in
+                guard let action = notification.object as? ShortcutAction else { return }
+                MomoFeedback.perform()
+                if action == .quickAsk {
+                    QuickAskContext.shared.activationLabel = "Shortcut received · \(shortcuts.bindings[action]?.label ?? action.title)"
+                    NotificationCenter.default.post(name: .showCommandPalette, object: nil)
+                } else {
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                    if VoiceInput.shared.isActive { VoiceInput.shared.stop() }
+                    else {
+                        VoiceInput.shared.prepare(action)
+                        openWindow(id: "voice")
+                        Task { await VoiceInput.shared.start() }
+                    }
+                }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { notification in
                 if let session = notification.object as? AgentSession {
-                    QuickAskContext.shared.select(session)
+                    QuickAskContext.shared.select(preferences.presented(session))
                 }
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openWindow(id: "command-palette")

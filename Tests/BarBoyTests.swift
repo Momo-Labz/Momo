@@ -6,6 +6,89 @@ import XCTest
 
 @MainActor
 final class BarBoyTests: XCTestCase {
+    func testShortcutRebindingRejectsDuplicatesAndPersists() throws {
+        let suite = "MomoShortcutTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let shortcuts = GlobalShortcutService(defaults: defaults, register: false)
+        let original = shortcuts.bindings[.quickAsk]
+        XCTAssertNotNil(shortcuts.update(ShortcutAction.talk.defaultBinding, for: .quickAsk))
+        XCTAssertEqual(shortcuts.bindings[.quickAsk], original)
+        XCTAssertNotNil(shortcuts.update(ShortcutBinding(key: 40, modifiers: 0, character: "K"), for: .quickAsk))
+        let replacement = ShortcutBinding(key: 40, modifiers: original!.modifiers, character: "K")
+        XCTAssertNil(shortcuts.update(replacement, for: .quickAsk))
+        XCTAssertEqual(GlobalShortcutService(defaults: defaults, register: false).bindings[.quickAsk], replacement)
+    }
+
+    func testHandsFreeCommandsRequireAnExplicitEnding() {
+        XCTAssertTrue(VoiceInput.hasStopCommand("Please inspect this. MOMO stop."))
+        XCTAssertFalse(VoiceInput.hasStopCommand("Stop the worker and continue"))
+        XCTAssertFalse(VoiceInput.hasStopCommand("MOMO stop is the command I use"))
+        XCTAssertEqual(VoiceInput.removingStopCommand("Hello MOMO stop!"), "Hello")
+        XCTAssertTrue(VoiceInput.hasDraftCommand("Hello MOMO use draft"))
+        XCTAssertEqual(VoiceInput.removingDraftCommand("Hello MOMO use draft."), "Hello")
+    }
+
+    func testBothQuotaWindowsRemainVisibleAndExpireHonestly() {
+        var snapshot = ProviderSnapshot(provider: .codex, sessions: [], activeCount: 0, localTokensToday: 10, updatedAt: .now)
+        snapshot.recordedQuotas = [
+            RecordedQuotaWindow(percent: 32, minutes: 10080, resetsAt: .now.addingTimeInterval(600), observedAt: .now),
+            RecordedQuotaWindow(percent: 76, minutes: 300, resetsAt: .now.addingTimeInterval(600), observedAt: .now)
+        ]
+        XCTAssertEqual(snapshot.quotaLabels, ["76% / 5HR", "32% / WEEK"])
+        snapshot.recordedQuotas = [RecordedQuotaWindow(percent: 100, minutes: 300, resetsAt: .distantPast, observedAt: .distantPast)]
+        XCTAssertEqual(snapshot.quotaLabels, ["QUOTA —", "LONG —"])
+    }
+
+    func testVoicePopupRendersWithoutMicrophoneAccess() throws {
+        let voice = VoiceInput()
+        voice.prepare(.handsFree)
+        let view = VoicePopup(voice: voice).preferredColorScheme(.dark)
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: 464, height: 340)
+        host.appearance = NSAppearance(named: .darkAqua)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        try XCTUnwrap(bitmap.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: "/tmp/momo-voice.png"))
+        XCTAssertEqual(voice.state, .ready)
+        XCTAssertFalse(voice.isActive)
+    }
+
+    func testRecordedChatNamesUseLatestRenameNotPromptText() throws {
+        let id = "12345678-1234-1234-1234-123456789abc"
+        let records: [[String: Any]] = [
+            ["id": id, "thread_name": "Old name", "updated_at": "2026-09-01"],
+            ["id": id, "thread_name": "Extend Gemini dashboard", "updated_at": "2026-09-12"],
+            ["id": "bad", "thread_name": "Invalid identity"]
+        ]
+        let data = try records.map { String(decoding: try JSONSerialization.data(withJSONObject: $0), as: UTF8.self) }.joined(separator: "\n").data(using: .utf8)!
+        XCTAssertEqual(CodexChatNames.parse(data), [id: "Extend Gemini dashboard"])
+    }
+
+    func testConversationLabelsPersistWithoutChangingIdentity() {
+        let suite = "MomoLabels-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        let session = AgentSession(id: "stable-id", provider: .codex, role: .main, title: "Original", detail: "", project: "Original folder", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
+        preferences.setLabel(name: "Dashboard work", folder: "Momo Labz", for: session)
+        let shown = PreferencesStore(defaults: defaults).presented(session)
+        XCTAssertEqual(shown.title, "Dashboard work")
+        XCTAssertEqual(shown.project, "Momo Labz")
+        XCTAssertEqual(shown.id, session.id)
+        XCTAssertEqual(session.title, "Original")
+    }
+
+    func testAutoResumeNeverClaimsOtherProvidersAreConnected() {
+        let service = AutoResumeService(defaults: UserDefaults(suiteName: "MomoResumeVisibility")!)
+        service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
+        for provider in AIProvider.allCases {
+            let session = AgentSession(id: provider.rawValue, provider: provider, role: .main, title: "Fixture", detail: "", project: "", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
+            XCTAssertTrue(service.state(for: session).contains("Unsupported"))
+        }
+    }
+
     func testDesktopTaskLinksRequireRecordedIdentity() {
         let id = "12345678-1234-1234-1234-123456789abc"
         let valid = Data("{\"type\":\"session_meta\",\"payload\":{\"id\":\"\(id)\"}}\n".utf8)
@@ -89,9 +172,9 @@ final class BarBoyTests: XCTestCase {
         let context = QuickAskContext()
         context.select(AgentSession(id: "reply-fixture", provider: .gemini, role: .main, title: "Repair dashboard session tracking", detail: "", project: "MOMO", updatedAt: .now, isRunning: false, processID: nil, tokens: nil, attention: .needsInput, attentionReason: "Choose which failed session to resume"))
         context.draft = "Resume this chat and verify the last recorded error."
-        let view = CommandPaletteView(context: context).environmentObject(PreferencesStore()).preferredColorScheme(.dark).frame(width: 552, height: 350)
+        let view = CommandPaletteView(context: context).environmentObject(PreferencesStore()).preferredColorScheme(.dark).frame(width: 552, height: 520)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 552, height: 350)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 552, height: 520)
         hostingView.appearance = NSAppearance(named: .darkAqua)
         hostingView.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
@@ -236,7 +319,7 @@ final class BarBoyTests: XCTestCase {
         preferences.autoResumeAfterReset = true
         XCTAssertTrue(PreferencesStore(defaults: defaults).autoResumeAfterReset)
         let service = AutoResumeService(defaults: defaults)
-        service.update(snapshots: [], enabled: true, authorized: [])
+        service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
         XCTAssertTrue(service.status.contains("authorization"))
         service.update(snapshots: [], enabled: false, authorized: [.codex])
         XCTAssertTrue(service.status.hasPrefix("Off"))
@@ -686,8 +769,8 @@ final class BarBoyTests: XCTestCase {
 
         let now = Date()
         var sessions = [
-            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
-            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 89, tokens: 4_800, attention: .failed, model: "GPT-5.6", mcpServers: [], skills: ["qa"], plugins: []),
+            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: nil, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
+            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: nil, tokens: 4_800, attention: .failed, model: "GPT-5.6", mcpServers: [], skills: ["qa"], plugins: []),
             AgentSession(id: "claude-main", provider: .claude, role: .main, title: "Reviewing onboarding copy", detail: "Recent local session", project: "Momo", updatedAt: now.addingTimeInterval(-420), isRunning: false, processID: nil, tokens: 31_200, attention: .needsInput, attentionReason: "Approve the revised copy", model: "Claude Sonnet", mcpServers: ["figma"], skills: ["brand"], plugins: ["Canva"])
         ]
         sessions[1].stoppedAfterUsageGrowth = true
@@ -699,6 +782,7 @@ final class BarBoyTests: XCTestCase {
             ProviderSnapshot(provider: .grok, sessions: [], activeCount: 0, localTokensToday: 0, updatedAt: now)
         ]
         snapshots[0].recordedQuota = RecordedQuotaWindow(percent: 76, minutes: 300, resetsAt: now.addingTimeInterval(3600), observedAt: now)
+        snapshots[0].recordedQuotas = [snapshots[0].recordedQuota!, RecordedQuotaWindow(percent: 32, minutes: 10080, resetsAt: now.addingTimeInterval(86400), observedAt: now)]
         let capabilityInventory = CapabilityInventory(
             items: [
                 InstalledCapability(name: "frontend-design", kind: .skill, owners: [.shared], marketplaces: [], usedBy: [.codex]),
@@ -724,6 +808,16 @@ final class BarBoyTests: XCTestCase {
         try render(preferredScheme: .light, name: "barboy-light", monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
         try render(preferredScheme: .dark, name: "barboy-agents-dark", initialTab: .agents, monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
         try render(preferredScheme: .dark, name: "barboy-tools-dark", initialTab: .tools, monitor: monitor, preferences: preferences, deskDisplay: deskDisplay)
+        let overview = DashboardView(refreshOnAppear: false, showsOverview: true)
+            .environmentObject(monitor).environmentObject(preferences).environmentObject(deskDisplay)
+            .preferredColorScheme(.dark)
+        let overviewHost = NSHostingView(rootView: overview)
+        overviewHost.frame = NSRect(x: 0, y: 0, width: 860, height: 570)
+        overviewHost.appearance = NSAppearance(named: .darkAqua)
+        overviewHost.layoutSubtreeIfNeeded()
+        let overviewBitmap = try XCTUnwrap(overviewHost.bitmapImageRepForCachingDisplay(in: overviewHost.bounds))
+        overviewHost.cacheDisplay(in: overviewHost.bounds, to: overviewBitmap)
+        try XCTUnwrap(overviewBitmap.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: "/tmp/momo-overview.png"))
         try renderCompact(preferredScheme: .dark, name: "barboy-compact-dark", monitor: monitor, preferences: preferences)
         try renderCompact(preferredScheme: .light, name: "barboy-compact-light", monitor: monitor, preferences: preferences)
     }
@@ -756,9 +850,9 @@ final class BarBoyTests: XCTestCase {
             .environmentObject(monitor)
             .environmentObject(preferences)
             .preferredColorScheme(preferredScheme)
-            .frame(width: 430, height: 174)
+            .frame(width: 430, height: 220)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 174)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 220)
         hostingView.appearance = NSAppearance(named: preferredScheme == .dark ? .darkAqua : .aqua)
         hostingView.layoutSubtreeIfNeeded()
         guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
