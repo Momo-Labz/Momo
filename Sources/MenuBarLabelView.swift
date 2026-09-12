@@ -6,17 +6,32 @@ struct MenuBarLabelView: View {
     let compact: Bool
 
     var body: some View {
-        let urgent = snapshots.reduce(0) { $0 + $1.needsAttentionCount }
+        let waiting = snapshots.reduce(0) { $0 + $1.waitingCount }
+        let failed = snapshots.reduce(0) { $0 + $1.failedCount }
         let active = snapshots.reduce(0) { $0 + $1.activeCount }
         HStack(spacing: 3) {
-            Image(nsImage: Self.statusIcon)
-                .renderingMode(.template)
-                .interpolation(.none)
-                .frame(width: 18, height: 18)
-            if urgent > 0 {
-                Text("!\(min(urgent, 9))")
+            ZStack(alignment: .topTrailing) {
+                Image(nsImage: Self.statusIcon)
+                    .renderingMode(.template)
+                    .interpolation(.none)
+                    .frame(width: 18, height: 18)
+                // A flat tab on the corner of the mark. Deliberately static:
+                // a menu-bar item is on screen all day and must not pulse.
+                if waiting > 0 || failed > 0 {
+                    Rectangle()
+                        .fill(failed > 0 ? BarBoyStyle.coral : BarBoyStyle.amber)
+                        .frame(width: 5, height: 5)
+                        .offset(x: 1, y: -1)
+                }
+            }
+            if failed > 0 {
+                Text("!\(min(failed, 9))")
                     .foregroundStyle(BarBoyStyle.coral)
-                    .accessibilityLabel("\(urgent) sessions need attention")
+                    .accessibilityLabel("\(failed) sessions failed")
+            } else if waiting > 0 {
+                Text("?\(min(waiting, 9))")
+                    .foregroundStyle(BarBoyStyle.amber)
+                    .accessibilityLabel("\(waiting) sessions are waiting for you")
             } else if !compact, active > 0 {
                 Text("\(min(active, 9))")
                     .accessibilityLabel("\(active) active agents")

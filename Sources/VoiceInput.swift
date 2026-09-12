@@ -123,6 +123,12 @@ enum MomoFeedback {
 }
 
 struct VoicePopup: View {
+    /// Rendered inside the MOMO window rather than a window of its own.
+    var embedded = false
+
+    private func leave() {
+        if embedded { MomoSurface.shared.show(.sessions) } else { dismiss() }
+    }
     @ObservedObject var voice = VoiceInput.shared
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -147,14 +153,14 @@ struct VoicePopup: View {
             ScrollView { Text(voice.text.isEmpty ? voice.message : voice.text).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }.frame(height: 100)
             if !voice.text.isEmpty { Text(voice.message).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
             HStack {
-                Button("Close") { voice.stop(); dismiss() }.barBoyButton()
+                Button("Close") { voice.stop(); leave() }.barBoyButton()
                 Spacer()
                 Button(voice.isActive ? "Stop" : "Start listening") {
                     if voice.isActive { voice.stop() } else { Task { await voice.start() } }
                 }.barBoyButton()
-                Button("Use draft") { voice.useDraft(); dismiss() }.barBoyButton().disabled(voice.text.isEmpty || voice.isActive)
+                Button("Use draft") { voice.useDraft(); leave() }.barBoyButton().disabled(voice.text.isEmpty || voice.isActive)
             }
-        }.padding(22).frame(width: 420).background(BarBoyStyle.panel)
+        }.padding(22).frame(width: embedded ? nil : 420).frame(maxWidth: embedded ? .infinity : nil).background(BarBoyStyle.panel)
             .onDisappear { voice.stop() }
             .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
                 if (notification.object as? NSWindow)?.title == "MOMO Voice" { voice.stop() }

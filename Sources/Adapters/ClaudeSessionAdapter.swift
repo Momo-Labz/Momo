@@ -3,6 +3,8 @@ import Foundation
 /// Parses Claude Code's JSONL transcript format without sampling away mid-session provenance.
 struct ClaudeSessionAdapter: ProviderSessionAdapter {
     let provider: AIProvider = .claude
+    /// How quiet an open tool call must go before it reads as a prompt on screen.
+    static let idleToolGrace: TimeInterval = 20
 
     func session(
         from file: ProviderSessionFile,
@@ -14,6 +16,18 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
         var metadata = ClaudeSessionMetadata()
         forEachJSONLine(in: handle) { object in
             metadata.consume(object)
+        }
+
+        // A transcript cannot tell "waiting for permission" apart from "the tool is
+        // still running". When a call has been open with no new activity for a
+        // while, say it MAY be waiting rather than asserting that it is.
+        var attention = metadata.attention
+        var attentionReason = metadata.attentionReason
+        if attention == .working || attention == .unknown,
+           let open = metadata.openToolCalls.last,
+           context.now.timeIntervalSince(file.modifiedAt) >= Self.idleToolGrace {
+            attention = .needsInput
+            attentionReason = "Claude may be waiting: \(open.name) has been open with no new activity."
         }
 
         let fallbackName = humanized(file.url.deletingPathExtension().lastPathComponent)
@@ -28,13 +42,14 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
             isRunning: context.isLikelyRunning(file),
             processID: nil,
             tokens: metadata.tokens > 0 ? metadata.tokens : nil,
-            attention: metadata.attention,
-            attentionReason: metadata.attentionReason,
+            attention: attention,
+            attentionReason: attentionReason,
             model: metadata.model,
             mcpServers: metadata.mcpServers.sorted(),
             skills: metadata.skills.sorted(),
             plugins: [],
-            sourceURL: file.url
+            sourceURL: file.url,
+            conversationID: metadata.sessionID
         )
     }
 
@@ -88,6 +103,7 @@ private struct ClaudeSessionMetadata {
     var detail: String?
     var project: String?
     var slug: String?
+    var sessionID: String?
     var model: String?
     var tokens = 0
     var isSidechain = false
@@ -95,8 +111,11 @@ private struct ClaudeSessionMetadata {
     var attentionReason: String?
     var mcpServers: Set<String> = []
     var skills: Set<String> = []
+    /// Tool calls with no matching tool_result yet, newest last.
+    var openToolCalls: [(id: String, name: String)] = []
 
     mutating func consume(_ event: [String: Any]) {
+        if sessionID == nil { sessionID = nonemptyString(event["sessionId"]) ?? nonemptyString(event["session_id"]) }
         if event["isSidechain"] as? Bool == true { isSidechain = true }
         if let cwd = nonemptyString(event["cwd"]) { project = projectName(from: cwd) }
         if slug == nil { slug = nonemptyString(event["slug"]) }
@@ -120,9 +139,15 @@ private struct ClaudeSessionMetadata {
             detail = text
         }
 
+        // A tool_result closes the call it answers.
+        for id in toolResultIDs(in: content) {
+            openToolCalls.removeAll { $0.id == id }
+        }
+
         let toolUses = toolUseBlocks(in: content)
         for tool in toolUses {
             guard let name = nonemptyString(tool["name"]) else { continue }
+            if let id = nonemptyString(tool["id"]) { openToolCalls.append((id: id, name: name)) }
             if let server = mcpServer(from: name) { mcpServers.insert(server) }
             if normalized(name) == "skill",
                let input = tool["input"] as? [String: Any],
@@ -177,6 +202,15 @@ private struct ClaudeSessionMetadata {
             if let result = identifier(candidate) { return result }
         }
         return nil
+    }
+
+    private func toolResultIDs(in content: Any?) -> [String] {
+        guard let blocks = content as? [Any] else { return [] }
+        return blocks.compactMap { block in
+            guard let object = block as? [String: Any],
+                  normalized(object["type"] as? String) == "tool_result" else { return nil }
+            return nonemptyString(object["tool_use_id"])
+        }
     }
 
     private func isUserInputTool(_ tool: [String: Any]) -> Bool {

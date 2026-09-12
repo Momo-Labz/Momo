@@ -46,7 +46,8 @@ struct RuntimeBridgeView: View {
                     if VoiceInput.shared.isActive { VoiceInput.shared.stop() }
                     else {
                         VoiceInput.shared.prepare(action)
-                        openWindow(id: "voice")
+                        MomoSurface.shared.show(.voice, fromKeyboard: true)
+                        openWindow(id: "dashboard")
                         Task { await VoiceInput.shared.start() }
                     }
                 }
@@ -56,7 +57,9 @@ struct RuntimeBridgeView: View {
                     QuickAskContext.shared.select(preferences.presented(session))
                 }
                 NSApplication.shared.activate(ignoringOtherApps: true)
-                openWindow(id: "command-palette")
+                // A shortcut-driven pane change must not animate.
+                MomoSurface.shared.show(.quickAsk, fromKeyboard: notification.object == nil)
+                openWindow(id: "dashboard")
             }
     }
 

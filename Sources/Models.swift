@@ -143,6 +143,7 @@ struct AgentSession: Identifiable, Hashable {
     let skills: [String]
     let plugins: [String]
     let sourceURL: URL?
+    let conversationID: String?
     var stoppedAfterUsageGrowth = false
     let recordedQuotaWindows: [RecordedQuotaWindow]
     let recordedSource: String?
@@ -165,6 +166,7 @@ struct AgentSession: Identifiable, Hashable {
         skills: [String] = [],
         plugins: [String] = [],
         sourceURL: URL? = nil,
+        conversationID: String? = nil,
         recordedQuotaWindows: [RecordedQuotaWindow] = [],
         recordedSource: String? = nil
     ) {
@@ -185,6 +187,7 @@ struct AgentSession: Identifiable, Hashable {
         self.skills = skills
         self.plugins = plugins
         self.sourceURL = sourceURL
+        self.conversationID = conversationID
         self.recordedQuotaWindows = recordedQuotaWindows
         self.recordedSource = recordedSource
     }
@@ -311,9 +314,13 @@ struct ProviderSnapshot: Identifiable {
     var recordedQuota: RecordedQuotaWindow? = nil
     var recordedQuotas: [RecordedQuotaWindow] = []
     var quotaLabels: [String] {
+        quotaLabels(now: .now)
+    }
+
+    func quotaLabels(now: Date) -> [String] {
         let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
         guard !windows.isEmpty else { return [quotaLabel, "LONG —"] }
-        let labels = windows.sorted { $0.minutes < $1.minutes }.prefix(2).map { $0.label(now: .now) }
+        let labels = windows.sorted { $0.minutes < $1.minutes }.prefix(2).map { $0.label(now: now) }
         return labels.count == 1 ? labels + ["LONG —"] : labels
     }
 
@@ -349,6 +356,10 @@ struct ProviderSnapshot: Identifiable {
 
     var id: AIProvider { provider }
     var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
+    /// A question or permission prompt is on screen somewhere.
+    var waitingCount: Int { sessions.filter { $0.attention == .needsInput }.count }
+    /// Something actually failed.
+    var failedCount: Int { sessions.filter { $0.attention == .failed }.count }
     var usageText: String {
         guard isInstalled else { return "Not installed" }
         guard localTokensToday > 0 else { return activeCount > 0 ? "\(activeCount) live" : "Idle" }

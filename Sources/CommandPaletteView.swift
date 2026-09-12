@@ -8,6 +8,7 @@ final class QuickAskContext: ObservableObject {
     @Published private(set) var session: AgentSession?
     @Published var activationLabel: String?
     @Published var provider: AIProvider = .codex
+    @Published var targetProvider: AIProvider = .codex
     @Published private var drafts: [String: String] = [:]
 
     private var draftKey: String { session.map { "chat:\($0.id)" } ?? "new:\(provider.rawValue)" }
@@ -19,12 +20,20 @@ final class QuickAskContext: ObservableObject {
     func select(_ session: AgentSession) {
         self.session = session
         provider = session.provider
+        targetProvider = session.provider
     }
 
     func newChat() { session = nil }
 }
 
 struct CommandPaletteView: View {
+    /// Rendered inside the MOMO window rather than a window of its own.
+    var embedded = false
+
+    /// Closing a pane returns to the chat list; closing a window dismisses it.
+    private func leave() {
+        if embedded { MomoSurface.shared.show(.sessions) } else { dismiss() }
+    }
     @ObservedObject var context = QuickAskContext.shared
     @FocusState private var editorFocused: Bool
     @Environment(\.dismiss) private var dismiss
@@ -73,6 +82,9 @@ struct CommandPaletteView: View {
                     }.barBoyButton()
                 }.font(.caption)
                 Text("Auto-resume: \(autoResume.state(for: session))").font(.caption).foregroundStyle(.secondary)
+                Picker("Continue with", selection: $context.targetProvider) {
+                    ForEach(AIProvider.allCases) { provider in Text(provider.name).tag(provider) }
+                }.pickerStyle(.menu)
             }
 
             TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
@@ -95,21 +107,22 @@ struct CommandPaletteView: View {
                 if context.session != nil {
                     Button("DETAILS") { showDetails = true }.barBoyButton()
                 }
-                if let session = context.session, session.provider == .codex, preferences.isEnabled(.codex) {
-                    Button("OPEN CODEX TASK") { openCodexTask(session) }.barBoyButton()
+                if let session = context.session {
+                    Button(continueLabel(for: session)) { continueConversation(session) }.barBoyButton()
                 }
                 if let source = context.session?.sourceURL, context.session?.provider != .codex {
                     Button("OPEN SESSION FILE") { NSWorkspace.shared.open(source) }.barBoyButton()
                 }
                 Spacer()
-                Button("CLOSE") { dismiss() }.barBoyButton()
+                Button("CLOSE") { leave() }.barBoyButton()
                 Button(context.session == nil || context.provider == .codex ? "COPY + OPEN" : "COPY REPLY") { routePrompt() }
                     .barBoyButton()
                     .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(16)
-        .frame(width: 520)
+        .frame(maxWidth: embedded ? .infinity : 520)
+        .frame(width: embedded ? nil : 520)
         .background(BarBoyStyle.panel)
         .sheet(isPresented: $editingLabel) {
             VStack(alignment: .leading, spacing: 14) {
@@ -133,7 +146,10 @@ struct CommandPaletteView: View {
         .sheet(isPresented: $showDetails) {
             if let session = context.session { SessionInspectorView(session: session) }
         }
-        .onAppear { editorFocused = true }
+        .onAppear {
+            editorFocused = true
+            if context.session?.attention.isUrgent == true { showDetails = true }
+        }
         .task(id: context.activationLabel) {
             guard context.activationLabel != nil else { return }
             try? await Task.sleep(for: .seconds(1.5))
@@ -155,13 +171,44 @@ struct CommandPaletteView: View {
     private func routePrompt() {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(context.draft, forType: .string)
-        if let session = context.session, session.provider == .codex {
-            openCodexTask(session)
+        if let session = context.session {
+            continueConversation(session)
         } else if context.session != nil {
             routingMessage = "Reply copied. Exact chat opening is not yet recorded for this session."
         } else {
             if let url = context.provider.conversationURL { NSWorkspace.shared.open(url) }
-            dismiss()
+            leave()
+        }
+    }
+
+    private func continueLabel(for session: AgentSession) -> String {
+        if context.targetProvider == .codex { return "OPEN CODEX TASK" }
+        if context.targetProvider == .claude { return "RESUME CLAUDE" }
+        return "COPY + OPEN \(context.targetProvider.name.uppercased())"
+    }
+
+    private func continueConversation(_ session: AgentSession) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(context.draft, forType: .string)
+        switch context.targetProvider {
+        case .codex:
+            openCodexTask(session)
+        case .claude:
+            guard let id = session.conversationID, UUID(uuidString: id) != nil else {
+                routingMessage = "Claude session ID was not recorded; reply copied."
+                return
+            }
+            let command = "claude --resume \(id)"
+            NSPasteboard.general.setString(command, forType: .string)
+            if let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") {
+                NSWorkspace.shared.open(terminal)
+                routingMessage = "Claude resume command copied. Paste it in Terminal, then paste your reply."
+            } else {
+                routingMessage = "Claude resume command copied: \(command)"
+            }
+        default:
+            if let url = context.targetProvider.conversationURL { NSWorkspace.shared.open(url) }
+            routingMessage = "Reply copied. This provider’s exact chat continuation is not recorded."
         }
     }
 }

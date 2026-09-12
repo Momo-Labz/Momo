@@ -35,6 +35,7 @@
 		854A48BAD75E91A6E9AE7AEB /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */; };
 		8D8CE207E25B42D4B67C7365 /* CursorSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */; };
 		966A728AF138807269935D7E /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */; };
+		AA2E8342A7F784656E2CB139 /* MomoSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5874E9B2BAD42C1998849812 /* MomoSurface.swift */; };
 		AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */; };
 		B0AACF60083AC3E5004B6BB3 /* gemini-public-conversation.json in Resources */ = {isa = PBXBuildFile; fileRef = BCAC7F7450275946880E2540 /* gemini-public-conversation.json */; };
 		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
@@ -81,6 +82,7 @@
 		53603012CFC4861E36CD1B24 /* CapabilityInventory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapabilityInventory.swift; sourceTree = "<group>"; };
 		5375940CB8F7866FFBA3446F /* claude-session.jsonl */ = {isa = PBXFileReference; path = "claude-session.jsonl"; sourceTree = "<group>"; };
 		565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */ = {isa = PBXFileReference; path = "sanitized-session.jsonl"; sourceTree = "<group>"; };
+		5874E9B2BAD42C1998849812 /* MomoSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomoSurface.swift; sourceTree = "<group>"; };
 		5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyApp.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 				9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */,
 				6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */,
 				914544FD481DF77821FAFD11 /* Models.swift */,
+				5874E9B2BAD42C1998849812 /* MomoSurface.swift */,
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
 				E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */,
 				1CB2244A22CE29B93DD607E1 /* SettingsView.swift */,
@@ -552,6 +555,7 @@
 				3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */,
 				F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */,
 				64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */,
+				AA2E8342A7F784656E2CB139 /* MomoSurface.swift in Sources */,
 				AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */,
 				5F0F2D999AA09D95B2C98B2B /* ProviderSessionAdapter.swift in Sources */,
 				17307F56295C41FC490603CC /* RelayContract.swift in Sources */,

@@ -125,6 +125,55 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(service.state(for: claude, now: now), "Manual · resets in 4H")
     }
 
+    func testMenuBarSeparatesAWaitingQuestionFromAFailure() {
+        func snapshot(_ attention: AgentAttention) -> ProviderSnapshot {
+            let session = AgentSession(id: "s", provider: .claude, role: .main, title: "T", detail: "", project: "P", updatedAt: .now, isRunning: false, processID: nil, tokens: nil, attention: attention)
+            return ProviderSnapshot(provider: .claude, sessions: [session], activeCount: 0, localTokensToday: 0, updatedAt: .now)
+        }
+        let waiting = snapshot(.needsInput)
+        XCTAssertEqual(waiting.waitingCount, 1)
+        XCTAssertEqual(waiting.failedCount, 0)
+        let failed = snapshot(.failed)
+        XCTAssertEqual(failed.waitingCount, 0)
+        XCTAssertEqual(failed.failedCount, 1)
+        // Both still count as urgent for the existing return queue.
+        XCTAssertEqual(waiting.needsAttentionCount, 1)
+        XCTAssertEqual(failed.needsAttentionCount, 1)
+    }
+
+    func testClaudeAdapterHedgesAnIdleOpenToolCall() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("momo-open-tool-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func session(answered: Bool, quietFor seconds: TimeInterval) throws -> AgentSession? {
+            var lines = [#"{"type":"user","cwd":"/Users/me/Demo","message":{"content":[{"type":"text","text":"go"}]}}"#,
+                         #"{"type":"assistant","message":{"model":"claude-opus-5","content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}"#]
+            if answered {
+                lines.append(#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1"}]}}"#)
+            }
+            let url = directory.appendingPathComponent("\(answered)-\(seconds).jsonl")
+            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            let modified = Date(timeIntervalSince1970: 1_789_056_000)
+            let file = ProviderSessionFile(url: url, modifiedAt: modified, index: 0)
+            let context = ProviderSessionContext(now: modified.addingTimeInterval(seconds), isProviderRunning: false)
+            return ClaudeSessionAdapter().session(from: file, context: context)
+        }
+
+        // An open call that has gone quiet reads as a prompt that may be on screen.
+        let idle = try XCTUnwrap(session(answered: false, quietFor: 120))
+        XCTAssertEqual(idle.attention, .needsInput)
+        XCTAssertTrue(try XCTUnwrap(idle.attentionReason).contains("may be waiting"), idle.attentionReason ?? "")
+
+        // Still within the grace period: the tool is probably just running.
+        let fresh = try XCTUnwrap(session(answered: false, quietFor: 2))
+        XCTAssertNotEqual(fresh.attention, .needsInput)
+
+        // Answered: nothing is waiting, however long ago it happened.
+        let answered = try XCTUnwrap(session(answered: true, quietFor: 600))
+        XCTAssertNotEqual(answered.attention, .needsInput)
+    }
+
     func testNotifierDetectsARecentlyReopenedWindowOnce() {
         let now = Date()
         func session(reset: TimeInterval) -> AgentSession {

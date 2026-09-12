@@ -12,6 +12,8 @@ enum BarBoyStyle {
     static let raised = Color.primary.opacity(0.085)
     static let hairline = Color.primary.opacity(0.22)
     static let coral = Color(red: 226 / 255, green: 92 / 255, blue: 72 / 255)
+    /// DESIGN.md `warning`. A question is waiting; nothing has gone wrong.
+    static let amber = Color(red: 211 / 255, green: 154 / 255, blue: 83 / 255)
     static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
     static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
     static let inverseInk = Color(nsColor: NSColor(name: nil) { appearance in

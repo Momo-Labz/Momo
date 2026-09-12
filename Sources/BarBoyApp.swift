@@ -60,14 +60,5 @@ struct BarBoyApp: App {
                 .environmentObject(attentionNotifier)
         }.defaultPosition(.center).windowResizability(.contentSize)
 
-        Window("MOMO Voice", id: "voice") { VoicePopup() }
-            .defaultPosition(.center)
-            .windowResizability(.contentSize)
-
-        Window("Quick Ask", id: "command-palette") {
-            CommandPaletteView().environmentObject(preferences)
-        }
-        .defaultPosition(.center)
-        .windowResizability(.contentSize)
     }
 }

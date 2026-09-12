@@ -10,6 +10,7 @@ struct DashboardView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var surface = MomoSurface.shared
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
@@ -67,7 +68,52 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            ScrollView {
+            paneBar
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+            switch surface.pane {
+            case .quickAsk: CommandPaletteView(embedded: true).environmentObject(preferences)
+            case .voice: VoicePopup(embedded: true)
+            case .sessions: sessionsPane
+            }
+            HStack {
+                Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                Spacer()
+                Button("QUICK ASK") { surface.show(.quickAsk) }.barBoyButton()
+            }.padding(12)
+        }
+        .frame(width: 430)
+        .frame(minHeight: 500)
+        .background(BarBoyStyle.panel)
+        .animation(paneAnimation, value: surface.pane)
+        .task { if refreshOnAppear { monitor.refresh() } }
+    }
+
+    /// Emil's frequency gate: a pane reached by keyboard shortcut must not animate.
+    private var paneAnimation: Animation? {
+        reduceMotion || surface.lastChangeWasKeyboard ? nil : BarBoyStyle.pageAnimation
+    }
+
+    private var paneBar: some View {
+        HStack(spacing: 0) {
+            ForEach(MomoPane.allCases) { item in
+                Button { surface.show(item) } label: {
+                    Label(item.title, systemImage: item.symbol)
+                        .font(BarBoyStyle.microLabel)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 7)
+                        .background(surface.pane == item ? Color.primary : Color.clear)
+                        .foregroundStyle(surface.pane == item ? BarBoyStyle.inverseInk : Color.primary)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(surface.pane == item ? [.isSelected] : [])
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    private var sessionsPane: some View {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         Text("SESSIONS").font(BarBoyStyle.sectionLabel)
@@ -102,16 +148,6 @@ struct DashboardView: View {
                     }
                 }.padding(12)
             }
-            HStack {
-                Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                Spacer()
-                Button("QUICK ASK") { openNext() }.barBoyButton()
-            }.padding(12)
-        }
-        .frame(width: 430)
-        .frame(minHeight: 500)
-        .background(BarBoyStyle.panel)
-        .task { if refreshOnAppear { monitor.refresh() } }
     }
 
     private var header: some View {
@@ -525,7 +561,13 @@ struct CompactDashboardView: View {
                         .frame(maxWidth: .infinity, minHeight: 72)
                 }
                 ForEach(snapshots) { snapshot in
-                    CompactProviderCell(snapshot: snapshot)
+                    Button { openProvider(snapshot) } label: {
+                        CompactProviderCell(snapshot: snapshot)
+                    }
+                    .buttonStyle(.plain)
+                    .help(snapshot.needsAttentionCount > 0
+                        ? "Open the issue in \(snapshot.provider.name) and inspect the exact chat"
+                        : "Open \(snapshot.provider.name) sessions")
                 }
             }
             .padding(12)
@@ -539,6 +581,17 @@ struct CompactDashboardView: View {
         let compactWindow = NSApplication.shared.keyWindow
         openWindow(id: "dashboard")
         DispatchQueue.main.async { compactWindow?.orderOut(nil) }
+    }
+
+    private func openProvider(_ snapshot: ProviderSnapshot) {
+        let session = snapshot.sessions.first(where: { $0.attention.isUrgent })
+            ?? snapshot.sessions.first
+        guard let session else {
+            openWindow(id: "dashboard")
+            return
+        }
+        NotificationCenter.default.post(name: .showCommandPalette, object: session)
+        MomoFeedback.perform()
     }
 }
 
@@ -574,10 +627,12 @@ private struct CompactProviderCell: View {
             Text(runningLine).font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                 .help(runningHelp)
-            ForEach(Array(snapshot.quotaLabels.enumerated()), id: \.offset) { _, label in
-                Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary).lineLimit(1)
-                    .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                ForEach(Array(snapshot.quotaLabels(now: context.date).enumerated()), id: \.offset) { _, label in
+                    Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                        .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
+                }
             }
         }
         .frame(maxWidth: .infinity, minHeight: 104)
@@ -809,6 +864,7 @@ private struct SessionRow: View {
 
 struct SessionInspectorView: View {
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var autoResume = AutoResumeService.shared
     let session: AgentSession
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -829,16 +885,34 @@ struct SessionInspectorView: View {
                     if session.attention.isUrgent {
                         InspectorBlock(title: "RETURN", values: [session.attentionReason ?? "This agent needs your response"], alert: true)
                     }
+                    InspectorBlock(title: "CHAT / AUTO-RESUME", values: [
+                        "Chat: \(session.title)",
+                        "Folder: \(session.project)",
+                        "Auto-resume: \(autoResume.state(for: session))"
+                    ], alert: session.attention.isUrgent)
+                    if let source = session.sourceURL {
+                        InspectorBlock(title: "SOURCE", values: [source.path])
+                    }
                     if !session.recordedQuotaWindows.isEmpty {
                         InspectorBlock(title: "RECORDED USAGE", values: session.recordedQuotaWindows.map {
-                            "\($0.label(now: .now)) · observed \($0.observedAt.formatted())"
+                            "\($0.label(now: .now))\($0.resetsAt.map { " · resets \($0.formatted(date: .omitted, time: .shortened))" } ?? "") · observed \($0.observedAt.formatted())"
                         })
+                    }
+                    if session.stoppedAfterUsageGrowth {
+                        InspectorBlock(title: "STOPPED AFTER USAGE", values: [
+                            "This chat was working, then stopped after token usage increased.",
+                            "Open the source chat to inspect the provider’s exact error."
+                        ], alert: true)
                     }
                     InspectorBlock(title: "MODEL", values: [session.model ?? "Not exposed by this session"])
                     InspectorBlock(title: "MCP SERVERS", values: session.mcpServers.isEmpty ? ["None recorded"] : session.mcpServers)
                     InspectorBlock(title: "SKILLS", values: session.skills.isEmpty ? ["None recorded"] : session.skills)
                     InspectorBlock(title: "PLUGINS", values: session.plugins.isEmpty ? ["None recorded"] : session.plugins)
                     InspectorBlock(title: "LATEST", values: [session.detail])
+                    Button("CONTINUE THIS CHAT") {
+                        dismiss()
+                        NotificationCenter.default.post(name: .showCommandPalette, object: session)
+                    }.barBoyButton()
                 }
                 .padding(16)
             }
