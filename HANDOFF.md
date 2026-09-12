@@ -179,3 +179,5 @@ Static validation after this change: `swiftc -parse Sources/*.swift Sources/Adap
 - A recorded Grok chat can now copy `grok --resume <session-id>` for manual continuation. MOMO does not claim unattended Grok continuation or send a message automatically.
 
 Verification after adding the adapter: the focused Grok fixture test and the full macOS suite passed (`54 tests`, `2 skipped`, `0 failures`); the app target also built successfully.
+
+Settings now names each provider's local session roots in its authorization dialog and states that one provider permission covers every account stored in those folders. The latest source commit is `bfcf595`. A subsequent isolated build passed; a later full test invocation was unable to start the test runner because CoreSimulator/testmanagerd was unavailable in the sandbox, so the last authoritative full-suite result remains the passing 54-test run above.
