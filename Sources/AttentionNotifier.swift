@@ -2,9 +2,25 @@ import Foundation
 import UserNotifications
 
 @MainActor
-final class AttentionNotifier: ObservableObject {
+final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var authorizationLabel = "Off"
     private var notified = Set<String>()
+    private var currentSessions: [String: AgentSession] = [:]
+
+    override init() {
+        super.init()
+        UNUserNotificationCenter.current().delegate = self
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
+        let identifier = response.notification.request.identifier
+        guard response.actionIdentifier == UNNotificationDefaultActionIdentifier else { return }
+        await MainActor.run {
+            guard let session = self.currentSessions[identifier] else { return }
+            NotificationCenter.default.post(name: .showCommandPalette, object: session)
+        }
+    }
+
 
     func requestAuthorization() async -> Bool {
         let center = UNUserNotificationCenter.current()
@@ -15,6 +31,8 @@ final class AttentionNotifier: ObservableObject {
 
     func update(snapshots: [ProviderSnapshot], enabled: Bool) {
         guard enabled else {
+            currentSessions.removeAll()
+            notified.removeAll()
             authorizationLabel = "Off"
             return
         }
@@ -22,6 +40,7 @@ final class AttentionNotifier: ObservableObject {
         let urgent = snapshots.flatMap(\.sessions).filter {
             $0.attention.isUrgent && ($0.isRunning || Date().timeIntervalSince($0.updatedAt) < 300)
         }
+        currentSessions = Dictionary(urgent.map { ("\($0.id)|\($0.attention.rawValue)", $0) }, uniquingKeysWith: { _, latest in latest })
         let currentIDs = Set(urgent.map { "\($0.id)|\($0.attention.rawValue)" })
         notified.formIntersection(currentIDs)
         for session in urgent {

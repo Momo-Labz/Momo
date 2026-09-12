@@ -1,0 +1,45 @@
+{
+  "sessionId": "fixture-gemini-01",
+  "projectHash": "fixture-project",
+  "startTime": "2026-09-12T00:00:00Z",
+  "lastUpdated": "2026-09-12T00:01:00Z",
+  "kind": "main",
+  "messages": [
+    {
+      "id": "user-1",
+      "type": "user",
+      "timestamp": "2026-09-12T00:00:01Z",
+      "content": "mcp__not_evidence__call /skills/not-evidence/SKILL.md"
+    },
+    {
+      "id": "response-1",
+      "type": "gemini",
+      "timestamp": "2026-09-12T00:00:10Z",
+      "content": "Fixture response",
+      "model": "gemini-fixture",
+      "tokens": {
+        "total": 30,
+        "input": 20,
+        "output": 10,
+        "cached": 0
+      },
+      "toolCalls": [
+        {
+          "id": "tool-1",
+          "name": "local_tool",
+          "status": "success",
+          "timestamp": "2026-09-12T00:00:10Z",
+          "args": {
+            "model": "fake-model",
+            "plugins": [
+              "fake-plugin"
+            ],
+            "skills": [
+              "fake-skill"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

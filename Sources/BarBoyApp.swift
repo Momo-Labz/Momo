@@ -36,13 +36,24 @@ struct BarBoyApp: App {
                 .environmentObject(preferences)
                 .environmentObject(deskDisplay)
                 .environmentObject(attentionNotifier)
-                .frame(minWidth: 760, minHeight: 500)
+                .frame(width: 430)
+                .frame(minHeight: 500)
         }
         .defaultPosition(.center)
-        .defaultSize(width: 900, height: 560)
+        .defaultSize(width: 430, height: 640)
+        .windowResizability(.contentSize)
+
+        Window("Connect Codex", id: "onboarding") {
+            CodexOnboardingView()
+                .environmentObject(preferences)
+                .environmentObject(monitor)
+                .environmentObject(attentionNotifier)
+        }
+        .defaultPosition(.center)
+        .windowResizability(.contentSize)
 
         Window("Quick Ask", id: "command-palette") {
-            CommandPaletteView()
+            CommandPaletteView().environmentObject(preferences)
         }
         .defaultPosition(.center)
         .windowResizability(.contentSize)

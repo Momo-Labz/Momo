@@ -8,6 +8,10 @@ struct SettingsView: View {
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
+    @ObservedObject private var autoResume = AutoResumeService.shared
+    @Environment(\.openWindow) private var openWindow
+    @State private var pendingProvider: AIProvider?
+
     var body: some View {
         TabView {
             providers
@@ -24,6 +28,19 @@ struct SettingsView: View {
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
         .frame(width: 590, height: 480)
+        .alert("Authorize local access", isPresented: Binding(
+            get: { pendingProvider != nil },
+            set: { if !$0 { pendingProvider = nil } }
+        ), presenting: pendingProvider) { provider in
+            Button("Authorize \(provider.name)") {
+                preferences.setEnabled(true, for: provider)
+                monitor.setAuthorizedProviders(preferences.enabledProviders)
+                pendingProvider = nil
+            }
+            Button("Cancel", role: .cancel) { pendingProvider = nil }
+        } message: { provider in
+            Text("Allow MOMO to read \(provider.name) session metadata in this Mac user’s local folders and detect its processes? This does not connect a remote account. Local files may include multiple accounts; authorize only if you permit access to all accounts in those folders. You can revoke access here.")
+        }
     }
 
     private var accountAccess: some View {
@@ -68,6 +85,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local providers").font(.title2.bold())
+                Button("Set up Codex desktop access") { openWindow(id: "onboarding") }
                 Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
                     .foregroundStyle(.secondary)
             }
@@ -90,7 +108,7 @@ struct SettingsView: View {
             ProviderMark(provider: provider, size: 34, active: snapshot.activeCount > 0)
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.name).font(.headline)
-                Text(snapshot.activeCount > 0 ? "\(snapshot.activeCount) local process\(snapshot.activeCount == 1 ? "" : "es") detected" : "No active local process")
+                Text(!preferences.isEnabled(provider) ? "Authorization required" : snapshot.activeCount > 0 ? "\(snapshot.activeCount) local process\(snapshot.activeCount == 1 ? "" : "es") detected" : "No active local process")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
@@ -100,7 +118,13 @@ struct SettingsView: View {
             }
             Toggle("", isOn: Binding(
                 get: { preferences.isEnabled(provider) },
-                set: { preferences.setEnabled($0, for: provider); monitor.refresh() }
+                set: { enabled in
+                    if enabled { pendingProvider = provider }
+                    else {
+                        preferences.setEnabled(false, for: provider)
+                        monitor.setAuthorizedProviders(preferences.enabledProviders)
+                    }
+                }
             ))
             .labelsHidden()
         }
@@ -124,6 +148,10 @@ struct SettingsView: View {
                 }
             ))
             LabeledContent("Alert permission", value: attentionNotifier.authorizationLabel)
+            Toggle("Auto-resume after usage reset", isOn: $preferences.autoResumeAfterReset)
+            Text("Automatically continue authorized local Codex CLI chats after a recorded usage reset. No confirmation per chat. One attempt per reset; manual stops and other errors are excluded. Desktop chats and other providers are not supported yet.")
+                .font(.caption).foregroundStyle(.secondary)
+            Text(autoResume.status).font(.caption).foregroundStyle(.secondary)
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
@@ -309,5 +337,61 @@ private struct QRCodeView: View {
         let context = CIContext(options: [.useSoftwareRenderer: false])
         guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
         return NSImage(cgImage: cgImage, size: NSSize(width: scaled.extent.width, height: scaled.extent.height))
+    }
+}
+
+
+/// Connection setup deliberately separates observation from sending a turn.
+struct CodexOnboardingView: View {
+    @EnvironmentObject private var preferences: PreferencesStore
+    @EnvironmentObject private var monitor: ActivityMonitor
+    @EnvironmentObject private var notifier: AttentionNotifier
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage("codexOnboardingSeen.v1") private var seen = false
+    @State private var confirmAccess = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(spacing: 12) {
+                AnimatedMomoMark(size: 44, motion: .wave)
+                VStack(alignment: .leading) {
+                    Text("MOMO / CONNECT CODEX").font(BarBoyStyle.sectionLabel)
+                    Text("Keep your task within reach.").foregroundStyle(.secondary)
+                }
+            }
+            Text(CodexDesktopConnection.applicationURL == nil ? "1. Install Codex desktop to open tasks." : "1. Codex desktop detected.").font(.headline)
+            Text("2. Authorize local access").font(.headline)
+            Text("MOMO reads task metadata, recorded usage and errors from ~/.codex/sessions. These folders can contain more than one account. This permission covers every account stored there; it does not sign you in or verify account identity.")
+                .font(.callout).foregroundStyle(.secondary)
+            Button(preferences.isEnabled(.codex) ? "Revoke Codex access" : "Authorize Codex local access") {
+                if preferences.isEnabled(.codex) {
+                    preferences.setEnabled(false, for: .codex)
+                    monitor.setAuthorizedProviders(preferences.enabledProviders)
+                } else { confirmAccess = true }
+            }.barBoyButton()
+            Text("3. Open the exact task").font(.headline)
+            Text("Click a recorded task in MOMO, then Open Codex Task. Copy + Open carries your reply on the clipboard for you to paste. MOMO does not send it automatically.")
+                .font(.callout).foregroundStyle(.secondary)
+            Button(preferences.attentionAlertsEnabled ? "Notifications enabled" : "Enable task notifications") {
+                Task { preferences.attentionAlertsEnabled = await notifier.requestAuthorization() }
+            }.barBoyButton().disabled(preferences.attentionAlertsEnabled || !preferences.isEnabled(.codex))
+            Text("Desktop auto-resume: unavailable. The installed app exposes task links, but MOMO has no verified desktop turn-control connection. CLI auto-resume is a separate setting.")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Text("No password, browser cookies or Accessibility permission needed.").font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { seen = true; dismiss() }.barBoyButton()
+            }
+        }
+        .padding(24).frame(width: 500).background(BarBoyStyle.panel)
+        .alert("Allow local Codex access?", isPresented: $confirmAccess) {
+            Button("Authorize") {
+                preferences.setEnabled(true, for: .codex)
+                monitor.setAuthorizedProviders(preferences.enabledProviders)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Authorize MOMO to read session metadata for all Codex accounts saved in this Mac user's local session folders and detect Codex processes. Revoke anytime in Settings. This does not authorize automatic desktop messages.")
+        }
     }
 }

@@ -73,7 +73,7 @@ components:
 **Key characteristics:**
 
 - A short menu-bar mark opens a models-only strip before the full hub.
-- The expanded window separates Home, Agents, and Tools instead of stacking everything vertically.
+- The expanded window extends the same 430-point provider strip downward into a scrolling list grouped by provider (user revision, 2026-09-12). Session details expose capability provenance.
 - Menlo labels, one-pixel rules, square surfaces, and the Momo monitor character create the 8-bit identity.
 - Coral is used only for human-blocking returns and failures.
 - Provider marks are recognizable without competing with the Momo Labz brand.
@@ -126,7 +126,7 @@ Primary actions invert the entire rectangular surface. Provider cards use the pr
 - **Approach:** Minimal-functional, weighted toward Emil Kowalski's frequency rule and Jakub Krehel's production subtlety.
 - **Easing:** Enter uses a fast native-style deceleration; exit is opacity-only; state changes use a no-bounce timing curve.
 - **Duration:** Button press 80ms, Momo entrance 220ms, page transition 200ms.
-- **The one authored moment:** Momo rises four points and resolves from partial opacity once when the compact model popup opens. Reduce Motion makes it instant.
+- **Momo motion:** Native 13 × 14 pixel frames and holds from `../Branding/index.html`: LOOK plus two WALK cycles in the dashboard and compact strip; a 300ms-per-pose wave in Quick Ask. Frames switch without interpolation. Reduce Motion, inactive scenes, and static previews use the resting pose. Tasks cancel when the view disappears. This supersedes the original entrance-only treatment at the user’s request (2026-09-12).
 
 ## Decisions Log
 

@@ -1,73 +1,150 @@
 import AppKit
 import SwiftUI
 
+/// In-memory drafts never cross chat boundaries or persist prompt text to disk.
+@MainActor
+final class QuickAskContext: ObservableObject {
+    static let shared = QuickAskContext()
+    @Published private(set) var session: AgentSession?
+    @Published var provider: AIProvider = .codex
+    @Published private var drafts: [String: String] = [:]
+
+    private var draftKey: String { session.map { "chat:\($0.id)" } ?? "new:\(provider.rawValue)" }
+    var draft: String {
+        get { drafts[draftKey] ?? "" }
+        set { drafts[draftKey] = newValue }
+    }
+
+    func select(_ session: AgentSession) {
+        self.session = session
+        provider = session.provider
+    }
+
+    func newChat() { session = nil }
+}
+
 struct CommandPaletteView: View {
-    @State private var provider: AIProvider = .codex
-    @State private var prompt = ""
+    @ObservedObject var context = QuickAskContext.shared
+    @FocusState private var editorFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var preferences: PreferencesStore
+    @State private var routingMessage: String?
+    @State private var showDetails = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
-                PixelBarBoyMark(size: 32, tile: true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("MOMO LABZ / QUICK ASK")
-                        .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1)
-                    Text("Route a thought without losing your place")
-                        .font(.caption).foregroundStyle(.secondary)
+                AnimatedMomoMark(size: 32, motion: .wave)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(context.session == nil ? "MOMO LABZ / QUICK ASK" : "REPLY / \(context.provider.name.uppercased())")
+                        .font(BarBoyStyle.sectionLabel)
+                    Text(context.session?.title ?? "Type a thought or use macOS Dictation")
+                        .font(BarBoyStyle.bodySmall).lineLimit(2)
                 }
                 Spacer()
-                Text("⌃⌥SPACE").font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                Text("⌃⌥SPACE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
 
-            HStack(spacing: 0) {
-                ForEach(AIProvider.allCases) { item in
-                    Button {
-                        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) { provider = item }
-                    } label: {
-                        Text(item.name.uppercased())
-                            .font(.system(size: 9, weight: .black, design: .monospaced))
-                            .frame(maxWidth: .infinity).padding(.vertical, 8)
-                            .background(provider == item ? Color.primary : BarBoyStyle.surface)
-                            .foregroundStyle(provider == item ? Color(nsColor: .windowBackgroundColor) : Color.primary)
-                    }
-                    .buttonStyle(.plain)
-                    if item != AIProvider.allCases.last { Rectangle().fill(BarBoyStyle.hairline).frame(width: 1) }
+            if let session = context.session {
+                HStack {
+                    Text(session.attentionReason ?? session.detail)
+                        .font(BarBoyStyle.bodySmall).lineLimit(3)
+                        .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : Color.secondary)
+                    Spacer()
+                    Button("NEW CHAT") { context.newChat(); routingMessage = nil }.barBoyButton()
                 }
+            } else {
+                Picker("Provider", selection: $context.provider) {
+                    ForEach(AIProvider.allCases) { item in Text(item.name).tag(item) }
+                }.pickerStyle(.segmented)
             }
-            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
 
-            TextEditor(text: $prompt)
+            TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
                 .font(.system(size: 14, design: .monospaced))
                 .scrollContentBackground(.hidden)
+                .focused($editorFocused)
                 .padding(9)
                 .background(BarBoyStyle.surface)
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-                .frame(height: 108)
+                .frame(height: 90)
+                .accessibilityLabel(context.session.map { "Reply to \($0.title)" } ?? "New prompt")
+
+            Text(routingMessage ?? (context.session == nil
+                ? "Copies your text, then opens the provider."
+                : "Draft for this chat. Use your Mac’s Dictation shortcut to speak."))
+                .font(.caption).foregroundStyle(.secondary)
 
             HStack {
-                Text("V0.2 COPIES YOUR PROMPT, THEN OPENS THE PROVIDER")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced)).foregroundStyle(.secondary)
+                if context.session != nil {
+                    Button("DETAILS") { showDetails = true }.barBoyButton()
+                }
+                if let session = context.session, session.provider == .codex, preferences.isEnabled(.codex) {
+                    Button("OPEN CODEX TASK") { openCodexTask(session) }.barBoyButton()
+                }
+                if let source = context.session?.sourceURL, context.session?.provider != .codex {
+                    Button("OPEN SESSION FILE") { NSWorkspace.shared.open(source) }.barBoyButton()
+                }
                 Spacer()
-                Button("CANCEL") { dismiss() }.barBoyButton()
-                Button("COPY + OPEN \(provider.name.uppercased())") { routePrompt() }
-                    .barBoyButton().disabled(prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("CLOSE") { dismiss() }.barBoyButton()
+                Button(context.session == nil || context.provider == .codex ? "COPY + OPEN" : "COPY REPLY") { routePrompt() }
+                    .barBoyButton()
+                    .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(16)
-        .frame(width: 520, height: 280)
+        .frame(width: 520)
         .background(BarBoyStyle.panel)
+        .sheet(isPresented: $showDetails) {
+            if let session = context.session { SessionInspectorView(session: session) }
+        }
+        .onAppear { editorFocused = true }
+        .onChange(of: context.session?.id) { _, _ in editorFocused = true; routingMessage = nil }
+        .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { _ in editorFocused = true }
+    }
+
+    private func openCodexTask(_ session: AgentSession) {
+        guard preferences.isEnabled(.codex) else { routingMessage = "Authorize Codex in Settings first."; return }
+        guard let url = CodexDesktopConnection.taskURL(source: session.sourceURL),
+              CodexDesktopConnection.applicationURL != nil else {
+            routingMessage = "No recorded task ID or Codex desktop installation available."; return
+        }
+        routingMessage = NSWorkspace.shared.open(url) ? "Task link opened. Paste your copied reply in Codex." : "Codex could not open this task link."
     }
 
     private func routePrompt() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(prompt, forType: .string)
-        if provider == .cursor,
-           let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.todesktop.230313mzl4w4u92") {
-            NSWorkspace.shared.openApplication(at: appURL, configuration: .init())
-        } else if let url = provider.conversationURL {
-            NSWorkspace.shared.open(url)
+        NSPasteboard.general.setString(context.draft, forType: .string)
+        if let session = context.session, session.provider == .codex {
+            openCodexTask(session)
+        } else if context.session != nil {
+            routingMessage = "Reply copied. Exact chat opening is not yet recorded for this session."
+        } else {
+            if let url = context.provider.conversationURL { NSWorkspace.shared.open(url) }
+            dismiss()
         }
-        dismiss()
+    }
+}
+
+
+enum CodexDesktopConnection {
+    static var applicationURL: URL? {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex")
+    }
+
+    static func taskURL(source: URL?) -> URL? {
+        guard let source, let handle = try? FileHandle(forReadingFrom: source) else { return nil }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 64 * 1024) else { return nil }
+        return taskURL(metadata: data)
+    }
+
+    static func taskURL(metadata: Data) -> URL? {
+        // Only the first, complete session_meta record establishes identity.
+        guard let line = metadata.split(separator: 10).first,
+              let record = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any],
+              record["type"] as? String == "session_meta",
+              let payload = record["payload"] as? [String: Any],
+              let id = payload["id"] as? String, UUID(uuidString: id) != nil else { return nil }
+        return URL(string: "codex://threads/\(id)")
     }
 }

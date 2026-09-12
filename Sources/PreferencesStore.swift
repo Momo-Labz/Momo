@@ -21,6 +21,9 @@ final class PreferencesStore: ObservableObject {
     @Published var attentionAlertsEnabled: Bool {
         didSet { defaults.set(attentionAlertsEnabled, forKey: Keys.attentionAlertsEnabled) }
     }
+    @Published var autoResumeAfterReset: Bool {
+        didSet { defaults.set(autoResumeAfterReset, forKey: "autoResumeAfterReset") }
+    }
     @Published private(set) var enabledProviders: Set<AIProvider>
 
     private let defaults: UserDefaults
@@ -29,7 +32,7 @@ final class PreferencesStore: ObservableObject {
         static let compactMenuBar = "compactMenuBar"
         static let hideIdleProviders = "hideIdleProviders"
         static let launchAtLogin = "launchAtLogin"
-        static let enabledProviders = "enabledProviders"
+        static let enabledProviders = "authorizedLocalProviders.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
         static let attentionAlertsEnabled = "attentionAlertsEnabled"
@@ -37,6 +40,7 @@ final class PreferencesStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        autoResumeAfterReset = defaults.bool(forKey: "autoResumeAfterReset")
         compactMenuBar = defaults.object(forKey: Keys.compactMenuBar) as? Bool ?? false
         hideIdleProviders = defaults.object(forKey: Keys.hideIdleProviders) as? Bool ?? false
         launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
@@ -44,7 +48,7 @@ final class PreferencesStore: ObservableObject {
         showDeskDisplayTitles = defaults.object(forKey: Keys.showDeskDisplayTitles) as? Bool ?? true
         attentionAlertsEnabled = defaults.object(forKey: Keys.attentionAlertsEnabled) as? Bool ?? false
         let saved = defaults.stringArray(forKey: Keys.enabledProviders)
-        enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? Set(AIProvider.allCases)
+        enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
     }
 
     func isEnabled(_ provider: AIProvider) -> Bool { enabledProviders.contains(provider) }

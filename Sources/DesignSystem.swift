@@ -133,20 +133,89 @@ private struct CursorGlyphShape: Shape {
     }
 }
 
+// Native port of Branding/index.html: fig(), LOOK, WALK and ANIMS.
+// Coordinates and holds match the index; animation never implies session status.
+enum MomoMotion {
+    case loop, wave, blink
+
+    var frames: [MomoPixelFrame] {
+        switch self {
+        case .loop:
+            let walk = [
+                MomoPixelFrame(look: 1, arms: .up, legs: .swingR, milliseconds: 220),
+                MomoPixelFrame(look: 1, legs: .pass, milliseconds: 180),
+                MomoPixelFrame(look: 1, arms: .down, legs: .swingL, milliseconds: 220),
+                MomoPixelFrame(look: 1, legs: .pass, milliseconds: 180)
+            ]
+            return [
+                MomoPixelFrame(milliseconds: 1100), MomoPixelFrame(look: 1, milliseconds: 220),
+                MomoPixelFrame(look: 2, milliseconds: 1000), MomoPixelFrame(look: 1, milliseconds: 220),
+                MomoPixelFrame(milliseconds: 700)
+            ] + walk + walk + [MomoPixelFrame(milliseconds: 600)]
+        case .wave:
+            return [MomoPixelFrame(look: 1, arms: .up, milliseconds: 300),
+                    MomoPixelFrame(look: 1, arms: .down, milliseconds: 300)]
+        case .blink:
+            return [MomoPixelFrame(milliseconds: 2200), MomoPixelFrame(closed: true, milliseconds: 200)]
+        }
+    }
+}
+
+struct MomoPixelFrame {
+    enum Arms { case flat, up, down }
+    enum Legs { case stand, swingR, pass, swingL }
+    var look = 0
+    var closed = false
+    var arms: Arms = .flat
+    var legs: Legs = .stand
+    var milliseconds = 100
+
+    var rows: [[Bool]] {
+        func line(_ pixels: [Int]) -> [Bool] { (0..<13).map { pixels.contains($0) } }
+        let edge = [1, 11]
+        var rows = [line(Array(1...11)), line(edge),
+                    line(closed ? edge : edge + [4 + look, 6 + look]), line(edge),
+                    line(edge + [3 + look, 7 + look]), line(edge + Array((3 + look)...(7 + look))),
+                    line(edge), line(Array(1...11)), line([6])]
+        switch arms {
+        case .flat: rows += [line(Array(1...11)), line([6])]
+        case .up: rows += [line(Array(1...6)), line(Array(6...11))]
+        case .down: rows += [line(Array(6...11)), line(Array(1...6))]
+        }
+        rows += [line([5, 6, 7]), line([4, 5, 7, 8])]
+        switch legs {
+        case .stand: rows += [line([3, 4, 8, 9])]
+        case .swingR: rows += [line([4, 5, 8, 9])]
+        case .pass: rows += [line([4, 5, 7, 8])]
+        case .swingL: rows += [line([3, 4, 7, 8])]
+        }
+        return rows
+    }
+}
+
 struct AnimatedMomoMark: View {
     let size: CGFloat
     var tile = true
     var animated = true
+    var motion: MomoMotion = .loop
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var appeared = false
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var frame = MomoPixelFrame()
+
+    private var shouldAnimate: Bool { animated && !reduceMotion && scenePhase == .active }
 
     var body: some View {
-        PixelBarBoyMark(size: size, tile: tile)
-            .opacity(appeared || reduceMotion || !animated ? 1 : 0.35)
-            .offset(y: appeared || reduceMotion || !animated ? 0 : 4)
-            .onAppear {
-                guard animated && !reduceMotion else { appeared = true; return }
-                withAnimation(.timingCurve(0.32, 0.72, 0, 1, duration: 0.22)) { appeared = true }
+        PixelBarBoyMark(size: size, tile: tile, frame: shouldAnimate ? frame : MomoPixelFrame())
+            .task(id: shouldAnimate) {
+                guard shouldAnimate else { return }
+                while !Task.isCancelled {
+                    for next in motion.frames {
+                        guard !Task.isCancelled else { return }
+                        frame = next
+                        do { try await Task.sleep(for: .milliseconds(next.milliseconds)) }
+                        catch { return }
+                    }
+                }
             }
     }
 }
@@ -154,43 +223,28 @@ struct AnimatedMomoMark: View {
 struct PixelBarBoyMark: View {
     var size: CGFloat = 34
     var tile = false
+    var frame = MomoPixelFrame()
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         ZStack {
-            if tile {
-                Rectangle()
-                    .fill(Color.primary)
+            if tile { Rectangle().fill(Color.primary) }
+            Canvas { context, bounds in
+                let inset = tile ? size * 0.12 : 0
+                let unit = max(1, ((size - inset * 2) * displayScale / 14).rounded()) / displayScale
+                let x = floor((bounds.width - unit * 13) * displayScale / 2) / displayScale
+                let y = floor((bounds.height - unit * 14) * displayScale / 2) / displayScale
+                var pixels = Path()
+                for (row, cells) in frame.rows.enumerated() {
+                    for (column, filled) in cells.enumerated() where filled {
+                        pixels.addRect(CGRect(x: x + CGFloat(column) * unit, y: y + CGFloat(row) * unit, width: unit, height: unit))
+                    }
+                }
+                context.fill(pixels, with: .color(tile ? Color(nsColor: .windowBackgroundColor) : .primary))
             }
-            PixelBarBoyShape()
-                .fill(tile ? Color(nsColor: .windowBackgroundColor) : Color.primary)
-                .padding(tile ? size * 0.12 : 0)
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
-    }
-}
-
-private struct PixelBarBoyShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        let scale = min(rect.width, rect.height) / 16
-        let origin = CGPoint(x: rect.midX - 8 * scale, y: rect.midY - 8 * scale)
-        var path = Path()
-        func block(_ x: Int, _ y: Int, _ width: Int, _ height: Int) {
-            path.addRect(CGRect(x: origin.x + CGFloat(x) * scale,
-                                y: origin.y + CGFloat(y) * scale,
-                                width: CGFloat(width) * scale,
-                                height: CGFloat(height) * scale))
-        }
-        // Monitor frame and stand, expressed on a crisp 16 × 16 pixel grid.
-        block(2, 1, 12, 1); block(2, 2, 1, 7); block(13, 2, 1, 7)
-        block(2, 9, 12, 1); block(2, 11, 12, 1); block(7, 10, 2, 3)
-        // Face.
-        block(5, 3, 1, 1); block(8, 3, 1, 1)
-        block(4, 5, 1, 2); block(5, 6, 5, 1); block(10, 5, 1, 2)
-        // Pixel person beneath the screen.
-        block(6, 12, 4, 1); block(5, 13, 3, 1); block(8, 13, 3, 1)
-        block(4, 14, 3, 1); block(10, 14, 3, 1); block(3, 15, 3, 1); block(11, 15, 3, 1)
-        return path
     }
 }
 

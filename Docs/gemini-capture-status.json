@@ -1,0 +1,11 @@
+{
+  "checkedAt": "2026-09-12T13:27:23.962635+00:00",
+  "provider": "gemini",
+  "authorization": "User authorized read-only local Gemini session fixture capture",
+  "sessionRoot": ".gemini/tmp",
+  "rootExists": false,
+  "localFixturesCaptured": 0,
+  "status": "No session folder at the authorized default location",
+  "adapterValidation": "Public-schema synthetic fixtures only; local schema validation remains pending",
+  "sensitiveContentCollected": false
+}

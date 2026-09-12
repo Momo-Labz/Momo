@@ -46,21 +46,54 @@ struct DashboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            page
-            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            footer
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack {
+                        Text("SESSIONS").font(BarBoyStyle.sectionLabel)
+                        Spacer()
+                        Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                            .barBoyIconButton().help("Refresh sessions")
+                        Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
+                            .barBoyIconButton().help("Provider authorization and settings")
+                    }
+                    ForEach(enabledSnapshots) { snapshot in
+                        VStack(alignment: .leading, spacing: 6) {
+                            SectionHeader(title: snapshot.provider.name.uppercased(), note: "\(snapshot.sessions.count) RECORDED")
+                            if snapshot.sessions.isEmpty {
+                                Text("No sessions recorded. Process activity alone cannot identify a chat.")
+                                    .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                            }
+                            ForEach(snapshot.sessions.sorted { $0.updatedAt > $1.updatedAt }) { session in
+                                Button { openReply(session) } label: { SessionRow(session: session) }
+                                    .buttonStyle(.plain)
+                                    .background(BarBoyStyle.surface)
+                                    .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                            }
+                        }
+                    }
+                    if enabledSnapshots.isEmpty {
+                        Text("Authorize a local provider above to see its sessions.")
+                            .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                    }
+                }.padding(12)
+            }
+            HStack {
+                Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                Spacer()
+                Button("QUICK ASK") { openNext() }.barBoyButton()
+            }.padding(12)
         }
-        .frame(minWidth: 760, minHeight: 500)
+        .frame(width: 430)
+        .frame(minHeight: 500)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
-        .sheet(item: $inspectedSession) { SessionInspectorView(session: $0) }
     }
 
     private var header: some View {
         HStack(spacing: 12) {
-            PixelBarBoyMark(size: 32, tile: true)
+            AnimatedMomoMark(size: 32)
             VStack(alignment: .leading, spacing: 1) {
                 Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
                 Text("BAR BOY").font(BarBoyStyle.display).tracking(0.9)
@@ -157,7 +190,7 @@ struct DashboardView: View {
                     .padding(11)
                 } else {
                     ForEach(Array(urgentSessions.prefix(2).enumerated()), id: \.element.id) { index, session in
-                        Button { inspectedSession = session } label: { SessionRow(session: session) }
+                        Button { openReply(session) } label: { SessionRow(session: session) }
                             .buttonStyle(.plain)
                         if index < min(urgentSessions.count, 2) - 1 {
                             Rectangle().fill(BarBoyStyle.coral.opacity(0.36)).frame(height: 1).padding(.leading, 45)
@@ -172,7 +205,7 @@ struct DashboardView: View {
 
     private var skillSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "SKILLS IN USE", note: skillTiles.isEmpty ? "NOT RECORDED" : "\(skillTiles.count) DETECTED")
+            SectionHeader(title: "RECORDED SKILLS", note: skillTiles.isEmpty ? "NOT RECORDED" : "\(skillTiles.count) DETECTED")
             if skillTiles.isEmpty {
                 EmptyCapabilityRow(text: "Skills appear when a local session records them.")
             } else {
@@ -187,10 +220,10 @@ struct DashboardView: View {
 
     private var integrationsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "ACTIVE INTEGRATIONS", note: "MCP + PLUGINS")
+            SectionHeader(title: "RECORDED INTEGRATIONS", note: "MCP + PLUGINS")
             HStack(spacing: 7) {
                 if integrationTiles.isEmpty {
-                    Text("NONE RECORDED IN LIVE SESSIONS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    Text("NONE RECORDED IN SESSIONS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 } else {
                     ForEach(integrationTiles.prefix(6)) { IntegrationMark(tile: $0) }
                     if integrationTiles.count > 6 {
@@ -243,7 +276,7 @@ struct DashboardView: View {
     private var liveSummary: some View {
         VStack(alignment: .leading, spacing: 7) {
             SummaryRow(label: "LIVE NOW", value: liveCount)
-            SummaryRow(label: "MODELS SEEN", value: enabledSnapshots.count)
+            SummaryRow(label: "MODELS RECORDED", value: Set(allSessions.compactMap(\.model)).count)
             SummaryRow(label: "CAPABILITIES", value: skillTiles.count + integrationTiles.count)
         }
         .padding(12)
@@ -263,7 +296,7 @@ struct DashboardView: View {
     private var toolsPage: some View {
         HStack(alignment: .top, spacing: 16) {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "SKILL CATALOG", note: "USED BY LIVE SESSIONS")
+                SectionHeader(title: "SKILL CATALOG", note: "RECORDED BY SESSIONS")
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 82), spacing: 8)], alignment: .leading, spacing: 8) {
                     if skillTiles.isEmpty { EmptyCapabilityRow(text: "No skills recorded yet.") }
                     else { ForEach(skillTiles) { CapabilitySquare(tile: $0) } }
@@ -340,7 +373,7 @@ struct DashboardView: View {
                         .padding(13)
                     } else {
                         ForEach(Array(visibleSessions.prefix(6).enumerated()), id: \.element.id) { index, session in
-                            Button { inspectedSession = session } label: { SessionRow(session: session) }
+                            Button { openReply(session) } label: { SessionRow(session: session) }
                                 .buttonStyle(.plain)
                             if index < min(visibleSessions.count, 6) - 1 {
                                 Rectangle().fill(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.35) : BarBoyStyle.hairline.opacity(0.7))
@@ -382,8 +415,12 @@ struct DashboardView: View {
         .frame(height: 48)
     }
 
+    private func openReply(_ session: AgentSession) {
+        NotificationCenter.default.post(name: .showCommandPalette, object: session)
+    }
+
     private func openNext() {
-        if let session = urgentSessions.first { inspectedSession = session }
+        if let session = urgentSessions.first { openReply(session) }
         else { NotificationCenter.default.post(name: .showCommandPalette, object: nil) }
     }
 
@@ -391,7 +428,7 @@ struct DashboardView: View {
         var seen = Set<String>()
         return allSessions.flatMap { session in
             values(session).compactMap { name in
-                let key = "\(kind.rawValue):\(name.lowercased())"
+                let key = "\(session.provider.rawValue):\(kind.rawValue):\(name.lowercased())"
                 guard seen.insert(key).inserted else { return nil }
                 return CapabilityTile(name: name, kind: kind, provider: session.provider)
             }
@@ -408,9 +445,12 @@ struct DashboardView: View {
 struct CompactDashboardView: View {
     var refreshOnAppear = true
     var animateMomo = true
+    var expanded = false
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.openSettings) private var openSettings
 
     private var snapshots: [ProviderSnapshot] {
         monitor.snapshots.filter { preferences.isEnabled($0.provider) }
@@ -431,8 +471,8 @@ struct CompactDashboardView: View {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
                         .accessibilityLabel("\(urgentCount) sessions need you")
                 }
-                Button(action: expand) {
-                    Label("EXPAND", systemImage: "arrow.up.left.and.arrow.down.right")
+                Button { if expanded { dismiss() } else { expand() } } label: {
+                    Label(expanded ? "COLLAPSE" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(BarBoyStyle.microLabel)
                 }
                 .barBoyButton()
@@ -444,13 +484,18 @@ struct CompactDashboardView: View {
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
 
             HStack(spacing: 7) {
+                if snapshots.isEmpty {
+                    Button("AUTHORIZE LOCAL PROVIDERS") { openSettings() }
+                        .barBoyButton()
+                        .frame(maxWidth: .infinity, minHeight: 72)
+                }
                 ForEach(snapshots) { snapshot in
                     CompactProviderCell(snapshot: snapshot)
                 }
             }
             .padding(12)
         }
-        .frame(width: 430, height: 154)
+        .frame(width: 430, height: 174)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
@@ -476,12 +521,15 @@ private struct CompactProviderCell: View {
             Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
             Text(snapshot.usageText.uppercased()).font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1)
+            Text(snapshot.quotaLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary).lineLimit(1)
+                .help(snapshot.recordedQuota?.explanation ?? "No recorded account usage window. A dash means the source did not report a valid percentage and duration.")
         }
-        .frame(maxWidth: .infinity, minHeight: 72)
+        .frame(maxWidth: .infinity, minHeight: 92)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.activeCount) active")
+        .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabel), \(snapshot.activeCount) active")
     }
 }
 
@@ -507,7 +555,7 @@ private struct CapabilityTile: Identifiable {
     let name: String
     let kind: CapabilityKind
     let provider: AIProvider
-    var id: String { "\(kind.rawValue):\(name.lowercased())" }
+    var id: String { "\(provider.rawValue):\(kind.rawValue):\(name.lowercased())" }
     var monogram: String { String(name.prefix(2)).uppercased() }
 }
 
@@ -672,7 +720,7 @@ private struct SessionRow: View {
                 }
             }
             Spacer(minLength: 6)
-            Text(session.attention.isUrgent ? session.attention.label : session.ageLabel)
+            Text(session.stoppedAfterUsageGrowth ? "STOPPED AFTER USAGE" : (session.attention == .working && !session.isRunning ? "LAST: WORKING" : session.attention.label))
                 .font(BarBoyStyle.microLabel)
                 .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : Color.secondary)
                 .padding(.horizontal, 6).padding(.vertical, 4)
@@ -681,11 +729,11 @@ private struct SessionRow: View {
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .contentShape(Rectangle())
-        .help(session.attentionReason ?? session.detail)
+        .help(session.stoppedAfterUsageGrowth ? "Stopped after recorded tokens increased. This does not establish a quota or rate-limit cause." : session.attentionReason ?? session.detail)
     }
 }
 
-private struct SessionInspectorView: View {
+struct SessionInspectorView: View {
     @Environment(\.dismiss) private var dismiss
     let session: AgentSession
     var body: some View {
@@ -706,6 +754,11 @@ private struct SessionInspectorView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if session.attention.isUrgent {
                         InspectorBlock(title: "RETURN", values: [session.attentionReason ?? "This agent needs your response"], alert: true)
+                    }
+                    if !session.recordedQuotaWindows.isEmpty {
+                        InspectorBlock(title: "RECORDED USAGE", values: session.recordedQuotaWindows.map {
+                            "\($0.label(now: .now)) · observed \($0.observedAt.formatted())"
+                        })
                     }
                     InspectorBlock(title: "MODEL", values: [session.model ?? "Not exposed by this session"])
                     InspectorBlock(title: "MCP SERVERS", values: session.mcpServers.isEmpty ? ["None recorded"] : session.mcpServers)

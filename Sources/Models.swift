@@ -102,6 +102,7 @@ enum AgentAttention: String, Codable {
     case completed
     case failed
     case idle
+    case unknown
 
     var label: String {
         switch self {
@@ -110,6 +111,7 @@ enum AgentAttention: String, Codable {
         case .completed: return "DONE"
         case .failed: return "FAILED"
         case .idle: return "IDLE"
+        case .unknown: return "UNKNOWN"
         }
     }
 
@@ -133,6 +135,9 @@ struct AgentSession: Identifiable, Hashable {
     let mcpServers: [String]
     let skills: [String]
     let plugins: [String]
+    let sourceURL: URL?
+    var stoppedAfterUsageGrowth = false
+    let recordedQuotaWindows: [RecordedQuotaWindow]
 
     init(
         id: String,
@@ -150,7 +155,9 @@ struct AgentSession: Identifiable, Hashable {
         model: String? = nil,
         mcpServers: [String] = [],
         skills: [String] = [],
-        plugins: [String] = []
+        plugins: [String] = [],
+        sourceURL: URL? = nil,
+        recordedQuotaWindows: [RecordedQuotaWindow] = []
     ) {
         self.id = id
         self.provider = provider
@@ -168,6 +175,8 @@ struct AgentSession: Identifiable, Hashable {
         self.mcpServers = mcpServers
         self.skills = skills
         self.plugins = plugins
+        self.sourceURL = sourceURL
+        self.recordedQuotaWindows = recordedQuotaWindows
     }
 
     var ageLabel: String {
@@ -206,70 +215,53 @@ struct SessionCapabilities: Equatable {
         plugins.formUnion(other.plugins)
     }
 
+    /// Only pass a schema-selected metadata object here. Never walk prompt text,
+    /// tool arguments, available-tool catalogs, or arbitrary nested dictionaries.
     static func infer(from value: Any) -> SessionCapabilities {
+        guard let record = value as? [String: Any] else { return SessionCapabilities() }
         var result = SessionCapabilities()
-        inspect(value, context: nil, result: &result)
+        for key in ["model", "model_name", "model_slug", "model_id"] {
+            if let model = record[key] as? String, !model.isEmpty { result.model = String(model.prefix(80)); break }
+        }
+        if let name = record["tool_name"] as? String, name.hasPrefix("mcp__") {
+            let parts = name.components(separatedBy: "__")
+            if parts.count >= 3, !parts[1].isEmpty { result.mcpServers.insert(parts[1]) }
+        }
+        if let path = record["skill_path"] as? String,
+           path.hasSuffix("/SKILL.md"), let range = path.range(of: "/skills/", options: .backwards) {
+            let name = String(path[range.upperBound...].dropLast("/SKILL.md".count))
+            if !name.isEmpty, !name.contains("/") { result.skills.insert(name) }
+        }
+        // Explicit observed metadata, not installation/catalog availability.
+        for plugin in record["plugins"] as? [String] ?? [] where !plugin.isEmpty {
+            result.plugins.insert(String(plugin.prefix(80)))
+        }
         return result
     }
 
-    private static func inspect(_ value: Any, context: String?, result: inout SessionCapabilities) {
-        if let dict = value as? [String: Any] {
-            for (rawKey, child) in dict {
-                let key = rawKey.lowercased().replacingOccurrences(of: "-", with: "_")
-                let strings = scalarStrings(in: child)
-                if ["model", "model_name", "model_slug", "model_id"].contains(key), let candidate = strings.first {
-                    result.model = normalize(candidate)
-                }
-                if key.contains("mcp") && (key.contains("server") || key == "mcps") {
-                    strings.map(normalize).filter(isUseful).forEach { result.mcpServers.insert($0) }
-                }
-                if key == "skill" || key == "skills" || key == "skill_name" {
-                    strings.map(normalize).filter(isUseful).forEach { result.skills.insert($0) }
-                }
-                if key == "plugin" || key == "plugins" || key == "plugin_name" {
-                    strings.map(normalize).filter { !$0.isEmpty && $0.count <= 48 }.forEach { result.plugins.insert($0) }
-                }
-                inspect(child, context: key, result: &result)
+    static func recorded(in event: [String: Any], provider: AIProvider) -> SessionCapabilities {
+        let type = event["type"] as? String
+        switch provider {
+        case .codex:
+            let payload = event["payload"] as? [String: Any] ?? [:]
+            if type == "turn_context" {
+                return infer(from: ["model": payload["model"] as Any])
             }
-            return
+            if type == "response_item", payload["type"] as? String == "function_call" {
+                return infer(from: ["tool_name": payload["name"] as Any])
+            }
+        case .claude:
+            if type == "assistant", let message = event["message"] as? [String: Any] {
+                var result = infer(from: ["model": message["model"] as Any])
+                for block in message["content"] as? [[String: Any]] ?? [] where block["type"] as? String == "tool_use" {
+                    result.merge(infer(from: ["tool_name": block["name"] as Any]))
+                }
+                return result
+            }
+        case .gemini, .grok, .cursor:
+            break // No guessed capability extraction for unverified schemas.
         }
-
-        if let array = value as? [Any] {
-            array.forEach { inspect($0, context: context, result: &result) }
-            return
-        }
-
-        guard let text = value as? String else { return }
-        let normalized = normalize(text)
-        if normalized.hasPrefix("mcp__") {
-            let parts = normalized.split(separator: "_", omittingEmptySubsequences: true)
-            if parts.count >= 2 { result.mcpServers.insert(String(parts[1])) }
-        }
-        if let marker = text.range(of: "/skills/"), let suffix = text[marker.upperBound...].split(separator: "/").first {
-            let skill = normalize(String(suffix))
-            if isUseful(skill) { result.skills.insert(skill) }
-        }
-        if context == "tool_name", normalized.hasPrefix("mcp_") {
-            let pieces = normalized.replacingOccurrences(of: "mcp__", with: "").split(separator: "_", omittingEmptySubsequences: true)
-            if let server = pieces.first { result.mcpServers.insert(String(server)) }
-        }
-    }
-
-    private static func scalarStrings(in value: Any) -> [String] {
-        if let text = value as? String { return [text] }
-        if let values = value as? [String] { return values }
-        if let values = value as? [Any] { return values.compactMap { $0 as? String } }
-        return []
-    }
-
-    private static func normalize(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        let lastPath = trimmed.contains("/") ? URL(fileURLWithPath: trimmed).lastPathComponent : trimmed
-        return String(lastPath.prefix(48))
-    }
-
-    private static func isUseful(_ value: String) -> Bool {
-        !value.isEmpty && value.count <= 48 && !value.contains(" ")
+        return SessionCapabilities()
     }
 }
 
@@ -291,20 +283,30 @@ struct ProviderAccessPlan: Identifiable {
     static let all: [ProviderAccessPlan] = [
         .init(provider: .codex, current: .organizationAPI, detail: "Local Codex sessions work now.", future: "OpenAI organization usage can use an admin key; ChatGPT consumer access waits for a supported delegated API."),
         .init(provider: .claude, current: .organizationAPI, detail: "Local Claude sessions work now.", future: "Anthropic organization usage can use an Admin API key; consumer-plan access waits for a supported delegated API."),
-        .init(provider: .gemini, current: .awaitingProvider, detail: "Local Gemini CLI sessions work now.", future: "Account usage will connect only through a provider-supported OAuth scope."),
+        .init(provider: .gemini, current: .awaitingProvider, detail: "Gemini CLI schema adapter available; local fixture validation pending.", future: "Account usage will connect only through a provider-supported OAuth scope."),
         .init(provider: .cursor, current: .awaitingProvider, detail: "Local Cursor activity works now.", future: "Account usage stays linked to Cursor's official dashboard until a supported API is available."),
-        .init(provider: .grok, current: .awaitingProvider, detail: "Local Grok processes work now.", future: "xAI usage will use an official API credential or delegated authorization when available.")
+        .init(provider: .grok, current: .awaitingProvider, detail: "Grok process detection only; session schema validation pending.", future: "xAI usage will use an official API credential or delegated authorization when available.")
     ]
 }
 
 struct ProviderSnapshot: Identifiable {
     let provider: AIProvider
-    let sessions: [AgentSession]
+    var sessions: [AgentSession]
     let activeCount: Int
     let localTokensToday: Int
     let updatedAt: Date
-    let shortWindowPercent: Int? = nil
-    let weekWindowPercent: Int? = nil
+    var shortWindowPercent: Int? = nil
+    var weekWindowPercent: Int? = nil
+    var shortWindowMinutes: Int? = nil
+    var recordedQuota: RecordedQuotaWindow? = nil
+
+    var quotaLabel: String {
+        if let recordedQuota { return recordedQuota.label(now: .now) }
+        guard let percent = shortWindowPercent, (0...100).contains(percent),
+              let minutes = shortWindowMinutes, minutes > 0 else { return "QUOTA —" }
+        let window = minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
+        return "\(percent)% / \(window)"
+    }
 
     var id: AIProvider { provider }
     var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
@@ -321,5 +323,187 @@ extension Array where Element == ProviderSnapshot {
         AIProvider.allCases.map {
             ProviderSnapshot(provider: $0, sessions: [], activeCount: 0, localTokensToday: 0, updatedAt: .now)
         }
+    }
+}
+
+
+/// Session lifecycle events only. Nested tool failures and quoted text cannot
+/// establish the lifecycle of their containing chat.
+enum SessionSignal {
+    static func recorded(in object: [String: Any], provider: AIProvider) -> (state: AgentAttention, reason: String)? {
+        let type = object["type"] as? String ?? ""
+        if provider == .codex, type == "event_msg", let payload = object["payload"] as? [String: Any] {
+            switch payload["type"] as? String {
+            case "task_started": return (.working, "A task started")
+            case "task_complete": return (.completed, "The task completed")
+            case "task_failed": return (.failed, "The task failed")
+            case "turn_aborted": return (.idle, "The turn was interrupted")
+            default: return nil
+            }
+        }
+        if provider == .claude, type == "result" {
+            if object["is_error"] as? Bool == true { return (.failed, "The session recorded an unsuccessful result") }
+            if object["subtype"] as? String == "success" { return (.completed, "The session completed") }
+        }
+        return nil
+    }
+}
+
+/// Gemini CLI ConversationRecord / JSONL recording, based on upstream
+/// chatRecordingTypes.ts and loadConversationRecord (2026-09-12).
+/// Public-schema fixtures are not a substitute for authorized local captures.
+enum GeminiSessionAdapter {
+    static func parse(_ data: Data, source: URL) -> AgentSession? {
+        var metadata: [String: Any] = [:]
+        var messages: [[String: Any]] = []
+        func upsert(_ message: [String: Any]) {
+            guard let id = message["id"] as? String else { return }
+            if let index = messages.firstIndex(where: { $0["id"] as? String == id }) { messages[index] = message }
+            else { messages.append(message) }
+        }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let records = object["messages"] as? [[String: Any]] {
+            metadata = object
+            records.forEach(upsert)
+        } else {
+            guard let text = String(data: data, encoding: .utf8) else { return nil }
+            for line in text.split(separator: "\n") {
+                guard let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any] else { return nil }
+                if let rewind = record["$rewindTo"] as? String {
+                    if let index = messages.firstIndex(where: { $0["id"] as? String == rewind }) { messages.removeSubrange(index...) }
+                    else { messages.removeAll() }
+                } else if record["id"] is String {
+                    upsert(record)
+                } else if let update = record["$set"] as? [String: Any] {
+                    metadata.merge(update) { _, new in new }
+                    if let checkpoint = update["messages"] as? [[String: Any]] {
+                        messages.removeAll()
+                        checkpoint.forEach(upsert)
+                    }
+                } else if record["sessionId"] is String, record["projectHash"] is String {
+                    metadata.merge(record) { _, new in new }
+                } else { return nil }
+            }
+        }
+        let timestamps = [metadata["lastUpdated"] as? String, metadata["startTime"] as? String].compactMap { $0 }
+            + messages.compactMap { $0["timestamp"] as? String }
+        guard let id = metadata["sessionId"] as? String, !id.isEmpty,
+              metadata["projectHash"] is String,
+              let updated = timestamps.compactMap(date).max() else { return nil }
+        let responses = messages.filter { $0["type"] as? String == "gemini" }
+        var total = 0
+        var completeTokens = !responses.isEmpty
+        for response in responses {
+            guard let tokens = response["tokens"] as? [String: Any],
+                  let value = tokens["total"] as? NSNumber,
+                  String(cString: value.objCType) != "c",
+                  value.doubleValue.isFinite, value.doubleValue >= 0,
+                  value.doubleValue < Double(Int.max), value.doubleValue.rounded(.down) == value.doubleValue else {
+                completeTokens = false; continue
+            }
+            let sum = total.addingReportingOverflow(value.intValue)
+            if sum.overflow { completeTokens = false } else { total = sum.partialValue }
+        }
+        let model = responses.reversed().compactMap { $0["model"] as? String }.first
+        // Tool names alone do not establish MCP server, plugin, or skill identity.
+        return AgentSession(id: "gemini-\(id)", provider: .gemini,
+                            role: metadata["kind"] as? String == "subagent" ? .subagent : .main,
+                            title: (metadata["summary"] as? String).map { String($0.prefix(120)) } ?? "Gemini chat \(id.prefix(8))",
+                            detail: "Recorded Gemini conversation; live state is not exposed",
+                            project: "Local Gemini", updatedAt: updated, isRunning: false,
+                            processID: nil, tokens: completeTokens ? total : nil,
+                            attention: .unknown, model: model.map { String($0.prefix(80)) }, sourceURL: source)
+    }
+
+    private static func date(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
+    }
+}
+
+
+/// Describes an observed sequence, never a claim that quota caused a stop.
+struct SessionProgressTracker {
+    private struct Observation {
+        var tokens: Int?
+        var state: AgentAttention
+        var grewWhileWorking: Bool
+        var stoppedAfterGrowth: Bool
+    }
+    private var previous: [String: Observation] = [:]
+
+    mutating func update(_ snapshots: [ProviderSnapshot]) -> [ProviderSnapshot] {
+        var next: [String: Observation] = [:]
+        let updated = snapshots.map { snapshot in
+            var result = snapshot
+            result.sessions = snapshot.sessions.map { session in
+                let old = previous[session.id]
+                let grew = old?.tokens.flatMap { before in session.tokens.map { $0 > before } } ?? false
+                let newRun = session.attention == .working && old?.state != .working
+                let growth = !newRun && ((old?.grewWhileWorking ?? false) || (old?.state == .working && grew))
+                let stopped = session.attention == .failed || session.attention == .idle
+                let observedStop = stopped && ((old?.state == .working && growth) || (old?.stoppedAfterGrowth ?? false))
+                next[session.id] = Observation(tokens: session.tokens, state: session.attention, grewWhileWorking: growth, stoppedAfterGrowth: observedStop)
+                var result = session
+                result.stoppedAfterUsageGrowth = observedStop
+                return result
+            }
+            return result
+        }
+        previous = next
+        return updated
+    }
+}
+
+
+struct RecordedQuotaWindow: Hashable {
+    let percent: Double
+    let minutes: Int
+    let resetsAt: Date?
+    let observedAt: Date
+
+    func label(now: Date) -> String {
+        if let resetsAt, now >= resetsAt { return "QUOTA —" }
+        let duration = minutes % 60 == 0 ? "\(minutes / 60)HR" : "\(minutes)MIN"
+        return "\(String(format: "%.0f", percent))% / \(duration)"
+    }
+
+    var explanation: String {
+        "Latest recorded session quota, observed \(observedAt.formatted()). Account identity is not recorded here."
+    }
+
+    /// nil: unrelated event; []: a quota observation with unavailable/invalid data.
+    static func codex(in event: [String: Any]) -> [RecordedQuotaWindow]? {
+        guard event["type"] as? String == "event_msg",
+              let payload = event["payload"] as? [String: Any],
+              payload["type"] as? String == "token_count",
+              payload.keys.contains("rate_limits") else { return nil }
+        guard let timestamp = event["timestamp"] as? String,
+              let observed = parseDate(timestamp),
+              let limits = payload["rate_limits"] as? [String: Any] else { return [] }
+        return ["primary", "secondary"].compactMap { key in
+            guard let window = limits[key] as? [String: Any],
+                  let percent = number(window["used_percent"]), (0...100).contains(percent),
+                  let minutes = number(window["window_minutes"]), minutes > 0,
+                  minutes < Double(Int.max), minutes.rounded(.down) == minutes else { return nil }
+            var reset: Date?
+            if let value = window["resets_at"], !(value is NSNull) {
+                guard let seconds = number(value), seconds > 0, seconds < 32_503_680_000 else { return nil }
+                reset = Date(timeIntervalSince1970: seconds)
+            }
+            return RecordedQuotaWindow(percent: percent, minutes: Int(minutes), resetsAt: reset, observedAt: observed)
+        }
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        guard let value = value as? NSNumber, String(cString: value.objCType) != "c", value.doubleValue.isFinite else { return nil }
+        return value.doubleValue
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: value) ?? ISO8601DateFormatter().date(from: value)
     }
 }

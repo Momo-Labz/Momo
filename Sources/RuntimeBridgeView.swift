@@ -6,18 +6,33 @@ struct RuntimeBridgeView: View {
     @ObservedObject var deskDisplay: DeskDisplayServer
     @ObservedObject var attentionNotifier: AttentionNotifier
     @ObservedObject var shortcuts: GlobalShortcutService
+    @ObservedObject private var autoResume = AutoResumeService.shared
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         Color.clear
-            .onAppear { syncServer() }
+            .onAppear {
+                monitor.setAuthorizedProviders(preferences.enabledProviders)
+                syncServer()
+                if !UserDefaults.standard.bool(forKey: "codexOnboardingSeen.v1") { openWindow(id: "onboarding") }
+            }
+            .onChange(of: preferences.enabledProviders) { _, providers in
+                monitor.setAuthorizedProviders(providers)
+            }
+            .onChange(of: preferences.autoResumeAfterReset) { _, _ in
+                autoResume.update(snapshots: monitor.snapshots, enabled: preferences.autoResumeAfterReset, authorized: preferences.enabledProviders)
+            }
             .onChange(of: preferences.deskDisplayEnabled) { _, _ in syncServer() }
             .onChange(of: preferences.showDeskDisplayTitles) { _, _ in syncServer() }
             .onReceive(monitor.$snapshots) { snapshots in
                 deskDisplay.update(snapshots: snapshots, includeTitles: preferences.showDeskDisplayTitles)
                 attentionNotifier.update(snapshots: snapshots, enabled: preferences.attentionAlertsEnabled)
+                autoResume.update(snapshots: snapshots, enabled: preferences.autoResumeAfterReset, authorized: preferences.enabledProviders)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { _ in
+            .onReceive(NotificationCenter.default.publisher(for: .showCommandPalette)) { notification in
+                if let session = notification.object as? AgentSession {
+                    QuickAskContext.shared.select(session)
+                }
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 openWindow(id: "command-palette")
             }
