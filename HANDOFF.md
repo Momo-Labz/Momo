@@ -169,7 +169,7 @@ behaviour still need interactive validation on an installed build.
 - Compact quota labels recompute on a 30-second timeline, so recorded 5HR/WEEK reset countdowns visibly advance instead of staying at the render-time value.
 - Quick Ask keeps a separate draft per conversation, supports changing the MOMO-only name/folder, and offers a provider target picker. Claude continuation copies a validated `claude --resume <session-id>` command; Codex opens a validated `codex://threads/<uuid>` task link. Neither path sends a message automatically.
 
-Static validation after this change: `swiftc -parse Sources/*.swift Sources/Adapters/*.swift` and `git diff --check` passed. The full Xcode test run was not repeated because the environment's automatic approval review rejected the build after the account usage limit was reached. The local commit is `4bc12e4`; publishing it to `origin/main` still requires a later push when the usage limit permits.
+Static validation after this change: `swiftc -parse Sources/*.swift Sources/Adapters/*.swift` and `git diff --check` passed. The full Xcode test run was not repeated because the environment's automatic approval review rejected the build after the account usage limit was reached. The interaction commit is `4bc12e4`; the later adapter commit is `7be5408`.
 
 ## Gemini and Grok schema adapters (2026-09-12)
 
