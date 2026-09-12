@@ -358,6 +358,11 @@ struct ProviderSnapshot: Identifiable {
 
     var id: AIProvider { provider }
     var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
+    func hasRecordedLimit(now: Date = .now) -> Bool {
+        let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
+        return windows.contains { $0.percent >= 100 && ($0.resetsAt == nil || $0.resetsAt! > now) }
+    }
+    var hasErrorOrApproval: Bool { sessions.contains { $0.attention == .failed || $0.attention == .needsInput } }
     /// A question or permission prompt is on screen somewhere.
     var waitingCount: Int { sessions.filter { $0.attention == .needsInput }.count }
     /// Something actually failed.

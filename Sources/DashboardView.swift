@@ -14,6 +14,7 @@ struct DashboardView: View {
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
+    @State private var selectedProvider: AIProvider?
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -117,11 +118,12 @@ struct DashboardView: View {
         HStack(spacing: 8) {
             ForEach(enabledSnapshots) { snapshot in
                 Button {
+                    selectedProvider = snapshot.provider
                     if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
                         openReply(session)
                     }
                 } label: {
-                    CompactProviderCell(snapshot: snapshot)
+                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider)
                 }
                 .buttonStyle(.plain)
                 .help("Open \(snapshot.provider.name) status and sessions")
@@ -590,6 +592,7 @@ struct CompactDashboardView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
+    @State private var selectedProvider: AIProvider?
 
     private var snapshots: [ProviderSnapshot] {
         monitor.snapshots.map { snapshot in
@@ -641,8 +644,8 @@ struct CompactDashboardView: View {
                         .frame(maxWidth: .infinity, minHeight: 72)
                 }
                 ForEach(snapshots) { snapshot in
-                    Button { openProvider(snapshot) } label: {
-                        CompactProviderCell(snapshot: snapshot)
+                    Button { selectedProvider = snapshot.provider; openProvider(snapshot) } label: {
+                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider)
                     }
                     .buttonStyle(.plain)
                     .help(snapshot.needsAttentionCount > 0
@@ -677,6 +680,7 @@ struct CompactDashboardView: View {
 
 private struct CompactProviderCell: View {
     let snapshot: ProviderSnapshot
+    var isSelected = false
 
     /// The conversation actually running for this provider, if any.
     private var running: AgentSession? {
@@ -699,8 +703,10 @@ private struct CompactProviderCell: View {
         VStack(spacing: 5) {
             ZStack(alignment: .topTrailing) {
                 ProviderMark(provider: snapshot.provider, size: 30, active: snapshot.activeCount > 0)
-                if snapshot.needsAttentionCount > 0 {
+                if snapshot.hasRecordedLimit() {
                     Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 12).offset(x: 4, y: -3)
+                } else if snapshot.hasErrorOrApproval {
+                    Rectangle().fill(BarBoyStyle.amber).frame(width: 5, height: 12).offset(x: 4, y: -3)
                 }
             }
             Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
@@ -716,7 +722,7 @@ private struct CompactProviderCell: View {
                         .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
                 }
                 Text(snapshot.statusLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
+                    .foregroundStyle(snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : .secondary))
                     .lineLimit(1).truncationMode(.tail)
                 Text(snapshot.resetLabel(now: context.date)).font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
@@ -724,7 +730,7 @@ private struct CompactProviderCell: View {
         }
         .frame(maxWidth: .infinity, minHeight: 104)
         .background(BarBoyStyle.surface)
-        .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+        .overlay(Rectangle().stroke(isSelected ? Color.white : (snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : BarBoyStyle.hairline)), lineWidth: isSelected ? 2 : 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabels.joined(separator: ", ")), \(snapshot.statusLabel), \(snapshot.resetLabel(now: .now)), \(snapshot.activeCount) active")
     }
