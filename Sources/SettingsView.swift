@@ -43,6 +43,7 @@ struct SettingsView: View {
         ), presenting: pendingProvider) { provider in
             Button("Authorize \(provider.name)") {
                 preferences.setEnabled(true, for: provider)
+                monitor.setAuthorizedRoots(authorizedRootURLs)
                 monitor.setAuthorizedProviders(preferences.enabledProviders)
                 pendingProvider = nil
             }
@@ -88,6 +89,13 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
+        .onAppear { monitor.setAuthorizedRoots(authorizedRootURLs) }
+    }
+
+    private var authorizedRootURLs: [AIProvider: [URL]] {
+        Dictionary(uniqueKeysWithValues: preferences.localProviderRoots.map { provider, paths in
+            (provider, paths.map { URL(fileURLWithPath: $0, isDirectory: true) })
+        })
     }
 
     private var providers: some View {
@@ -109,6 +117,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(24)
+        .onAppear { monitor.setAuthorizedRoots(authorizedRootURLs) }
     }
 
     private func authorizationMessage(for provider: AIProvider) -> String {
@@ -137,6 +146,7 @@ struct SettingsView: View {
                     if enabled { pendingProvider = provider }
                     else {
                         preferences.setEnabled(false, for: provider)
+                        monitor.setAuthorizedRoots(authorizedRootURLs)
                         monitor.setAuthorizedProviders(preferences.enabledProviders)
                     }
                 }
@@ -166,7 +176,7 @@ struct SettingsView: View {
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = false
-        panel.message = "Choose the (provider.name) session folder MOMO may read."
+        panel.message = "Choose the \(provider.name) session folder MOMO may read."
         panel.prompt = "Use Folder"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         preferences.setLocalRoot(url.path, for: provider)
