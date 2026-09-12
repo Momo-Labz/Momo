@@ -80,7 +80,7 @@ struct DashboardView: View {
             HStack {
                 Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 Spacer()
-                Button("QUICK ASK") { surface.show(.quickAsk) }.barBoyButton()
+                Button("QUICK ASK") { showNewAsk() }.barBoyButton()
             }.padding(12)
         }
         .frame(width: 430)
@@ -98,7 +98,7 @@ struct DashboardView: View {
     private var paneBar: some View {
         HStack(spacing: 0) {
             ForEach(MomoPane.allCases) { item in
-                Button { surface.show(item) } label: {
+                Button { item == .quickAsk ? showNewAsk() : surface.show(item) } label: {
                     Label(item.title, systemImage: item.symbol)
                         .font(BarBoyStyle.microLabel)
                         .frame(maxWidth: .infinity)
@@ -123,7 +123,7 @@ struct DashboardView: View {
                         openReply(session)
                     }
                 } label: {
-                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider)
+                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails)
                 }
                 .buttonStyle(.plain)
                 .help("Open \(snapshot.provider.name) status and sessions")
@@ -559,6 +559,12 @@ struct DashboardView: View {
         NotificationCenter.default.post(name: .showCommandPalette, object: session)
     }
 
+    private func showNewAsk() {
+        QuickAskContext.shared.newChat()
+        QuickAskContext.shared.activationLabel = nil
+        surface.show(.quickAsk)
+    }
+
     private func openNext() {
         if let session = urgentSessions.first { openReply(session) }
         else { NotificationCenter.default.post(name: .showCommandPalette, object: nil) }
@@ -645,7 +651,7 @@ struct CompactDashboardView: View {
                 }
                 ForEach(snapshots) { snapshot in
                     Button { selectedProvider = snapshot.provider; openProvider(snapshot) } label: {
-                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider)
+                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails)
                     }
                     .buttonStyle(.plain)
                     .help(snapshot.needsAttentionCount > 0
@@ -681,6 +687,7 @@ struct CompactDashboardView: View {
 private struct CompactProviderCell: View {
     let snapshot: ProviderSnapshot
     var isSelected = false
+    var showDetails = true
 
     /// The conversation actually running for this provider, if any.
     private var running: AgentSession? {
@@ -723,23 +730,21 @@ private struct CompactProviderCell: View {
             Text(runningLine).font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                 .help(runningHelp)
-            if let runningMeta {
+            if showDetails, let runningMeta {
                 Text(runningMeta).font(.system(size: 6, weight: .bold, design: .monospaced))
                     .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
             }
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(snapshot.tokenLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
-                ForEach(Array(snapshot.quotaLabels(now: context.date).enumerated()), id: \.offset) { _, label in
-                    Text(label).font(.system(size: 7, weight: .bold, design: .monospaced))
-                        .foregroundStyle(.secondary).lineLimit(1)
-                        .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
-                }
-                Text(snapshot.statusLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
+                Text(snapshot.quotaLabels(now: context.date).joined(separator: " · "))
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.secondary).lineLimit(1)
+                    .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
+                Text("\(snapshot.statusLabel) · \(snapshot.resetLabel(now: context.date))")
+                    .font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : .secondary))
                     .lineLimit(1).truncationMode(.tail)
-                Text(snapshot.resetLabel(now: context.date)).font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary).lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, minHeight: 104)

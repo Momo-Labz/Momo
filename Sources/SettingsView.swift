@@ -187,6 +187,9 @@ struct SettingsView: View {
         Form {
             Toggle("Compact menu bar icon", isOn: $preferences.compactMenuBar)
             Toggle("Hide idle providers", isOn: $preferences.hideIdleProviders)
+            Toggle("Show provider card details", isOn: $preferences.showProviderCardDetails)
+            Text("When off, cards keep only the provider, chat state, and one-line usage summary. Hover a card for the full folder, model, and process details.")
+                .font(.caption).foregroundStyle(.secondary)
             Toggle("Notify when an agent needs me", isOn: Binding(
                 get: { preferences.attentionAlertsEnabled },
                 set: { enabled in

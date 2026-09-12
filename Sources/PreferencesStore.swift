@@ -9,6 +9,9 @@ final class PreferencesStore: ObservableObject {
     @Published var hideIdleProviders: Bool {
         didSet { defaults.set(hideIdleProviders, forKey: Keys.hideIdleProviders) }
     }
+    @Published var showProviderCardDetails: Bool {
+        didSet { defaults.set(showProviderCardDetails, forKey: Keys.showProviderCardDetails) }
+    }
     @Published var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
@@ -33,6 +36,7 @@ final class PreferencesStore: ObservableObject {
     private enum Keys {
         static let compactMenuBar = "compactMenuBar"
         static let hideIdleProviders = "hideIdleProviders"
+        static let showProviderCardDetails = "showProviderCardDetails"
         static let launchAtLogin = "launchAtLogin"
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
@@ -51,6 +55,7 @@ final class PreferencesStore: ObservableObject {
         autoResumeAfterReset = defaults.bool(forKey: "autoResumeAfterReset")
         compactMenuBar = defaults.object(forKey: Keys.compactMenuBar) as? Bool ?? false
         hideIdleProviders = defaults.object(forKey: Keys.hideIdleProviders) as? Bool ?? false
+        showProviderCardDetails = defaults.object(forKey: Keys.showProviderCardDetails) as? Bool ?? true
         launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         deskDisplayEnabled = defaults.object(forKey: Keys.deskDisplayEnabled) as? Bool ?? false
         showDeskDisplayTitles = defaults.object(forKey: Keys.showDeskDisplayTitles) as? Bool ?? true
