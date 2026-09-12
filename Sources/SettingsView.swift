@@ -293,10 +293,40 @@ struct SettingsView: View {
             }
             ForEach(ShortcutAction.allCases) { action in
                 HStack {
-                    Text(action.title).font(.headline)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(action.title).font(.headline)
+                        Text(shortcutService.isEnabled(action) ? "Shortcut active" : "Shortcut off")
+                            .font(.caption).foregroundStyle(shortcutService.isEnabled(action) ? .secondary : BarBoyStyle.coral)
+                    }
                     Spacer()
                     Button(shortcutService.bindings[action]?.label ?? "Set shortcut") { recordingShortcut = action; shortcutError = nil }.barBoyButton()
-                    Text(shortcutService.errors[action] ?? "ACTIVE").font(.caption).foregroundStyle(.secondary)
+                    Toggle("", isOn: Binding(
+                        get: { shortcutService.isEnabled(action) },
+                        set: { value in
+                            shortcutError = shortcutService.setEnabled(value, for: action)
+                            shortcutNotice = shortcutError == nil ? "\(action.title) \(value ? "enabled" : "turned off")" : nil
+                        }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    Menu {
+                        Button("Change shortcut") { recordingShortcut = action; shortcutError = nil }
+                        Button(shortcutService.isEnabled(action) ? "Turn off" : "Turn on") {
+                            let value = !shortcutService.isEnabled(action)
+                            shortcutError = shortcutService.setEnabled(value, for: action)
+                            shortcutNotice = shortcutError == nil ? "\(action.title) \(value ? "enabled" : "turned off")" : nil
+                        }
+                        Button("Reset to default") {
+                            shortcutError = shortcutService.reset(action)
+                            shortcutNotice = shortcutError == nil ? "Reset \(action.title) to its default" : nil
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .barBoyIconButton()
+                    .help("More options for \(action.title)")
+                    Text(shortcutService.errors[action] ?? (shortcutService.isEnabled(action) ? "ACTIVE" : "OFF"))
+                        .font(.caption).foregroundStyle(shortcutService.isEnabled(action) ? .secondary : BarBoyStyle.coral)
                 }
             }
             Toggle("Haptic feedback", isOn: $hapticFeedback)

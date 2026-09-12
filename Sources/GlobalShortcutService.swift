@@ -26,6 +26,7 @@ struct ShortcutBinding: Codable, Equatable {
 final class GlobalShortcutService: ObservableObject {
     static let shared = GlobalShortcutService()
     @Published private(set) var bindings: [ShortcutAction: ShortcutBinding] = [:]
+    @Published private(set) var enabled: [ShortcutAction: Bool] = [:]
     @Published private(set) var errors: [ShortcutAction: String] = [:]
     var isRegistered: Bool { references[.quickAsk] != nil }
     private var references: [ShortcutAction: EventHotKeyRef] = [:]
@@ -36,7 +37,11 @@ final class GlobalShortcutService: ObservableObject {
     init(defaults: UserDefaults = .standard, register: Bool = true) {
         self.defaults = defaults; registers = register
         let saved = defaults.data(forKey: "shortcuts.v1").flatMap { try? JSONDecoder().decode([ShortcutAction: ShortcutBinding].self, from: $0) } ?? [:]
-        for action in ShortcutAction.allCases { bindings[action] = saved[action] ?? action.defaultBinding }
+        let savedEnabled = defaults.data(forKey: "shortcuts.enabled.v1").flatMap { try? JSONDecoder().decode([ShortcutAction: Bool].self, from: $0) } ?? [:]
+        for action in ShortcutAction.allCases {
+            bindings[action] = saved[action] ?? action.defaultBinding
+            enabled[action] = savedEnabled[action] ?? true
+        }
         guard register else { return }
         var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
         let status = InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
@@ -50,18 +55,46 @@ final class GlobalShortcutService: ObservableObject {
         }, 1, &eventType, nil, &handlerRef)
         for action in ShortcutAction.allCases {
             if status != noErr { errors[action] = "Keyboard handler unavailable" }
-            else if let error = install(bindings[action]!, for: action) { errors[action] = error }
+            else if enabled[action] == true, let error = install(bindings[action]!, for: action) { errors[action] = error }
         }
+    }
+
+    func isEnabled(_ action: ShortcutAction) -> Bool { enabled[action] ?? true }
+
+    @discardableResult func setEnabled(_ value: Bool, for action: ShortcutAction) -> String? {
+        if value {
+            guard let binding = bindings[action] else { return "No shortcut saved" }
+            if registers, let error = install(binding, for: action) {
+                errors[action] = error
+                return error
+            }
+            enabled[action] = true
+        } else {
+            if let reference = references.removeValue(forKey: action) { UnregisterEventHotKey(reference) }
+            errors[action] = nil
+            enabled[action] = false
+        }
+        persist()
+        return nil
     }
 
     @discardableResult func update(_ binding: ShortcutBinding, for action: ShortcutAction) -> String? {
         guard binding.isValid else { return "Include Control, Option or Command." }
         guard !bindings.contains(where: { $0.key != action && $0.value.conflicts(with: binding) }) else { return "That shortcut already belongs to another MOMO action." }
         if bindings[action] == binding && errors[action] == nil { return nil }
-        if registers, let error = install(binding, for: action) { return error }
+        if isEnabled(action), registers, let error = install(binding, for: action) { return error }
         bindings[action] = binding; errors[action] = nil
-        if let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: "shortcuts.v1") }
+        persist()
         return nil
+    }
+
+    @discardableResult func reset(_ action: ShortcutAction) -> String? {
+        update(action.defaultBinding, for: action)
+    }
+
+    private func persist() {
+        if let data = try? JSONEncoder().encode(bindings) { defaults.set(data, forKey: "shortcuts.v1") }
+        if let data = try? JSONEncoder().encode(enabled) { defaults.set(data, forKey: "shortcuts.enabled.v1") }
     }
     private func install(_ binding: ShortcutBinding, for action: ShortcutAction) -> String? {
         guard binding.isValid else { return "Invalid saved shortcut" }

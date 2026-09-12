@@ -227,6 +227,7 @@ struct DashboardView: View {
             case .home: homePage
             case .agents: agentsPage
             case .tools: toolsPage
+            case .network: networkPage
             }
         }
         .id(tab)
@@ -366,6 +367,58 @@ struct DashboardView: View {
         }
         .padding(12)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var networkPage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeader(title: "WORK NETWORK", note: "PROVIDER → FOLDER → CHAT")
+                Text("See where each model is working, which folder owns the chat, and what capabilities it recorded.")
+                    .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                ForEach(enabledSnapshots) { snapshot in
+                    VStack(alignment: .leading, spacing: 9) {
+                        HStack(spacing: 8) {
+                            ProviderMark(provider: snapshot.provider, size: 24, active: snapshot.activeCount > 0)
+                            Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle)
+                            Spacer()
+                            Text(snapshot.statusLabel).font(BarBoyStyle.microLabel)
+                                .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
+                        }
+                        ForEach(Array(Set(snapshot.sessions.map(\.project)).sorted()), id: \.self) { folder in
+                            VStack(alignment: .leading, spacing: 5) {
+                                Label(folder, systemImage: "folder")
+                                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                                ForEach(snapshot.sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
+                                    HStack(spacing: 8) {
+                                        Circle().fill(session.attention.isUrgent ? BarBoyStyle.coral : (session.isRunning ? Color.green : BarBoyStyle.hairline))
+                                            .frame(width: 7, height: 7)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(1)
+                                            Text([session.model, session.skills.first, session.mcpServers.first].compactMap { $0 }.joined(separator: " · "))
+                                                .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
+                                        }
+                                        Spacer()
+                                        Text(session.attention.label.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                                    }
+                                    .padding(8)
+                                    .background(BarBoyStyle.surface)
+                                    .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                                }
+                            }
+                            .padding(.leading, 14)
+                        }
+                    }
+                    .padding(10)
+                    .background(BarBoyStyle.raised)
+                    .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                }
+                if enabledSnapshots.isEmpty {
+                    Text("Authorize a provider to map its local folders and chats.")
+                        .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                }
+            }
+            .padding(18)
+        }
     }
 
     private var agentsPage: some View {
@@ -678,7 +731,7 @@ private struct CompactProviderCell: View {
 }
 
 enum DashboardTab: String, CaseIterable, Identifiable {
-    case home, agents, tools
+    case home, agents, tools, network
     var id: String { rawValue }
     var label: String { rawValue.uppercased() }
     var symbol: String {
@@ -686,6 +739,7 @@ enum DashboardTab: String, CaseIterable, Identifiable {
         case .home: return "square.grid.2x2.fill"
         case .agents: return "sparkles"
         case .tools: return "square.stack.3d.up.fill"
+        case .network: return "point.3.connected.trianglepath.dotted"
         }
     }
 }

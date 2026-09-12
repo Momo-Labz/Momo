@@ -20,6 +20,18 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(GlobalShortcutService(defaults: defaults, register: false).bindings[.quickAsk], replacement)
     }
 
+    func testShortcutCanBeTurnedOffAndPersistsSeparately() {
+        let suite = "MomoShortcutToggleTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let shortcuts = GlobalShortcutService(defaults: defaults, register: false)
+        XCTAssertNil(shortcuts.setEnabled(false, for: .handsFree))
+        XCTAssertFalse(shortcuts.isEnabled(.handsFree))
+        XCTAssertFalse(GlobalShortcutService(defaults: defaults, register: false).isEnabled(.handsFree))
+        XCTAssertNil(shortcuts.setEnabled(true, for: .handsFree))
+        XCTAssertTrue(shortcuts.isEnabled(.handsFree))
+    }
+
     func testHandsFreeCommandsRequireAnExplicitEnding() {
         XCTAssertTrue(VoiceInput.hasStopCommand("Please inspect this. MOMO stop."))
         XCTAssertFalse(VoiceInput.hasStopCommand("Stop the worker and continue"))
