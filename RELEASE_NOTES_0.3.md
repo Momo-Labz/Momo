@@ -1,6 +1,6 @@
-# BAR BOY 0.3 — the return queue
+# MOMO 0.3 — the return queue
 
-This release reframes BAR BOY around the expensive part of parallel AI work: a person noticing, understanding, and answering every agent return.
+This release reframes MOMO around the expensive part of parallel AI work: a person noticing, understanding, and answering every agent return.
 
 ## New
 

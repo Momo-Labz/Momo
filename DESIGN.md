@@ -1,6 +1,6 @@
 ---
 # gstack: design-md-format=spec
-name: BAR BOY
+name: MOMO
 description: A compact pixel-industrial command surface with hard edges, honest data, and one coral interruption signal.
 colors:
   primary: "#201E1D"
@@ -58,7 +58,7 @@ components:
     textColor: "{colors.text}"
 ---
 
-# BAR BOY
+# MOMO
 
 ## Overview
 
@@ -68,9 +68,9 @@ components:
 
 **Mode per surface:** The compact menu popup is an Operate glance surface. The expanded desktop hub is an Operate investigation surface. The iOS companion is an Operate return queue. The desk display is a Read surface.
 
-**Reference:** The user-supplied HeyClicky screenshot informs the top navigation, shortcut keycaps, and horizontal composition. BAR BOY keeps its own Momo Labz pixel identity, hard edges, and return-queue hierarchy.
+**Reference:** The user-supplied HeyClicky screenshot informs the top navigation, shortcut keycaps, and horizontal composition. MOMO keeps its own Momo Labz pixel identity, hard edges, and return-queue hierarchy.
 
-**Momo Labz source language:** The supplied studio HTML and bundled mark establish `#201E1D` ink, `#F3F2F2` paper, crisp pixel geometry, two-weight rules, compact uppercase labels, solid inverse actions, and short character-led status copy. BAR BOY uses those exact base colors on Mac, iPhone, and desk display; denser one-point rules are retained where the native utility scale needs them.
+**Momo Labz source language:** The supplied studio HTML and bundled mark establish `#201E1D` ink, `#F3F2F2` paper, crisp pixel geometry, two-weight rules, compact uppercase labels, solid inverse actions, and short character-led status copy. MOMO uses those exact base colors on Mac, iPhone, and desk display; denser one-point rules are retained where the native utility scale needs them.
 
 **Key characteristics:**
 

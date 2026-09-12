@@ -46,7 +46,7 @@ final class RelayStore: ObservableObject {
 
     func connect() {
         guard let nextCredential = RelayCredential(pairingAddress: pairAddress) else {
-            connection = .offline("Paste the full pairing address from BAR BOY on your Mac.")
+            connection = .offline("Paste the full pairing address from MOMO on your Mac.")
             return
         }
         credential = nextCredential

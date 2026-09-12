@@ -26,7 +26,7 @@
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>MOMO RELAY connects to BAR BOY on your local network to show agents waiting for you.</string>
+	<string>MOMO RELAY connects to MOMO on your local network to show agents waiting for you.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

@@ -6,6 +6,14 @@ import XCTest
 
 @MainActor
 final class BarBoyTests: XCTestCase {
+    func testMenuBarStatusIconIsVisibleTemplateArtwork() {
+        let icon = MenuBarLabelView.statusIcon
+
+        XCTAssertTrue(icon.isTemplate)
+        XCTAssertEqual(icon.size, NSSize(width: 18, height: 18))
+        XCTAssertFalse(icon.tiffRepresentation?.isEmpty ?? true)
+    }
+
     func testProviderCoverage() {
         XCTAssertEqual(AIProvider.allCases.map(\.name), ["Codex", "Claude", "Gemini", "Cursor", "Grok"])
         XCTAssertTrue(AIProvider.allCases.allSatisfy { !$0.sessionRoots.isEmpty })
@@ -331,7 +339,7 @@ final class BarBoyTests: XCTestCase {
     }
 
     func testRunningSessionWinsAgeLabel() {
-        let session = AgentSession(id: "1", provider: .claude, role: .subagent, title: "Test", detail: "", project: "BAR BOY", updatedAt: .distantPast, isRunning: true, processID: 123, tokens: nil)
+        let session = AgentSession(id: "1", provider: .claude, role: .subagent, title: "Test", detail: "", project: "MOMO", updatedAt: .distantPast, isRunning: true, processID: 123, tokens: nil)
         XCTAssertEqual(session.ageLabel, "LIVE")
     }
 
@@ -376,8 +384,8 @@ final class BarBoyTests: XCTestCase {
 
         let now = Date()
         let sessions = [
-            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the BAR BOY menu app", detail: "Implementing the local activity dashboard", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
-            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "Bar-Boy", updatedAt: now, isRunning: true, processID: 89, tokens: 4_800, model: "GPT-5.6", mcpServers: [], skills: ["qa"], plugins: []),
+            AgentSession(id: "codex-main", provider: .codex, role: .main, title: "Building the MOMO menu app", detail: "Implementing the local activity dashboard", project: "MOMO", updatedAt: now, isRunning: true, processID: 88, tokens: 12_400, model: "GPT-5.6", mcpServers: ["github", "web"], skills: ["frontend-design"], plugins: []),
+            AgentSession(id: "codex-sub", provider: .codex, role: .subagent, title: "Verifying provider adapters", detail: "Checking local session discovery", project: "MOMO", updatedAt: now, isRunning: true, processID: 89, tokens: 4_800, model: "GPT-5.6", mcpServers: [], skills: ["qa"], plugins: []),
             AgentSession(id: "claude-main", provider: .claude, role: .main, title: "Reviewing onboarding copy", detail: "Recent local session", project: "Momo", updatedAt: now.addingTimeInterval(-420), isRunning: false, processID: nil, tokens: 31_200, attention: .needsInput, attentionReason: "Approve the revised copy", model: "Claude Sonnet", mcpServers: ["figma"], skills: ["brand"], plugins: ["Canva"])
         ]
         let snapshots = [
@@ -443,9 +451,9 @@ final class BarBoyTests: XCTestCase {
             .environmentObject(monitor)
             .environmentObject(preferences)
             .preferredColorScheme(preferredScheme)
-            .frame(width: 430, height: 154)
+            .frame(width: CompactDashboardView.canvasSize.width, height: CompactDashboardView.canvasSize.height)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 154)
+        hostingView.frame = NSRect(origin: .zero, size: CompactDashboardView.canvasSize)
         hostingView.appearance = NSAppearance(named: preferredScheme == .dark ? .darkAqua : .aqua)
         hostingView.layoutSubtreeIfNeeded()
         guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {

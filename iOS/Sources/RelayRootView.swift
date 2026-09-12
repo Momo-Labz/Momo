@@ -46,7 +46,7 @@ private struct PairView: View {
             Text("Your agents return here.")
                 .font(.title3.weight(.semibold))
                 .padding(.top, 6)
-            Text("Paste the pairing address from BAR BOY on your Mac. Its one-time setup key is stored separately from the status address in this iPhone's Keychain.")
+            Text("Paste the pairing address from MOMO on your Mac. Its one-time setup key is stored separately from the status address in this iPhone's Keychain.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)

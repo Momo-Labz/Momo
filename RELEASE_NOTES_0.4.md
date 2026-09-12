@@ -1,6 +1,6 @@
-# BAR BOY 0.4 — compact command center
+# MOMO 0.4 — compact command center
 
-BAR BOY now opens as a short, models-only menu popup and expands into a wider three-tab workspace when you need context.
+MOMO now opens as a short, models-only menu popup and expands into a wider three-tab workspace when you need context.
 
 ## New
 
@@ -22,7 +22,7 @@ BAR BOY now opens as a short, models-only menu popup and expands into a wider th
 
 ## Product truth
 
-- Consumer subscription quota APIs remain inconsistent. A dash means BAR BOY does not have a verified number.
+- Consumer subscription quota APIs remain inconsistent. A dash means MOMO does not have a verified number.
 - Provider authorization is still a capability map; no credentials are collected in this build.
 - Installed capability presence does not imply that a session used it; only recorded provenance receives a `USED` mark.
 - Claude, Codex, and Cursor have dedicated schema adapters. Gemini and Grok remain conservative generic discovery until representative fixtures are available.

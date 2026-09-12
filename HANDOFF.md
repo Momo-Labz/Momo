@@ -1,4 +1,4 @@
-# BAR BOY handoff
+# MOMO handoff
 
 ## Current state
 
@@ -40,7 +40,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 
 ## Verified 0.4 checks
 
-- `BAR_BOY_REAL_DATA_CHECK=1 BAR_BOY_RENDER_SNAPSHOTS=1` runs the complete 19-test suite, live metadata smoke check, and six Mac snapshot states.
+- `BAR_BOY_REAL_DATA_CHECK=1 BAR_BOY_RENDER_SNAPSHOTS=1` runs the complete 20-test suite, live metadata smoke check, and six Mac snapshot states.
 - The real-machine smoke test reports aggregate inventory/session counts only; it does not emit names, paths, titles, prompts, or details.
 - MOMO RELAY has been built, installed, launched with sanitized demo data, and screenshot-checked on an iPhone simulator.
 - The hardware body, vented back, and stand STL files are generated; dimensions still require validation against the purchased 3.5-inch 480 × 320 display board.

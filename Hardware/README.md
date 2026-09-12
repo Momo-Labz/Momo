@@ -1,6 +1,6 @@
 # MOMO LABZ Agent Desk prototype
 
-This turns BAR BOY into a small, private, always-visible status object. The Mac does the scanning; the desk unit only opens a read-only page over the local network.
+This turns MOMO into a small, private, always-visible status object. The Mac does the scanning; the desk unit only opens a read-only page over the local network.
 
 ## Reference hardware
 

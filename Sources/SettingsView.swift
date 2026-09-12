@@ -63,7 +63,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text("BAR BOY will use OAuth 2.1 + PKCE for compatible remote MCP servers and Keychain for tokens. It will not import browser cookies or collect ChatGPT, Claude, Cursor, Gemini, or Grok passwords.")
+            Text("MOMO will use OAuth 2.1 + PKCE for compatible remote MCP servers and Keychain for tokens. It will not import browser cookies or collect ChatGPT, Claude, Cursor, Gemini, or Grok passwords.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
@@ -73,7 +73,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local providers").font(.title2.bold())
-                Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
+                Text("MOMO reads local session files and running processes. It never asks for your account password.")
                     .foregroundStyle(.secondary)
             }
             VStack(spacing: 8) {
@@ -154,7 +154,7 @@ struct SettingsView: View {
             }
 
             HStack(alignment: .top, spacing: 18) {
-                QRCodeView(value: deskDisplay.displayURL?.absoluteString ?? "BAR BOY")
+                QRCodeView(value: deskDisplay.displayURL?.absoluteString ?? "MOMO")
                     .frame(width: 132, height: 132)
                     .padding(10)
                     .background(Color.white)
@@ -251,7 +251,7 @@ struct SettingsView: View {
             Image(systemName: "lock.shield")
                 .font(.system(size: 38, weight: .light))
             Text("Your work stays on your Mac").font(.title2.bold())
-            Text("BAR BOY inspects running process names and recent local session metadata only for providers you enable. It does not upload prompts, source code, or usage data.")
+            Text("MOMO inspects running process names and recent local session metadata only for providers you enable. It does not upload prompts, source code, or usage data.")
                 .foregroundStyle(.secondary)
             Text("Disable a provider in the Providers tab to stop its process and file scanning and exclude it from Desk Display and MOMO RELAY status.")
                 .font(.callout)

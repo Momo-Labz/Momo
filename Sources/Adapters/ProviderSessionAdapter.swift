@@ -17,7 +17,7 @@ struct ProviderSessionContext: Sendable {
     }
 }
 
-/// Converts one provider-owned transcript into BAR BOY's shared session model.
+/// Converts one provider-owned transcript into MOMO's shared session model.
 ///
 /// Adapters must report unavailable fields as `nil`; they must not manufacture usage,
 /// model, provenance, or attention data that is absent from the provider's schema.

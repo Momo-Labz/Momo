@@ -65,7 +65,7 @@ struct DashboardView: View {
             PixelBarBoyMark(size: 32, tile: true)
             VStack(alignment: .leading, spacing: 1) {
                 Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
-                Text("BAR BOY").font(BarBoyStyle.display).tracking(0.9)
+                Text("MOMO").font(BarBoyStyle.display).tracking(0.9)
             }
             HStack(spacing: 4) {
                 ForEach(DashboardTab.allCases) { item in
@@ -394,7 +394,7 @@ struct DashboardView: View {
                 Text(lastUpdateLabel.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
             Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }
-                .buttonStyle(.plain).help("Quit BAR BOY")
+                .buttonStyle(.plain).help("Quit MOMO")
         }
         .padding(.horizontal, 14)
         .frame(height: 48)
@@ -422,6 +422,8 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
+    static let canvasSize = CGSize(width: 430, height: 68)
+
     var refreshOnAppear = true
     var animateMomo = true
     @EnvironmentObject private var monitor: ActivityMonitor
@@ -432,41 +434,27 @@ struct CompactDashboardView: View {
         monitor.snapshots.filter { preferences.isEnabled($0.provider) }
     }
 
-    private var urgentCount: Int { snapshots.reduce(0) { $0 + $1.needsAttentionCount } }
-
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                AnimatedMomoMark(size: 28, animated: animateMomo)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.2).foregroundStyle(.secondary)
-                    Text("MODELS").font(BarBoyStyle.display)
-                }
-                Spacer()
-                if urgentCount > 0 {
-                    Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
-                        .accessibilityLabel("\(urgentCount) sessions need you")
-                }
-                Button(action: expand) {
-                    Label("EXPAND", systemImage: "arrow.up.left.and.arrow.down.right")
-                        .font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton()
-                .help("Open the full BAR BOY hub")
-            }
-            .padding(.horizontal, 12)
-            .frame(height: 52)
-
-            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-
+        HStack(spacing: 8) {
+            AnimatedMomoMark(size: 28, animated: animateMomo)
+                .help("MOMO by Momo Labz")
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1, height: 36)
             HStack(spacing: 7) {
                 ForEach(snapshots) { snapshot in
                     CompactProviderCell(snapshot: snapshot)
                 }
             }
-            .padding(12)
+            .frame(maxWidth: .infinity)
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1, height: 36)
+            Button(action: expand) {
+                Label("EXPAND", systemImage: "arrow.up.left.and.arrow.down.right")
+                    .font(BarBoyStyle.microLabel)
+            }
+            .barBoyButton()
+            .help("Open the full MOMO hub")
         }
-        .frame(width: 430, height: 154)
+        .padding(.horizontal, 9)
+        .frame(width: Self.canvasSize.width, height: Self.canvasSize.height)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
@@ -482,22 +470,28 @@ private struct CompactProviderCell: View {
     let snapshot: ProviderSnapshot
 
     var body: some View {
-        VStack(spacing: 5) {
+        VStack(spacing: 3) {
             ZStack(alignment: .topTrailing) {
-                ProviderMark(provider: snapshot.provider, size: 30, active: snapshot.activeCount > 0)
+                ProviderMark(provider: snapshot.provider, size: 25, active: snapshot.activeCount > 0)
                 if snapshot.needsAttentionCount > 0 {
-                    Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 12).offset(x: 4, y: -3)
+                    Rectangle().fill(BarBoyStyle.coral).frame(width: 4, height: 10).offset(x: 3, y: -2)
                 }
             }
-            Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
-            Text(snapshot.usageText.uppercased()).font(.system(size: 7, weight: .bold, design: .monospaced))
-                .foregroundStyle(.secondary).lineLimit(1)
+            Text(compactUsage)
+                .font(.system(size: 7, weight: .bold, design: .monospaced))
+                .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
-        .frame(maxWidth: .infinity, minHeight: 72)
-        .background(BarBoyStyle.surface)
-        .overlay(Rectangle().stroke(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
+        .help("\(snapshot.provider.name): \(snapshot.usageText), \(snapshot.activeCount) active")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.activeCount) active")
+    }
+
+    private var compactUsage: String {
+        snapshot.isInstalled ? snapshot.usageText.uppercased() : "NO APP"
     }
 }
 

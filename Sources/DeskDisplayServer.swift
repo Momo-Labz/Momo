@@ -144,7 +144,7 @@ final class DeskDisplayServer: ObservableObject {
             guard headerAuthorized || cookieAuthorized else {
                 return Self.unauthorizedResponse()
             }
-            return Self.httpResponse(status: "200 OK", type: "text/plain; charset=utf-8", body: Data("BAR BOY OK".utf8))
+            return Self.httpResponse(status: "200 OK", type: "text/plain; charset=utf-8", body: Data("MOMO OK".utf8))
         }
 
         if (components.path == "/" || components.path == "/display"),
@@ -153,7 +153,7 @@ final class DeskDisplayServer: ObservableObject {
             return Self.httpResponse(
                 status: "303 See Other",
                 type: "text/plain; charset=utf-8",
-                body: Data("Continue to BAR BOY".utf8),
+                body: Data("Continue to MOMO".utf8),
                 extraHeaders: [
                     "Location: /display",
                     "Set-Cookie: barboy_key=\(token); Path=/; HttpOnly; SameSite=Strict; Max-Age=2592000"
@@ -269,7 +269,7 @@ final class DeskDisplayServer: ObservableObject {
         <html lang="en">
         <head>
         <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="referrer" content="no-referrer">
-        <title>BAR BOY Desk Display</title>
+        <title>MOMO Desk Display</title>
         <style>
         :root{color-scheme:dark;--bg:#201e1d;--panel:#2d2b2b;--line:#66615e;--ink:#f3f2f2;--muted:#aaa5a2;--alert:#E25C48}
         *{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:ui-monospace,"SFMono-Regular",Menlo,monospace}
@@ -336,7 +336,7 @@ final class DeskDisplayServer: ObservableObject {
             status: "401 Unauthorized",
             type: "text/plain; charset=utf-8",
             body: Data("Pairing credential required".utf8),
-            extraHeaders: ["WWW-Authenticate: Bearer realm=\"BAR BOY\""]
+            extraHeaders: ["WWW-Authenticate: Bearer realm=\"MOMO\""]
         )
     }
 

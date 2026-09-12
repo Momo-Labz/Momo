@@ -1,10 +1,15 @@
-# BAR BOY
+# MOMO
 
-BAR BOY is a working title for a private, local-first Momo Labz return queue. It keeps Codex, Claude, Gemini, Cursor, and Grok moving by gathering every question, approval, failure, and completed result in one place instead of making the human patrol five apps.
+MOMO is a private, local-first Momo Labz return queue. It keeps Codex, Claude, Gemini, Cursor, and Grok moving by gathering every question, approval, failure, and completed result in one place instead of making the human patrol five apps.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="Docs/momo-compact-dark.png">
+  <img alt="MOMO compact horizontal menu-bar strip" src="Docs/momo-compact-light.png" width="430">
+</picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="Docs/barboy-dark.png">
-  <img alt="BAR BOY horizontal dashboard in light and dark mode" src="Docs/barboy-light.png" width="760">
+  <img alt="MOMO expanded horizontal dashboard" src="Docs/barboy-light.png" width="760">
 </picture>
 
 ## What works in 0.4
@@ -48,7 +53,7 @@ xcodebuild -project BarBoy.xcodeproj -scheme BarBoyMobile -destination 'generic/
 xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' BAR_BOY_REAL_DATA_CHECK=1 BAR_BOY_RENDER_SNAPSHOTS=1 test
 ```
 
-The unsigned development Mac app is created at `DerivedData/Build/Products/Release/BAR BOY.app`. The iOS target is source/build verified but requires the Momo Labz Apple Developer Team before it can be installed on a physical iPhone or distributed through TestFlight.
+The unsigned development Mac app is created at `DerivedData/Build/Products/Release/MOMO.app`. The iOS target is source/build verified but requires the Momo Labz Apple Developer Team before it can be installed on a physical iPhone or distributed through TestFlight.
 
 The real-data test prints aggregate counts and timings only. It never prints capability names, project paths, session titles, prompts, or transcript bodies. Snapshot fixtures are sanitized.
 
@@ -56,7 +61,7 @@ Release builds are universal binaries for Apple silicon and Intel Macs. The deve
 
 ## Product truth
 
-macOS has no supported public API that lets BAR BOY remove arbitrary third-party menu-bar items. Menu Calm opens Apple’s supported controls. Likewise, consumer subscription quota APIs are not consistently public, so unlinked short/week quota cells show an honest dash, official usage pages remain one click away, and local token counts are labeled as local.
+macOS has no supported public API that lets MOMO remove arbitrary third-party menu-bar items. Menu Calm opens Apple’s supported controls. Likewise, consumer subscription quota APIs are not consistently public, so unlinked short/week quota cells show an honest dash, official usage pages remain one click away, and local token counts are labeled as local.
 
 OpenAI and Anthropic expose organization API usage endpoints using administrative credentials; those are different from personal ChatGPT and Claude subscription quotas. Version 0.4 maps those access paths but does not collect credentials or claim an account is connected. Remote MCP authorization is designed for OAuth 2.1 + PKCE and provider tokens belong in Keychain.
 

@@ -23,8 +23,8 @@ extension RelayStatus {
         ],
         sessions: [
             .init(id: "1", provider: "Claude", mark: "A", role: "Main", title: "Choose the launch headline", project: "Momo", live: true, age: "LIVE", attention: "needsInput", attentionLabel: "NEEDS YOU", attentionReason: "The agent is waiting for your response", urgent: true, model: "Claude Sonnet", mcpServers: ["github"], skills: ["frontend-design"], plugins: [], capabilityCount: 2),
-            .init(id: "2", provider: "Codex", mark: "◎", role: "Subagent", title: "Approve release packaging", project: "BAR BOY", live: true, age: "LIVE", attention: "needsInput", attentionLabel: "NEEDS YOU", attentionReason: "Approval required before publishing", urgent: true, model: "GPT-5", mcpServers: ["github", "web"], skills: ["ship"], plugins: ["Codex Security"], capabilityCount: 4),
-            .init(id: "3", provider: "Cursor", mark: "C", role: "Main", title: "Refactoring the provider adapter", project: "BAR BOY", live: true, age: "LIVE", attention: "working", attentionLabel: "WORKING", attentionReason: nil, urgent: false, model: "Composer", mcpServers: [], skills: [], plugins: [], capabilityCount: 0)
+            .init(id: "2", provider: "Codex", mark: "◎", role: "Subagent", title: "Approve release packaging", project: "MOMO", live: true, age: "LIVE", attention: "needsInput", attentionLabel: "NEEDS YOU", attentionReason: "Approval required before publishing", urgent: true, model: "GPT-5", mcpServers: ["github", "web"], skills: ["ship"], plugins: ["Codex Security"], capabilityCount: 4),
+            .init(id: "3", provider: "Cursor", mark: "C", role: "Main", title: "Refactoring the provider adapter", project: "MOMO", live: true, age: "LIVE", attention: "working", attentionLabel: "WORKING", attentionReason: nil, urgent: false, model: "Composer", mcpServers: [], skills: [], plugins: [], capabilityCount: 0)
         ]
     )
 }

@@ -24,10 +24,10 @@ struct MenuBarLabelView: View {
         }
         .font(.system(size: 10, weight: .black, design: .monospaced))
         .monospacedDigit()
-        .accessibilityLabel("BAR BOY AI activity")
+        .accessibilityLabel("MOMO AI activity")
     }
 
-    private static let statusIcon: NSImage = {
+    static let statusIcon: NSImage = {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { bounds in
             NSColor.black.setFill()
             let scale = min(bounds.width, bounds.height) / 16

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The single transport contract shared by BAR BOY, MOMO RELAY, and the desk display.
+/// The single transport contract shared by MOMO, MOMO RELAY, and the desk display.
 /// Optional provenance fields keep 0.3 payloads decodable during the 0.4 migration.
 struct RelayStatus: Codable {
     static let currentSchemaVersion = 1
