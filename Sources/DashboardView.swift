@@ -56,10 +56,11 @@ struct DashboardView: View {
         if showsOverview {
             VStack(spacing: 0) {
                 header
+                overviewProviderStrip
                 Divider()
                 page
                 footer
-            }.frame(width: 860, height: 570).background(BarBoyStyle.panel)
+            }.frame(width: 860, height: 790).background(BarBoyStyle.panel)
                 .task { if refreshOnAppear { monitor.refresh() } }
         } else { compactExpansion }
     }
@@ -110,6 +111,30 @@ struct DashboardView: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    private var overviewProviderStrip: some View {
+        HStack(spacing: 8) {
+            ForEach(enabledSnapshots) { snapshot in
+                Button {
+                    if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
+                        openReply(session)
+                    }
+                } label: {
+                    CompactProviderCell(snapshot: snapshot)
+                }
+                .buttonStyle(.plain)
+                .help("Open \(snapshot.provider.name) status and sessions")
+            }
+            if enabledSnapshots.isEmpty {
+                Text("AUTHORIZE A PROVIDER TO SEE USAGE, LIMITS, ISSUES, AND RESET TIMERS")
+                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 104)
+                    .background(BarBoyStyle.surface)
+                    .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
     }
 
     private var sessionsPane: some View {
@@ -548,6 +573,8 @@ struct CompactDashboardView: View {
             HStack {
                 Button("+ PROVIDER") { openSettings() }.barBoyButton()
                 Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton()
+                Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
+                    .barBoyIconButton().help("Provider authorization and settings")
                 Spacer()
                 Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
             }.font(BarBoyStyle.microLabel).padding(.horizontal, 12).padding(.bottom, 8)
