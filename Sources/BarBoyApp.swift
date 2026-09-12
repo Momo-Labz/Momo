@@ -15,7 +15,7 @@ struct BarBoyApp: App {
                 .environmentObject(preferences)
         } label: {
             ZStack {
-                MenuBarLabelView(snapshots: monitor.snapshots, compact: preferences.compactMenuBar)
+                MenuBarLabelView(snapshots: monitor.snapshots, compact: preferences.compactMenuBar, attentionNotifier: attentionNotifier)
                 RuntimeBridgeView(monitor: monitor, preferences: preferences, deskDisplay: deskDisplay, attentionNotifier: attentionNotifier, shortcuts: shortcuts)
                     .frame(width: 0, height: 0)
             }

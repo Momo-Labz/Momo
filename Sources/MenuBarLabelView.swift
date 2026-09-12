@@ -4,11 +4,13 @@ import SwiftUI
 struct MenuBarLabelView: View {
     let snapshots: [ProviderSnapshot]
     let compact: Bool
+    @ObservedObject var attentionNotifier: AttentionNotifier
 
     var body: some View {
         let waiting = snapshots.reduce(0) { $0 + $1.waitingCount }
         let failed = snapshots.reduce(0) { $0 + $1.failedCount }
         let active = snapshots.reduce(0) { $0 + $1.activeCount }
+        let completed = attentionNotifier.completedSessions.count
         HStack(spacing: 3) {
             ZStack(alignment: .topTrailing) {
                 Image(nsImage: Self.statusIcon)
@@ -17,9 +19,9 @@ struct MenuBarLabelView: View {
                     .frame(width: 18, height: 18)
                 // A flat tab on the corner of the mark. Deliberately static:
                 // a menu-bar item is on screen all day and must not pulse.
-                if waiting > 0 || failed > 0 {
+                if waiting > 0 || failed > 0 || completed > 0 {
                     Rectangle()
-                        .fill(failed > 0 ? BarBoyStyle.coral : BarBoyStyle.amber)
+                        .fill(failed > 0 ? BarBoyStyle.coral : (waiting > 0 ? BarBoyStyle.amber : .green))
                         .frame(width: 5, height: 5)
                         .offset(x: 1, y: -1)
                 }
@@ -32,6 +34,10 @@ struct MenuBarLabelView: View {
                 Text("?\(min(waiting, 9))")
                     .foregroundStyle(BarBoyStyle.amber)
                     .accessibilityLabel("\(waiting) sessions are waiting for you")
+            } else if completed > 0 {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .accessibilityLabel("\(completed) sessions finished")
             } else if !compact, active > 0 {
                 Text("\(min(active, 9))")
                     .accessibilityLabel("\(active) active agents")

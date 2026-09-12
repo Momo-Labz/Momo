@@ -4,8 +4,10 @@ import UserNotifications
 @MainActor
 final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var authorizationLabel = "Off"
+    @Published private(set) var completedSessions: [AgentSession] = []
     private var notified = Set<String>()
     private var currentSessions: [String: AgentSession] = [:]
+    private var knownStates: [String: AgentAttention] = [:]
 
     private enum Category {
         static let ret = "MOMO_RETURN"
@@ -44,6 +46,13 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
     }
 
     func update(snapshots: [ProviderSnapshot], enabled: Bool, now: Date = .now) {
+        let sessions = snapshots.flatMap(\.sessions)
+        let newlyCompleted = sessions.filter { session in
+            session.attention == .completed && knownStates[session.id] != nil && knownStates[session.id] != .completed
+        }
+        for session in sessions { knownStates[session.id] = session.attention }
+        completedSessions = (completedSessions + newlyCompleted).filter { now.timeIntervalSince($0.updatedAt) < 900 }
+
         guard enabled else {
             currentSessions.removeAll()
             notified.removeAll()
@@ -52,7 +61,6 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
         }
         authorizationLabel = "On"
 
-        let sessions = snapshots.flatMap(\.sessions)
         let urgent = sessions.filter {
             $0.attention.isUrgent && ($0.isRunning || now.timeIntervalSince($0.updatedAt) < 300)
         }
@@ -90,6 +98,15 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
             content.subtitle = "\(session.title) · \(session.project)"
             content.sound = .default
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+        }
+
+        for session in newlyCompleted {
+            let content = UNMutableNotificationContent()
+            content.title = "(session.provider.name) finished"
+            content.body = session.title
+            content.subtitle = session.project
+            content.sound = .default
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "completed|\(session.id)|\(Int(session.updatedAt.timeIntervalSince1970))", content: content, trigger: nil))
         }
     }
 
