@@ -22,7 +22,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 ## Architecture
 
 - `BarBoyApp.swift`: menu-bar, settings, and preview window scenes.
-- `ActivityMonitor.swift`: enabled-provider process scanning, parallel recent-session parsing, installed-inventory refresh, and the 15-second refresh loop. Its process pipe must be drained before waiting or large process tables can deadlock.
+- `ActivityMonitor.swift`: enabled-provider process scanning, parallel recent-session parsing, installed-inventory refresh, and the 30-second refresh loop. Parsed sessions are cached by provider, path, modification date, and file size; cache entries are pruned to the current recent-file set. Its process pipe must be drained before waiting or large process tables can deadlock.
 - `Adapters/ProviderSessionAdapter.swift`: provider parser seam and generic fallbacks.
 - `Adapters/{Claude,Codex,Cursor}SessionAdapter.swift`: streaming, provider-specific local session readers.
 - `Adapters/CapabilityInventory.swift`: metadata-only installed MCP/plugin/marketplace/skill inventory. It does not retain config values, commands, paths, or secrets.

@@ -5,7 +5,7 @@ import CryptoKit
 
 @MainActor
 final class ActivityMonitor: ObservableObject {
-    static let refreshInterval: TimeInterval = 15
+    static let refreshInterval: TimeInterval = 30
 
     @Published private(set) var snapshots: [ProviderSnapshot] = .placeholder
     @Published private(set) var capabilityInventory: CapabilityInventory
@@ -39,6 +39,7 @@ final class ActivityMonitor: ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in self?.refresh() }
             }
+            timer?.tolerance = 5
         }
     }
 
@@ -120,6 +121,12 @@ actor LocalActivityScanner {
     private let detectProcesses: Bool
     private let adapters: ProviderSessionAdapterRegistry
     private var authorizedRoots: [AIProvider: [URL]]
+    private struct CachedSession {
+        let modifiedAt: Date
+        let fileSize: Int
+        let session: AgentSession?
+    }
+    private var sessionCache: [String: CachedSession] = [:]
 
     init(adapters: [any ProviderSessionAdapter] = [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter(), GrokSessionAdapter()], home: URL = FileManager.default.homeDirectoryForCurrentUser, detectProcesses: Bool = true, authorizedRoots: [AIProvider: [URL]] = [:]) {
         self.home = home
@@ -247,28 +254,50 @@ actor LocalActivityScanner {
         let selectedFiles = files
             .sorted { $0.modifiedAt > $1.modifiedAt }
             .prefix(20)
+        let selectedPaths = Set(selectedFiles.map { "\(provider.rawValue)|\($0.url.path)" })
         return await withTaskGroup(of: (Int, AgentSession?).self) { group in
             for (index, file) in selectedFiles.enumerated() {
                 group.addTask {
-                    if provider == .gemini {
-                        guard let size = try? file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 16 * 1024 * 1024, let data = try? Data(contentsOf: file.url) else { return (index, nil) }
-                        return (index, GeminiSessionAdapter.parse(data, source: file.url))
-                    }
-                    return (
-                        index,
-                        adapter.session(
-                            from: ProviderSessionFile(url: file.url, modifiedAt: file.modifiedAt, index: index),
-                            context: context
-                        )
-                    )
+                    (index, await self.cachedSession(provider: provider, file: file, index: index, context: context, adapter: adapter))
                 }
             }
             var parsed: [(Int, AgentSession)] = []
             for await (index, session) in group {
                 if let session { parsed.append((index, session)) }
             }
+            sessionCache = sessionCache.filter { selectedPaths.contains($0.key) }
             return parsed.sorted { $0.0 < $1.0 }.map(\.1)
         }
+    }
+
+    private func cachedSession(
+        provider: AIProvider,
+        file: (url: URL, modifiedAt: Date),
+        index: Int,
+        context: ProviderSessionContext,
+        adapter: any ProviderSessionAdapter
+    ) -> AgentSession? {
+        let key = "\(provider.rawValue)|\(file.url.path)"
+        let size = (try? file.url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        if let cached = sessionCache[key], cached.modifiedAt == file.modifiedAt, cached.fileSize == size {
+            return cached.session
+        }
+
+        let session: AgentSession?
+        if provider == .gemini {
+            guard size <= 16 * 1024 * 1024, let data = try? Data(contentsOf: file.url) else {
+                sessionCache[key] = CachedSession(modifiedAt: file.modifiedAt, fileSize: size, session: nil)
+                return nil
+            }
+            session = GeminiSessionAdapter.parse(data, source: file.url)
+        } else {
+            session = adapter.session(
+                from: ProviderSessionFile(url: file.url, modifiedAt: file.modifiedAt, index: index),
+                context: context
+            )
+        }
+        sessionCache[key] = CachedSession(modifiedAt: file.modifiedAt, fileSize: size, session: session)
+        return session
     }
 
     private func recentSessionFiles(for provider: AIProvider, now: Date) -> [(url: URL, modifiedAt: Date)] {
