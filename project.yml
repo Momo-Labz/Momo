@@ -7,7 +7,8 @@ options:
   createIntermediateGroups: true
 settings:
   base:
-    PRODUCT_NAME: BAR BOY
+    PRODUCT_NAME: MOMO
+    PRODUCT_MODULE_NAME: BAR_BOY
     MARKETING_VERSION: 0.4.0
     CURRENT_PROJECT_VERSION: 4
     SWIFT_VERSION: 5.0
@@ -20,25 +21,23 @@ targets:
     platform: macOS
     sources:
       - path: Sources
+      - path: Shared
       - path: Resources
         buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.momolabz.barboy
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: BAR BOY
+        INFOPLIST_KEY_CFBundleDisplayName: MOMO
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
         INFOPLIST_KEY_LSUIElement: YES
-        INFOPLIST_KEY_NSLocalNetworkUsageDescription: BAR BOY uses your local network only when you enable Desk Display, so your paired screen can read live session status from this Mac.
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: MOMO uses your local network only when you enable Desk Display, so your paired screen can read live session status from this Mac.
         INFOPLIST_KEY_NSHumanReadableCopyright: Copyright © 2026 Momo Labz
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_APP_SANDBOX: NO
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
-    scheme:
-      testTargets:
-        - BarBoyTests
   BarBoyTests:
     type: bundle.unit-test
     platform: macOS
@@ -52,7 +51,7 @@ targets:
         PRODUCT_MODULE_NAME: BarBoyTests
         PRODUCT_BUNDLE_IDENTIFIER: com.momolabz.barboy.tests
         GENERATE_INFOPLIST_FILE: YES
-        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/BAR BOY.app/Contents/MacOS/BAR BOY"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MOMO.app/Contents/MacOS/MOMO"
         BUNDLE_LOADER: "$(TEST_HOST)"
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
@@ -62,6 +61,7 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: iOS/Sources
+      - path: Shared
       - path: iOS/Resources
         buildPhase: resources
     info:
@@ -71,9 +71,18 @@ targets:
         CFBundleShortVersionString: "0.4.0"
         CFBundleVersion: "4"
         UILaunchScreen: {}
-        NSLocalNetworkUsageDescription: MOMO RELAY connects to BAR BOY on your local network to show agents waiting for you.
+        NSLocalNetworkUsageDescription: MOMO RELAY connects to MOMO on your local network to show agents waiting for you.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     settings:
       base:
         PRODUCT_NAME: MOMO RELAY
@@ -84,3 +93,14 @@ targets:
         SUPPORTS_MACCATALYST: NO
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO
+schemes:
+  BarBoy:
+    build:
+      targets:
+        BarBoy: all
+    test:
+      targets:
+        - BarBoyTests
+      environmentVariables:
+        BAR_BOY_REAL_DATA_CHECK: "$(BAR_BOY_REAL_DATA_CHECK)"
+        BAR_BOY_RENDER_SNAPSHOTS: "$(BAR_BOY_RENDER_SNAPSHOTS)"

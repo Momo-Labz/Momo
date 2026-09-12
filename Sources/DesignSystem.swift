@@ -3,15 +3,22 @@ import CoreImage
 import SwiftUI
 
 enum BarBoyStyle {
-    static let panel = Color(nsColor: .windowBackgroundColor)
+    static let panel = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : NSColor(srgbRed: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
     static let surface = Color.primary.opacity(0.045)
     static let raised = Color.primary.opacity(0.085)
     static let hairline = Color.primary.opacity(0.22)
-    static let quiet = Color.secondary.opacity(0.72)
-    static let coral = Color(red: 0.88, green: 0.36, blue: 0.28)
+    static let coral = Color(red: 226 / 255, green: 92 / 255, blue: 72 / 255)
     static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
     static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
-    static let inverseInk = Color(nsColor: .windowBackgroundColor)
+    static let inverseInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : NSColor(srgbRed: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
 
     static let display = Font.custom("Menlo-Bold", fixedSize: 15)
     static let navLabel = Font.custom("Menlo-Bold", fixedSize: 10)
@@ -26,6 +33,14 @@ enum BarBoyStyle {
     static let metricSmall = Font.custom("Menlo-Bold", fixedSize: 9)
     static let capabilityMark = Font.custom("Menlo-Bold", fixedSize: 16)
     static let keycap = Font.custom("Menlo-Bold", fixedSize: 9)
+    static let stroke: CGFloat = 1
+    static let strokeStrong: CGFloat = 1.5
+    static let space1: CGFloat = 4
+    static let space2: CGFloat = 8
+    static let space3: CGFloat = 12
+    static let space4: CGFloat = 16
+    static let space5: CGFloat = 24
+    static let space6: CGFloat = 32
     static let pageAnimation = Animation.timingCurve(0.32, 0.72, 0, 1, duration: 0.20)
 }
 
@@ -38,7 +53,16 @@ struct ProviderMark: View {
         ZStack {
             Rectangle()
                 .fill(active ? Color.primary : BarBoyStyle.raised)
-            if let icon = applicationIcon {
+            if let bundledIconName {
+                Rectangle()
+                    .fill(BarBoyStyle.paper)
+                    .padding(active ? 2 : 1)
+                Image(bundledIconName)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(size * 0.14)
+            } else if let icon = applicationIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .scaledToFit()
@@ -54,6 +78,16 @@ struct ProviderMark: View {
         .frame(width: size, height: size)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         .accessibilityLabel(provider.name)
+    }
+
+    private var bundledIconName: String? {
+        switch provider {
+        case .codex: return "ProviderCodex"
+        case .claude: return "ProviderClaude"
+        case .cursor: return "ProviderCursor"
+        case .grok: return "ProviderGrok"
+        case .gemini: return nil
+        }
     }
 
     private var applicationIcon: NSImage? {

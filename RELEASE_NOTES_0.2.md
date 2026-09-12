@@ -1,4 +1,4 @@
-# BAR BOY 0.2 prototype
+# MOMO 0.2 prototype
 
 - Adds Cursor and Grok alongside Codex, Claude, and Gemini.
 - Adds conservative `NEEDS YOU`, failure, completion, working, and idle session states.

@@ -11,6 +11,10 @@ struct SettingsView: View {
     @ObservedObject private var autoResume = AutoResumeService.shared
     @Environment(\.openWindow) private var openWindow
     @State private var pendingProvider: AIProvider?
+    private var refreshIntervalLabel: String {
+        let seconds = Int(ActivityMonitor.refreshInterval)
+        return "\(seconds) second\(seconds == 1 ? "" : "s")"
+    }
 
     var body: some View {
         TabView {
@@ -39,7 +43,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { pendingProvider = nil }
         } message: { provider in
-            Text("Allow MOMO to read \(provider.name) session metadata in this Mac user’s local folders and detect its processes? This does not connect a remote account. Local files may include multiple accounts; authorize only if you permit access to all accounts in those folders. You can revoke access here.")
+            Text("Allow MOMO to read \(provider.name) session metadata and capability configuration in this Mac user’s local folders and detect its processes? This does not connect a remote account. Local files may include multiple accounts; authorize only if you permit access to all accounts in those folders. You can revoke access here.")
         }
     }
 
@@ -75,7 +79,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text("BAR BOY will use OAuth 2.1 + PKCE for compatible remote MCP servers and Keychain for tokens. It will not import browser cookies or collect ChatGPT, Claude, Cursor, Gemini, or Grok passwords.")
+            Text("MOMO will use OAuth 2.1 + PKCE for compatible remote MCP servers and Keychain for tokens. It will not import browser cookies or collect ChatGPT, Claude, Cursor, Gemini, or Grok passwords.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(24)
@@ -155,8 +159,8 @@ struct SettingsView: View {
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
-            LabeledContent("Refresh interval", value: "15 seconds")
-            LabeledContent("Version", value: "0.3.0")
+            LabeledContent("Refresh interval", value: refreshIntervalLabel)
+            LabeledContent("Version", value: BarBoyAppInfo.marketingVersion)
         }
         .formStyle(.grouped)
         .padding(10)
@@ -177,7 +181,7 @@ struct SettingsView: View {
             }
 
             HStack(alignment: .top, spacing: 18) {
-                QRCodeView(value: deskDisplay.displayURL?.absoluteString ?? "BAR BOY")
+                QRCodeView(value: deskDisplay.displayURL?.absoluteString ?? "MOMO")
                     .frame(width: 132, height: 132)
                     .padding(10)
                     .background(Color.white)
@@ -274,9 +278,9 @@ struct SettingsView: View {
             Image(systemName: "lock.shield")
                 .font(.system(size: 38, weight: .light))
             Text("Your work stays on your Mac").font(.title2.bold())
-            Text("BAR BOY reads process names and recent local session metadata for Codex, Claude, Gemini, Cursor, and Grok. It does not upload prompts, source code, or usage data.")
+            Text("MOMO inspects running process names and recent local session metadata only for providers you enable. It does not upload prompts, source code, or usage data.")
                 .foregroundStyle(.secondary)
-            Text("Disable any provider in the Providers tab to stop scanning its session folder.")
+            Text("Disable a provider in the Providers tab to stop its process and file scanning and exclude it from Desk Display and MOMO RELAY status.")
                 .font(.callout)
             Spacer()
         }
@@ -361,7 +365,7 @@ struct CodexOnboardingView: View {
             }
             Text(CodexDesktopConnection.applicationURL == nil ? "1. Install Codex desktop to open tasks." : "1. Codex desktop detected.").font(.headline)
             Text("2. Authorize local access").font(.headline)
-            Text("MOMO reads task metadata, recorded usage and errors from ~/.codex/sessions. These folders can contain more than one account. This permission covers every account stored there; it does not sign you in or verify account identity.")
+            Text("MOMO reads task metadata, recorded usage and errors from ~/.codex/sessions, plus installed tool and skill configuration. These folders can contain more than one account. This permission covers every account stored there; it does not sign you in or verify account identity.")
                 .font(.callout).foregroundStyle(.secondary)
             Button(preferences.isEnabled(.codex) ? "Revoke Codex access" : "Authorize Codex local access") {
                 if preferences.isEnabled(.codex) {
@@ -391,7 +395,7 @@ struct CodexOnboardingView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Authorize MOMO to read session metadata for all Codex accounts saved in this Mac user's local session folders and detect Codex processes. Revoke anytime in Settings. This does not authorize automatic desktop messages.")
+            Text("Authorize MOMO to read session metadata and capability configuration for all Codex accounts saved in this Mac user's local session folders and detect Codex processes. Revoke anytime in Settings. This does not authorize automatic desktop messages.")
         }
     }
 }

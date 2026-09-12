@@ -1,6 +1,13 @@
 import Foundation
 import SwiftUI
 
+enum BarBoyAppInfo {
+    static var marketingVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "Development"
+    }
+}
+
 enum AIProvider: String, CaseIterable, Codable, Identifiable {
     case codex
     case claude
@@ -308,9 +315,32 @@ struct ProviderSnapshot: Identifiable {
         return "\(percent)% / \(window)"
     }
 
+    let isInstalled: Bool
+
+    init(
+        provider: AIProvider,
+        sessions: [AgentSession],
+        activeCount: Int,
+        localTokensToday: Int,
+        updatedAt: Date,
+        shortWindowPercent: Int? = nil,
+        weekWindowPercent: Int? = nil,
+        isInstalled: Bool = true
+    ) {
+        self.provider = provider
+        self.sessions = sessions
+        self.activeCount = activeCount
+        self.localTokensToday = localTokensToday
+        self.updatedAt = updatedAt
+        self.shortWindowPercent = shortWindowPercent
+        self.weekWindowPercent = weekWindowPercent
+        self.isInstalled = isInstalled
+    }
+
     var id: AIProvider { provider }
     var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
     var usageText: String {
+        guard isInstalled else { return "Not installed" }
         guard localTokensToday > 0 else { return activeCount > 0 ? "\(activeCount) live" : "Idle" }
         if localTokensToday >= 1_000_000 { return String(format: "%.1fM", Double(localTokensToday) / 1_000_000) }
         if localTokensToday >= 1_000 { return String(format: "%.1fK", Double(localTokensToday) / 1_000) }

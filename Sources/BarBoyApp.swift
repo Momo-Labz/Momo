@@ -30,7 +30,7 @@ struct BarBoyApp: App {
                 .environmentObject(attentionNotifier)
         }
 
-        Window("BAR BOY", id: "dashboard") {
+        Window("MOMO", id: "dashboard") {
             DashboardView()
                 .environmentObject(monitor)
                 .environmentObject(preferences)

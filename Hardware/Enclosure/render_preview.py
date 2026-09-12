@@ -28,8 +28,8 @@ draw.rectangle((372, 266, 788, 532), outline="#66615e", width=3)
 
 draw.text((396, 292), "MOMO LABZ", font=bold, fill="#f3f2f2")
 draw.text((396, 340), "3 AGENTS WORKING", font=regular, fill="#aaa5a2")
-draw.rectangle((396, 405, 418, 475), fill="#e15b47")
-draw.text((444, 411), "CLAUDE NEEDS YOU", font=bold, fill="#e15b47")
+draw.rectangle((396, 405, 418, 475), fill="#E25C48")
+draw.text((444, 411), "CLAUDE NEEDS YOU", font=bold, fill="#E25C48")
 draw.text((444, 459), "APPROVAL WAITING", font=regular, fill="#f3f2f2")
 
 draw.text((62, 72), "MOMO LABZ / AGENT DESK", font=bold, fill="#f3f2f2")

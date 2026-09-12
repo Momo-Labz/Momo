@@ -24,7 +24,7 @@ final class RelayStore: ObservableObject {
     @Published private(set) var status: RelayStatus?
     @Published private(set) var connection: ConnectionState = .unpaired
 
-    private var statusURL: URL?
+    private var credential: RelayCredential?
     private var pollTask: Task<Void, Never>?
     private var notifiedUrgentIDs = Set<String>()
 
@@ -34,9 +34,10 @@ final class RelayStore: ObservableObject {
             connection = .live
             return
         }
-        if let saved = RelayKeychain.load(), let url = URL(string: saved) {
-            pairAddress = saved
-            statusURL = url
+        if let saved = RelayKeychain.load() {
+            credential = saved
+            pairAddress = saved.pairingAddress
+            RelayKeychain.save(saved)
             startPolling()
         }
     }
@@ -44,20 +45,20 @@ final class RelayStore: ObservableObject {
     deinit { pollTask?.cancel() }
 
     func connect() {
-        guard let url = Self.statusURL(from: pairAddress) else {
-            connection = .offline("Paste the full pairing address from BAR BOY on your Mac.")
+        guard let nextCredential = RelayCredential(pairingAddress: pairAddress) else {
+            connection = .offline("Paste the full pairing address from MOMO on your Mac.")
             return
         }
-        statusURL = url
-        pairAddress = url.absoluteString
-        RelayKeychain.save(url.absoluteString)
+        credential = nextCredential
+        pairAddress = nextCredential.pairingAddress
+        RelayKeychain.save(nextCredential)
         startPolling()
     }
 
     func disconnect() {
         pollTask?.cancel()
         pollTask = nil
-        statusURL = nil
+        credential = nil
         status = nil
         pairAddress = ""
         connection = .unpaired
@@ -67,13 +68,7 @@ final class RelayStore: ObservableObject {
     func refresh() async { await fetch() }
 
     static func statusURL(from input: String) -> URL? {
-        let cleaned = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var components = URLComponents(string: cleaned),
-              components.scheme == "http" || components.scheme == "https",
-              components.host != nil,
-              components.queryItems?.contains(where: { $0.name == "key" && !($0.value ?? "").isEmpty }) == true else { return nil }
-        components.path = "/api/status"
-        return components.url
+        RelayCredential(pairingAddress: input)?.statusURL
     }
 
     private func startPolling() {
@@ -88,11 +83,12 @@ final class RelayStore: ObservableObject {
     }
 
     private func fetch() async {
-        guard let statusURL else { return }
+        guard let credential else { return }
         do {
-            var request = URLRequest(url: statusURL)
+            var request = URLRequest(url: credential.statusURL)
             request.cachePolicy = .reloadIgnoringLocalCacheData
             request.timeoutInterval = 5
+            request.setValue("Bearer \(credential.token)", forHTTPHeaderField: "Authorization")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 throw URLError(.badServerResponse)

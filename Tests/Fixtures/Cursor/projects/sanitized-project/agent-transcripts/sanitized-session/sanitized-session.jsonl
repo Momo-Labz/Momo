@@ -1,0 +1,2 @@
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>Polish the sanitized dashboard</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"I will refine the layout without exposing private data."}]}}

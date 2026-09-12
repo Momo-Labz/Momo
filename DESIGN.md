@@ -1,9 +1,9 @@
 ---
 # gstack: design-md-format=spec
-name: BAR BOY
+name: MOMO
 description: A compact pixel-industrial command surface with hard edges, honest data, and one coral interruption signal.
 colors:
-  primary: "#211F1E"
+  primary: "#201E1D"
   on-primary: "#F3F2F2"
   surface: "#2B2928"
   text: "#F3F2F2"
@@ -58,7 +58,7 @@ components:
     textColor: "{colors.text}"
 ---
 
-# BAR BOY
+# MOMO
 
 ## Overview
 
@@ -68,7 +68,9 @@ components:
 
 **Mode per surface:** The compact menu popup is an Operate glance surface. The expanded desktop hub is an Operate investigation surface. The iOS companion is an Operate return queue. The desk display is a Read surface.
 
-**Reference:** The user-supplied HeyClicky screenshot informs the top navigation, shortcut keycaps, and horizontal composition. BAR BOY keeps its own Momo Labz pixel identity, hard edges, and return-queue hierarchy.
+**Reference:** The user-supplied HeyClicky screenshot informs the top navigation, shortcut keycaps, and horizontal composition. MOMO keeps its own Momo Labz pixel identity, hard edges, and return-queue hierarchy.
+
+**Momo Labz source language:** The supplied studio HTML and bundled mark establish `#201E1D` ink, `#F3F2F2` paper, crisp pixel geometry, two-weight rules, compact uppercase labels, solid inverse actions, and short character-led status copy. MOMO uses those exact base colors on Mac, iPhone, and desk display; denser one-point rules are retained where the native utility scale needs them.
 
 **Key characteristics:**
 
@@ -106,7 +108,7 @@ Primary controls and data surfaces are square. A 2-point radius is permitted onl
 
 ## Components
 
-Primary actions invert the entire rectangular surface. Provider cards use the provider's real app icon when installed and a recognizable monochrome glyph otherwise. Urgent rows use a coral outline and tint. Selected tabs are filled rectangles. Keycaps are separate 24-point rectangular tokens. Disabled future voice actions are visibly labeled NEXT rather than appearing functional.
+Primary actions invert the entire rectangular surface. Provider cards use the owner-supplied Claude, Codex, Cursor, and Grok identity assets on a paper tile; Gemini keeps a recognizable monochrome fallback. Urgent rows use a coral outline and tint. Selected tabs are filled rectangles. Keycaps are separate 24-point rectangular tokens. Disabled future voice actions are visibly labeled NEXT rather than appearing functional.
 
 ## Do's and Don'ts
 
@@ -135,3 +137,5 @@ Primary actions invert the entire rectangular surface. Provider cards use the pr
 | 2026-09-10 | Use a compact models-only popup plus an expandable three-tab hub | It keeps the menu interaction fast while preserving a serious workspace for agents and tools. |
 | 2026-09-10 | Keep provider marks monochrome and subordinate to Momo Labz | Providers remain recognizable without turning the product into a logo collage. |
 | 2026-09-10 | Use one-shot Momo motion and no looping attention animation | It adds identity without making a frequently used productivity tool tiring. |
+| 2026-09-11 | Align native surfaces to the supplied Momo Labz site and bundled icon | Exact ink/paper colors, crisp edges, inverse actions, and brief Momo status copy now carry across the product family. |
+| 2026-09-11 | Use the owner-supplied provider identity assets | Claude, Codex, Cursor, and Grok now match the supplied marks on both Mac and iPhone without disappearing in dark mode. |

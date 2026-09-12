@@ -2,10 +2,20 @@ import SwiftUI
 
 private enum RelayStyle {
     static let ink = Color.primary
-    static let panel = Color(uiColor: .systemBackground)
+    static let panel = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : UIColor(red: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
+    static let inverseInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 32 / 255, green: 30 / 255, blue: 29 / 255, alpha: 1)
+            : UIColor(red: 243 / 255, green: 242 / 255, blue: 242 / 255, alpha: 1)
+    })
     static let surface = Color.primary.opacity(0.045)
     static let line = Color.primary.opacity(0.24)
-    static let coral = Color(red: 0.91, green: 0.25, blue: 0.15)
+    static let paper = Color(red: 243.0 / 255.0, green: 242.0 / 255.0, blue: 242.0 / 255.0)
+    static let coral = Color(red: 226.0 / 255.0, green: 92.0 / 255.0, blue: 72.0 / 255.0)
 }
 
 struct RelayRootView: View {
@@ -36,7 +46,7 @@ private struct PairView: View {
             Text("Your agents return here.")
                 .font(.title3.weight(.semibold))
                 .padding(.top, 6)
-            Text("Paste the pairing address from BAR BOY on your Mac. The address includes a private local key and stays in this iPhone's Keychain.")
+            Text("Paste the pairing address from MOMO on your Mac. Its one-time setup key is stored separately from the status address in this iPhone's Keychain.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .padding(.top, 10)
@@ -52,7 +62,7 @@ private struct PairView: View {
                 .font(.system(size: 12, weight: .black, design: .monospaced))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14)
-                .foregroundStyle(Color(UIColor.systemBackground))
+                .foregroundStyle(RelayStyle.inverseInk)
                 .background(Color.primary)
                 .padding(.top, 10)
             if case let .offline(message) = store.connection {
@@ -263,27 +273,65 @@ private struct MobileCapabilitySection: View {
 }
 
 private struct RelayProviderIcon: View {
-    let provider: RelayProvider
+    let providerID: String
+    let providerName: String
+    let providerMark: String
+    let active: Bool
     let size: CGFloat
+
+    init(provider: RelayProvider, size: CGFloat) {
+        providerID = provider.id
+        providerName = provider.name
+        providerMark = provider.mark
+        active = provider.active > 0
+        self.size = size
+    }
+
+    init(session: RelaySession, size: CGFloat) {
+        providerID = session.provider.lowercased()
+        providerName = session.provider
+        providerMark = session.mark
+        active = session.live
+        self.size = size
+    }
+
     var body: some View {
         ZStack {
-            Rectangle().fill(provider.active > 0 ? Color.primary : RelayStyle.surface)
-            Group {
-                switch provider.id.lowercased() {
-                case "codex": Text("⌬")
-                case "claude": Text("✳")
-                case "gemini": Text("✦")
-                case "cursor": Image(systemName: "cursorarrow")
-                case "grok": Text("𝕏")
-                default: Text(provider.mark)
+            Rectangle().fill(active ? Color.primary : RelayStyle.surface)
+            if let assetName {
+                Rectangle()
+                    .fill(RelayStyle.paper)
+                    .padding(active ? 2 : 1)
+                Image(assetName)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFit()
+                    .padding(size * 0.13)
+            } else {
+                Group {
+                    switch providerID.lowercased() {
+                    case "gemini": Text("✦")
+                    case "grok": Text("𝕏")
+                    default: Text(providerMark)
+                    }
                 }
+                .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
+                .foregroundStyle(active ? RelayStyle.panel : Color.primary)
             }
-            .font(.system(size: size * 0.52, weight: .black, design: .monospaced))
-            .foregroundStyle(provider.active > 0 ? RelayStyle.panel : Color.primary)
         }
         .frame(width: size, height: size)
         .overlay(Rectangle().stroke(RelayStyle.line, lineWidth: 1))
-        .accessibilityLabel(provider.name)
+        .accessibilityLabel(providerName)
+    }
+
+    private var assetName: String? {
+        switch providerID.lowercased() {
+        case "codex": return "ProviderCodex"
+        case "claude": return "ProviderClaude"
+        case "cursor": return "ProviderCursor"
+        case "grok": return "ProviderGrok"
+        default: return nil
+        }
     }
 }
 
@@ -294,7 +342,7 @@ private struct SessionButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                Text(session.mark).font(.headline).frame(width: 31, height: 31).foregroundStyle(Color(UIColor.systemBackground)).background(Color.primary)
+                RelayProviderIcon(session: session, size: 31)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(session.title).font(.subheadline.weight(.semibold)).lineLimit(1)
                     Text(session.urgent ? (session.attentionReason ?? session.attentionLabel) : session.provenance)

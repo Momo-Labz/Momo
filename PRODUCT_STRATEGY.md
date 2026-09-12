@@ -1,6 +1,6 @@
 # Product direction: remove the human prompt bottleneck
 
-`BAR BOY` can remain a working title. The durable idea is not another usage meter and not another general chat window. It is the place where parallel AI work returns to the human.
+MOMO is not another usage meter and not another general chat window. It is the place where parallel AI work returns to the human.
 
 ## The wedge
 
@@ -32,7 +32,7 @@ Codex / Claude / Gemini / Cursor / Grok
 7. **Local-first by default.** Session titles and project context stay on the Mac; cloud sync is optional and encrypted if it is ever added.
 8. **Capability receipts.** Each return carries the model, MCP servers, plugins, and skills actually recorded in that session—not merely everything installed on the machine.
 9. **One permission map.** Momo grants access once per supported provider or MCP server, sees the scope, and can revoke it without hunting through individual agent apps.
-10. **Human-latency accounting.** Measure how long agents waited for a person, which questions caused the delay, and how much parallel work the return queue recovered. That makes BAR BOY an orchestration product rather than a decorative activity monitor.
+10. **Human-latency accounting.** Measure how long agents waited for a person, which questions caused the delay, and how much parallel work the return queue recovered. That makes MOMO an orchestration product rather than a decorative activity monitor.
 
 ## Authorization ladder
 
@@ -72,11 +72,10 @@ Codex / Claude / Gemini / Cursor / Grok
 - Confirmation receipts, undo where possible, and complete action history
 - Encrypted phone/watch relay for urgent approvals away from the desk
 
-## Naming territories
+## Product family
 
-- **MOMO RELAY** — strongest fit for routing attention between people and agents
-- **AGENT DESK** — clearest descriptive name and strong fit for the hardware
-- **MOMO OPS** — more technical and expandable into teams
-- **BAR BOY** — memorable working title, but less immediately legible as an AI product
+- **MOMO** — the Mac hub and primary product
+- **MOMO RELAY** — the iPhone return queue
+- **MOMO AGENT DESK** — the optional ambient hardware display
 
-Keep the application display name in one build setting and the in-product wordmark in one component so a rename does not require an architectural change.
+Keep the application display name in one build setting and the in-product wordmark in one component so future naming refinements do not require an architectural change.

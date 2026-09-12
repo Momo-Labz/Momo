@@ -96,7 +96,7 @@ struct DashboardView: View {
             AnimatedMomoMark(size: 32)
             VStack(alignment: .leading, spacing: 1) {
                 Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
-                Text("BAR BOY").font(BarBoyStyle.display).tracking(0.9)
+                Text("MOMO").font(BarBoyStyle.display).tracking(0.9)
             }
             HStack(spacing: 4) {
                 ForEach(DashboardTab.allCases) { item in
@@ -443,6 +443,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
+    static let canvasSize = CGSize(width: 430, height: 174)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -476,7 +477,7 @@ struct CompactDashboardView: View {
                         .font(BarBoyStyle.microLabel)
                 }
                 .barBoyButton()
-                .help("Open the full BAR BOY hub")
+                .help("Open the full MOMO hub")
             }
             .padding(.horizontal, 12)
             .frame(height: 52)
