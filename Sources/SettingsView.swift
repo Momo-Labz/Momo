@@ -16,6 +16,7 @@ struct SettingsView: View {
     @State private var shortcutNotice: String?
     @AppStorage("hapticFeedback") private var hapticFeedback = true
     @State private var pendingProvider: AIProvider?
+    @State private var pendingRoot: String?
     private var refreshIntervalLabel: String {
         let seconds = Int(ActivityMonitor.refreshInterval)
         return "\(seconds) second\(seconds == 1 ? "" : "s")"
@@ -39,17 +40,18 @@ struct SettingsView: View {
         .frame(width: 590, height: 480)
         .alert("Authorize local access", isPresented: Binding(
             get: { pendingProvider != nil },
-            set: { if !$0 { pendingProvider = nil } }
+            set: { if !$0 { pendingProvider = nil; pendingRoot = nil } }
         ), presenting: pendingProvider) { provider in
             Button("Authorize \(provider.name)") {
+                if let pendingRoot { preferences.addLocalRoot(pendingRoot, for: provider) }
                 preferences.setEnabled(true, for: provider)
                 monitor.setAuthorizedRoots(authorizedRootURLs)
                 monitor.setAuthorizedProviders(preferences.enabledProviders)
-                pendingProvider = nil
+                pendingProvider = nil; pendingRoot = nil
             }
-            Button("Cancel", role: .cancel) { pendingProvider = nil }
+            Button("Cancel", role: .cancel) { pendingProvider = nil; pendingRoot = nil }
         } message: { provider in
-            Text(authorizationMessage(for: provider))
+            Text(authorizationMessage(for: provider, root: pendingRoot))
         }
     }
 
@@ -120,9 +122,9 @@ struct SettingsView: View {
         .onAppear { monitor.setAuthorizedRoots(authorizedRootURLs) }
     }
 
-    private func authorizationMessage(for provider: AIProvider) -> String {
-        let roots = provider.sessionRoots.joined(separator: " or ")
-        return "Allow MOMO to read \(provider.name) session metadata and recorded capability fields under \(roots)? This is local folder access, not remote account sign-in. The folders may contain more than one account, so this permission covers every account stored there. MOMO will not read passwords, browser cookies, prompts, tool arguments, or credentials. You can revoke access here."
+    private func authorizationMessage(for provider: AIProvider, root: String? = nil) -> String {
+        let location = root ?? provider.sessionRoots.joined(separator: " or ")
+        return "Allow MOMO to read \(provider.name) session metadata and recorded capability fields under \(location)? This approval is for this local folder only. If an account uses another folder, authorize that folder separately. MOMO will not read passwords, browser cookies, prompts, tool arguments, or credentials. You can revoke access here."
     }
 
     private func providerRow(_ provider: AIProvider) -> some View {
@@ -154,12 +156,12 @@ struct SettingsView: View {
             .labelsHidden()
             }
             HStack(spacing: 8) {
-                Button("Choose local session folder") { chooseLocalRoot(for: provider) }
+                Button(preferences.roots(for: provider).isEmpty ? "Authorize account folder" : "Add account folder") { chooseLocalRoot(for: provider) }
                     .barBoyButton()
-                if let path = preferences.roots(for: provider).first {
-                    Text(URL(fileURLWithPath: path).lastPathComponent)
+                if !preferences.roots(for: provider).isEmpty {
+                    Text(preferences.roots(for: provider).map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: ", "))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        .help(path)
+                        .help(preferences.roots(for: provider).joined(separator: "\n"))
                 } else {
                     Text("Default: \(provider.sessionRoots.joined(separator: ", "))")
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
@@ -179,7 +181,7 @@ struct SettingsView: View {
         panel.message = "Choose the \(provider.name) session folder MOMO may read."
         panel.prompt = "Use Folder"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        preferences.setLocalRoot(url.path, for: provider)
+        pendingRoot = url.path
         pendingProvider = provider
     }
 

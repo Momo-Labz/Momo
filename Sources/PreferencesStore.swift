@@ -90,6 +90,16 @@ final class PreferencesStore: ObservableObject {
         defaults.set(Dictionary(uniqueKeysWithValues: localProviderRoots.map { ($0.key.rawValue, $0.value) }), forKey: "localProviderRoots.v1")
     }
 
+    func addLocalRoot(_ path: String, for provider: AIProvider) {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var roots = localProviderRoots[provider] ?? []
+        guard !roots.contains(trimmed) else { return }
+        roots.append(trimmed)
+        localProviderRoots[provider] = roots
+        defaults.set(Dictionary(uniqueKeysWithValues: localProviderRoots.map { ($0.key.rawValue, $0.value) }), forKey: "localProviderRoots.v1")
+    }
+
     func clearLocalRoots(for provider: AIProvider) {
         localProviderRoots.removeValue(forKey: provider)
         defaults.set(Dictionary(uniqueKeysWithValues: localProviderRoots.map { ($0.key.rawValue, $0.value) }), forKey: "localProviderRoots.v1")

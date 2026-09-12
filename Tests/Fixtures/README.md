@@ -9,3 +9,15 @@ Sources inspected 2026-09-12:
 - https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/services/chatRecordingService.ts
 
 Authorized sanitized local Gemini and Grok captures remain pending. Never add raw prompts, responses, personal paths, account identifiers, tool arguments/results, or credentials to captured fixtures. Grok's documented schema reference is https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/17-sessions.md and https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-pager/docs/user-guide/14-headless-mode.md.
+
+## Authorized capture workflow
+
+MOMO asks for one local account folder at a time in Settings → Access. After approving that exact folder, create a reviewable sanitized capture with:
+
+```sh
+python3 Scripts/capture_sanitized_fixture.py gemini /path/to/one-account-session-folder \
+  --output Tests/Fixtures/captured/gemini/account-1 \
+  --account-label account-1 --confirm-authorization
+```
+
+Use `grok` and a Grok session folder for the other provider. The script records only schema fields needed by the adapters, removes prompts, responses, paths, credentials, tool arguments/results, and account identifiers, and writes a manifest without the source path. Review the generated files before committing them.
