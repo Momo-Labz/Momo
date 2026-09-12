@@ -296,9 +296,9 @@ struct ProviderAccessPlan: Identifiable {
     static let all: [ProviderAccessPlan] = [
         .init(provider: .codex, current: .organizationAPI, detail: "Local Codex sessions work now.", future: "OpenAI organization usage can use an admin key; ChatGPT consumer access waits for a supported delegated API."),
         .init(provider: .claude, current: .organizationAPI, detail: "Local Claude sessions work now.", future: "Anthropic organization usage can use an Admin API key; consumer-plan access waits for a supported delegated API."),
-        .init(provider: .gemini, current: .awaitingProvider, detail: "Gemini CLI schema adapter available; local fixture validation pending.", future: "Account usage will connect only through a provider-supported OAuth scope."),
+        .init(provider: .gemini, current: .awaitingProvider, detail: "Gemini ConversationRecord adapter is ready; local capture requires folder authorization.", future: "Account usage will connect only through a provider-supported OAuth scope."),
         .init(provider: .cursor, current: .awaitingProvider, detail: "Local Cursor activity works now.", future: "Account usage stays linked to Cursor's official dashboard until a supported API is available."),
-        .init(provider: .grok, current: .awaitingProvider, detail: "Grok process detection only; session schema validation pending.", future: "xAI usage will use an official API credential or delegated authorization when available.")
+        .init(provider: .grok, current: .awaitingProvider, detail: "Grok Build session adapter is ready; local capture requires folder authorization.", future: "xAI usage will use an official API credential or delegated authorization when available.")
     ]
 }
 

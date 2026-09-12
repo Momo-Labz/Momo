@@ -48,7 +48,7 @@ struct SettingsView: View {
             }
             Button("Cancel", role: .cancel) { pendingProvider = nil }
         } message: { provider in
-            Text("Allow MOMO to read \(provider.name) session metadata and capability configuration in this Mac user’s local folders and detect its processes? This does not connect a remote account. Local files may include multiple accounts; authorize only if you permit access to all accounts in those folders. You can revoke access here.")
+            Text(authorizationMessage(for: provider))
         }
     }
 
@@ -109,6 +109,11 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
         }
         .padding(24)
+    }
+
+    private func authorizationMessage(for provider: AIProvider) -> String {
+        let roots = provider.sessionRoots.joined(separator: " or ")
+        return "Allow MOMO to read \(provider.name) session metadata and recorded capability fields under \(roots)? This is local folder access, not remote account sign-in. The folders may contain more than one account, so this permission covers every account stored there. MOMO will not read passwords, browser cookies, prompts, tool arguments, or credentials. You can revoke access here."
     }
 
     private func providerRow(_ provider: AIProvider) -> some View {
