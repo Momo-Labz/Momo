@@ -396,7 +396,7 @@ struct DashboardView: View {
                                             .frame(width: 7, height: 7)
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(1)
-                                            Text([session.model, session.skills.first, session.mcpServers.first].compactMap { $0 }.joined(separator: " · "))
+                                            Text([session.model, session.project, session.tokens.map { "\($0) TOKENS" }, session.capabilitySummary].compactMap { $0 }.joined(separator: " · "))
                                                 .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
                                         }
                                         Spacer()
@@ -696,7 +696,17 @@ private struct CompactProviderCell: View {
 
     private var runningHelp: String {
         guard let running else { return "No running conversation recorded for \(snapshot.provider.name)." }
-        return "\(running.title)\nFolder: \(running.project)"
+        return "\(running.title)\nFolder: \(running.project)\nModel: \(running.model ?? "—")\n\(running.detail)"
+    }
+
+    private var runningMeta: String? {
+        guard let running else { return nil }
+        let values = [
+            running.model,
+            running.project,
+            running.processID.map { "PID \($0)" }
+        ].compactMap { $0 }.filter { !$0.isEmpty }
+        return values.isEmpty ? nil : values.joined(separator: " · ").uppercased()
     }
 
     var body: some View {
@@ -713,6 +723,10 @@ private struct CompactProviderCell: View {
             Text(runningLine).font(.system(size: 7, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                 .help(runningHelp)
+            if let runningMeta {
+                Text(runningMeta).font(.system(size: 6, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+            }
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 Text(snapshot.tokenLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
