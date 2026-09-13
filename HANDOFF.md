@@ -216,3 +216,9 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - The compact header was tightened to the MOMO navigation treatment: mini Home, Agents, Tools, and Brain buttons sit beside the status badge, labeled OFF control, and Expand.
 - When a local model is available, `ASK LOCAL AGENT` asks Ollama for a three-bullet graph summary using only recorded provider, project, and chat names. The result appears below the graph; the action is disabled while Ollama is offline.
 - When Ollama is offline, Brain shows `SET UP OLLAMA`. The button requires an explicit confirmation, then opens Ollama's official macOS download page; MOMO never downloads or installs a server silently.
+
+## Reference compact navigation pass (2026-09-12)
+
+- Compact menu width is now 760 points so Home, Agents, Tools, and Network labels remain readable beside the MOMO identity. The control row keeps Provider, Refresh, Expand/Contract, Overview, Settings, and OFF in one proportionate toolbar.
+- Expand continues to reuse the same menu surface; the button changes to CONTRACT and returns to the compact state without opening a second dashboard shell.
+- Snapshot: `/tmp/momo-compact-models.png`. Full macOS suite after this pass: 64 tests, 2 skipped, 0 failures.

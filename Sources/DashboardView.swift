@@ -88,7 +88,7 @@ struct DashboardView: View {
                 Button("QUICK ASK") { showNewAsk() }.barBoyButton()
             }.padding(12)
         }
-        .frame(width: 430)
+        .frame(width: CompactDashboardView.canvasSize.width)
         .frame(minHeight: 500)
         .background(BarBoyStyle.panel)
         .animation(paneAnimation, value: surface.pane)
@@ -649,7 +649,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
-    static let canvasSize = CGSize(width: 430, height: 238)
+    static let canvasSize = CGSize(width: 760, height: 260)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -681,10 +681,10 @@ struct CompactDashboardView: View {
                 }
                 Spacer()
                 HStack(spacing: 2) {
-                    CompactHeaderButton(symbol: "square.grid.2x2.fill", help: "Home") { openWindow(id: "overview") }
-                    CompactHeaderButton(symbol: "sparkles", help: "Agents") { openWindow(id: "overview") }
-                    CompactHeaderButton(symbol: "square.stack.3d.up.fill", help: "Tools") { openWindow(id: "overview") }
-                    CompactHeaderButton(symbol: "point.3.connected.trianglepath.dotted", help: "MOMO Brain") { openWindow(id: "overview") }
+                    CompactHeaderButton(title: "HOME", symbol: "square.grid.2x2.fill", help: "Home") { openWindow(id: "overview") }
+                    CompactHeaderButton(title: "AGENTS", symbol: "sparkles", help: "Agents") { openWindow(id: "overview") }
+                    CompactHeaderButton(title: "TOOLS", symbol: "square.stack.3d.up.fill", help: "Tools") { openWindow(id: "overview") }
+                    CompactHeaderButton(title: "NETWORK", symbol: "point.3.connected.trianglepath.dotted", help: "MOMO Brain") { openWindow(id: "overview") }
                 }
                 if urgentCount > 0 {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
@@ -704,8 +704,10 @@ struct CompactDashboardView: View {
                 .help(expanded ? "Contract MOMO into the menu bar" : "Expand MOMO from the menu bar")
                 Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
                 Spacer(minLength: 0)
-                Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
-                    .barBoyIconButton().help("Provider authorization and settings")
+                Button { openSettings() } label: {
+                    Label("SETTINGS", systemImage: "gearshape.fill").font(BarBoyStyle.microLabel)
+                }
+                .barBoyButton().help("Provider authorization and settings")
                 Button { NSApplication.shared.terminate(nil) } label: {
                     Label("OFF", systemImage: "power").font(BarBoyStyle.microLabel)
                 }
@@ -732,7 +734,7 @@ struct CompactDashboardView: View {
             }
             .padding(12)
         }
-        .frame(width: 430, height: Self.canvasSize.height)
+        .frame(width: Self.canvasSize.width, height: Self.canvasSize.height)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
@@ -760,15 +762,17 @@ struct CompactDashboardView: View {
 }
 
 private struct CompactHeaderButton: View {
+    let title: String
     let symbol: String
     let help: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .bold))
-                .frame(width: 24, height: 24)
+            Label(title, systemImage: symbol)
+                .font(BarBoyStyle.navLabel)
+                .padding(.horizontal, 12)
+                .frame(height: 42)
                 .background(BarBoyStyle.surface)
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         }
