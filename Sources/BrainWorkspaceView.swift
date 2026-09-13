@@ -54,6 +54,16 @@ actor VaultLayoutEngine {
                 positions[i].y = min(340, max(35, positions[i].y + forces[i].y))
             }
         }
+        // Fit the relaxed cluster to the canvas so linked notes do not collapse
+        // into a small, unreadable group in the center.
+        if positions.count > 1,
+           let minX = positions.map(\.x).min(), let maxX = positions.map(\.x).max(),
+           let minY = positions.map(\.y).min(), let maxY = positions.map(\.y).max() {
+            positions = positions.map {
+                CGPoint(x: 60 + ($0.x - minX) / max(1, maxX - minX) * 400,
+                        y: 45 + ($0.y - minY) / max(1, maxY - minY) * 280)
+            }
+        }
         return VaultVisualSnapshot(nodes: nodes, edges: edges,
             positions: Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($1.id, positions[$0]) }))
     }
@@ -150,6 +160,7 @@ struct BrainWorkspaceView: View {
             if let message { Text(message).font(.system(size: 12)).foregroundStyle(BarBoyStyle.amber) }
         }
         .padding(16)
+        .background(BarBoyStyle.panel)
         .task {
             mappings = (UserDefaults.standard.data(forKey: mappingKey).flatMap { try? JSONDecoder().decode([BrainFolderMapping].self, from: $0) }) ?? []
             if refreshOnAppear { await ollama.refresh() }

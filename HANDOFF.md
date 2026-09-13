@@ -1,5 +1,27 @@
 # MOMO handoff
 
+## September 13 checkpoint — attached menu and vault Brain
+
+This section supersedes older progress notes below. The implementation checkpoint is `e45cf86`; a follow-up corrects the Brain background/layout and refreshes the README and screenshots.
+
+Verification on September 13: 79 tests total, 78 passed, one opt-in live-data check skipped, zero failures. Result bundle: `/tmp/momo-checkpoint/Logs/Test/Test-BarBoy-2026.09.13_05-45-05--0500.xcresult`. The compact, expanded, attention and Brain screenshots were regenerated with synthetic data; the Brain graph was visually checked after correcting its opaque background and spreading the node cluster to the canvas.
+
+- `BarBoyApp` retains one `DashboardView` root in MenuBarExtra. Shared provider/page/attention state lives in `MomoSurface`; Expand and provider selection route inside that surface. Overview remains an explicit separate window. Shortcut routing prepares the menu state but still requires live verification of menu opening/focus.
+- `BrainWorkspaceView` provides a vault-backed graph, search, backlinks, pan/zoom, explicit project-folder mappings, local-model selection, suggestion review and a new-note save preview. Recorded links are solid; unaccepted suggestions are dashed. Accepted suggestions stay session-local until saved.
+- `VaultIndexService` is an actor with incremental metadata caching. It resolves Markdown/wiki links, preserves ambiguous targets as unresolved, skips hidden files/symlinks, and checks vault containment. Note bodies are read on demand. Index limits: 20,000 notes, 256 KiB metadata per note; selected-note reads are capped at 1 MiB. Links beyond those limits are not guaranteed complete.
+- `OllamaService.shared` owns the production generation queue and model choice. It supports an injectable client, cancellation and explicit states, a bounded 12-entry five-minute cache keyed by source revision, 4,096 context and 384 generated-token requests, and `keep_alive: 30s`. These are request bounds, not proof of actual model-memory release.
+- No user vault was selected or modified during testing. Snapshot notes and session activity are synthetic. No live inference, microphone, desktop continuation or notification delivery is claimed verified.
+- Fresh captures are stored under `Docs/momo-*-current.png`. The README includes build/install steps and Brain setup. An app archive is produced outside tracked sources under `MOMO Releases/0.5-checkpoint/`; it is a development build, not a notarized public release.
+
+Run fixture verification from the repository root:
+
+```sh
+xcodegen generate
+xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' BAR_BOY_RENDER_SNAPSHOTS=1 test CODE_SIGNING_ALLOWED=NO
+```
+
+Remaining validation: actual menu anchoring/focus on the installed app, live voice/notification actions, live Ollama idle RSS/CPU and model unloading, and a user-selected real vault. Synthetic index and graph performance checks exercise bounded workloads; they do not substitute for a long idle-energy profile.
+
 ## Current state
 
 Version 0.5 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO RELAY companion, and a printable Agent Desk prototype. The Mac opens as a compact models-only strip and expands in place into a Chat/Ask workflow plus mini Home, Agents, Tools, and Brain previews. Both apps prioritize the human return queue and expose model/MCP/plugin/skill provenance when sessions provide it. The Mac separately inventories installed MCP servers, plugins, marketplaces, and skills and marks only capabilities with recorded session evidence as `USED`. Core monitoring remains local and requires no provider credentials.
