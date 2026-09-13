@@ -33,11 +33,24 @@ final class MomoSurface: ObservableObject {
     static let shared = MomoSurface()
     @Published var pane: MomoPane = .sessions
     @Published var expanded = false
+    /// State shared by the compact menu and its in-place expanded surface.
+    /// Keeping this here prevents the menu and the expanded content from
+    /// drifting apart when the user changes provider or page.
+    @Published var selectedProvider: AIProvider?
+    @Published var page: DashboardTab = .home
+    @Published var attentionOnly = false
     /// True when the pane changed from a keyboard shortcut, which must not animate.
     @Published var lastChangeWasKeyboard = false
 
     func show(_ pane: MomoPane, fromKeyboard: Bool = false) {
         lastChangeWasKeyboard = fromKeyboard
         self.pane = pane
+    }
+
+    func selectProvider(_ provider: AIProvider?) {
+        selectedProvider = provider
+        guard let provider else { return }
+        QuickAskContext.shared.provider = provider
+        QuickAskContext.shared.targetProvider = provider
     }
 }

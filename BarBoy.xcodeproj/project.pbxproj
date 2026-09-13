@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		009909D80F56BE20EC7E27D3 /* RelayContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */; };
+		03DF24FEEFAB26F4DFDAC1AC /* BrainBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0DDBB3BDDDD86AD85C2D204 /* BrainBackendTests.swift */; };
 		0802C41ACA287566BC7D56FE /* momo-index-frames.json in Resources */ = {isa = PBXBuildFile; fileRef = 6F8BBDBA397DACEB28BE4C94 /* momo-index-frames.json */; };
 		09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2244A22CE29B93DD607E1 /* SettingsView.swift */; };
 		136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */; };
@@ -34,6 +35,7 @@
 		76F832EA656D975C3B04DDFF /* BarBoyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4636595E64156A63431C041 /* BarBoyTests.swift */; };
 		7882380E753C1D32CCCB3D4E /* mcp.json in Resources */ = {isa = PBXBuildFile; fileRef = 1E40F78C9E6FDDAEFC05B8A5 /* mcp.json */; };
 		7B9EDC7D9C229953EDD39DDD /* CodexSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */; };
+		83A76A2F000E44F112C888F7 /* BrainVisualTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39DF5923C083CA52AA8C57BE /* BrainVisualTests.swift */; };
 		84DED67B26BC691668B312A2 /* VoiceInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76996AA8D94E9B84E90875E /* VoiceInput.swift */; };
 		854A48BAD75E91A6E9AE7AEB /* RelayStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */; };
 		8D8CE207E25B42D4B67C7365 /* CursorSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1C3032736B1985587C1BAC8 /* CursorSessionAdapter.swift */; };
@@ -52,7 +54,9 @@
 		E052D23FE428CEED342603E6 /* icon-source.png in Resources */ = {isa = PBXBuildFile; fileRef = D3D299542F8A6FB8744AAD52 /* icon-source.png */; };
 		E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */; };
 		E8074D2914582CC7BF9D7902 /* sanitized-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = 565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */; };
+		E8C81DC057C767DD6DB7AEE3 /* BrainWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D379A0AD44CAB4D3F533E /* BrainWorkspaceView.swift */; };
 		F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479945A2B783FEEB67F51BD8 /* RelayModels.swift */; };
+		F17FFB4218519015022F8478 /* VaultIndexService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C114ABCEFAED659EEBE0D9 /* VaultIndexService.swift */; };
 		F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */; };
 		F8912305CB95E1F9EFD74818 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 532B6989DEC8AFDE334B990F /* Assets.xcassets */; };
 		F989C4417EB9D613B957E31D /* README.md in Resources */ = {isa = PBXBuildFile; fileRef = 98FE083AC1D1EA0A6CA61476 /* README.md */; };
@@ -72,11 +76,13 @@
 /* Begin PBXFileReference section */
 		02DB6F8D5A8498E6FCE4C927 /* RelayRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayRootView.swift; sourceTree = "<group>"; };
 		0F40C1CBE4E2B88359F0ECC6 /* RelayStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayStore.swift; sourceTree = "<group>"; };
+		15C114ABCEFAED659EEBE0D9 /* VaultIndexService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultIndexService.swift; sourceTree = "<group>"; };
 		1CB2244A22CE29B93DD607E1 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		1E40F78C9E6FDDAEFC05B8A5 /* mcp.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = mcp.json; sourceTree = "<group>"; };
 		1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayKeychain.swift; sourceTree = "<group>"; };
 		3020B8662144C4584146E42E /* BRAND_FIXTURE.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = BRAND_FIXTURE.txt; sourceTree = "<group>"; };
 		374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = known_marketplaces.json; sourceTree = "<group>"; };
+		39DF5923C083CA52AA8C57BE /* BrainVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainVisualTests.swift; sourceTree = "<group>"; };
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BarBoyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		479945A2B783FEEB67F51BD8 /* RelayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayModels.swift; sourceTree = "<group>"; };
@@ -90,6 +96,7 @@
 		5874E9B2BAD42C1998849812 /* MomoSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomoSurface.swift; sourceTree = "<group>"; };
 		5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyApp.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
+		6A1D379A0AD44CAB4D3F533E /* BrainWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainWorkspaceView.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
 		6F8BBDBA397DACEB28BE4C94 /* momo-index-frames.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "momo-index-frames.json"; sourceTree = "<group>"; };
 		7186CCEFF286C3FE6572CFF1 /* OllamaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OllamaService.swift; sourceTree = "<group>"; };
@@ -106,6 +113,7 @@
 		A72CEEC45826A8C44AED2A86 /* BarBoyMobileApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BarBoyMobileApp.swift; sourceTree = "<group>"; };
 		A80F4CD2A60C6ABF98C794EF /* .claude.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = .claude.json; sourceTree = "<group>"; };
 		AD736D8462A2F0D789868829 /* CodexSessionAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexSessionAdapter.swift; sourceTree = "<group>"; };
+		B0DDBB3BDDDD86AD85C2D204 /* BrainBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainBackendTests.swift; sourceTree = "<group>"; };
 		B76996AA8D94E9B84E90875E /* VoiceInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInput.swift; sourceTree = "<group>"; };
 		BCAC7F7450275946880E2540 /* gemini-public-conversation.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = "gemini-public-conversation.json"; sourceTree = "<group>"; };
 		C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreferencesStore.swift; sourceTree = "<group>"; };
@@ -199,6 +207,7 @@
 				CCA94527A39181A6696901C9 /* ActivityMonitor.swift */,
 				DCA99E1EA403BF09F258AE4E /* AttentionNotifier.swift */,
 				5A6A09E60B441CA2C24878F3 /* BarBoyApp.swift */,
+				6A1D379A0AD44CAB4D3F533E /* BrainWorkspaceView.swift */,
 				A2182EBD0728CDF9DA9E5EAD /* CapabilityInventoryView.swift */,
 				E97EABE168680367E8C4D28E /* CommandPaletteView.swift */,
 				9D568DC6BE830956FA389F7D /* DashboardView.swift */,
@@ -212,6 +221,7 @@
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
 				E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */,
 				1CB2244A22CE29B93DD607E1 /* SettingsView.swift */,
+				15C114ABCEFAED659EEBE0D9 /* VaultIndexService.swift */,
 				B76996AA8D94E9B84E90875E /* VoiceInput.swift */,
 				670F0E4384D32C6842843F47 /* Adapters */,
 			);
@@ -238,6 +248,8 @@
 			isa = PBXGroup;
 			children = (
 				D4636595E64156A63431C041 /* BarBoyTests.swift */,
+				B0DDBB3BDDDD86AD85C2D204 /* BrainBackendTests.swift */,
+				39DF5923C083CA52AA8C57BE /* BrainVisualTests.swift */,
 				18C3506B51651F4E05EC6AB7 /* Fixtures */,
 			);
 			path = Tests;
@@ -555,6 +567,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				76F832EA656D975C3B04DDFF /* BarBoyTests.swift in Sources */,
+				03DF24FEEFAB26F4DFDAC1AC /* BrainBackendTests.swift in Sources */,
+				83A76A2F000E44F112C888F7 /* BrainVisualTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -565,6 +579,7 @@
 				D775071983646DA197C7AB53 /* ActivityMonitor.swift in Sources */,
 				136C0DA5B426235B89A81EB3 /* AttentionNotifier.swift in Sources */,
 				68A0A85DC321D07519B5F1EC /* BarBoyApp.swift in Sources */,
+				E8C81DC057C767DD6DB7AEE3 /* BrainWorkspaceView.swift in Sources */,
 				DC8B8CBBCD85907533A1CC95 /* CapabilityInventory.swift in Sources */,
 				183991540BDA6768A32500D9 /* CapabilityInventoryView.swift in Sources */,
 				74F7AFD2374B1C1409092407 /* ClaudeSessionAdapter.swift in Sources */,
@@ -585,6 +600,7 @@
 				17307F56295C41FC490603CC /* RelayContract.swift in Sources */,
 				7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */,
 				09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */,
+				F17FFB4218519015022F8478 /* VaultIndexService.swift in Sources */,
 				84DED67B26BC691668B312A2 /* VoiceInput.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

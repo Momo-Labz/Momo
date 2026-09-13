@@ -15,9 +15,9 @@ struct DashboardView: View {
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
-    @State private var selectedProvider: AIProvider?
     @State private var ollamaInsight: String?
     @State private var showOllamaSetup = false
+    @State private var showAllFolders = false
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -45,7 +45,10 @@ struct DashboardView: View {
     }
 
     private var visibleSessions: [AgentSession] {
-        allSessions.filter { providerFilter == nil || $0.provider == providerFilter }
+        allSessions.filter {
+            (providerFilter == nil || $0.provider == providerFilter)
+                && (!surface.attentionOnly || $0.attention.isUrgent)
+        }
     }
 
     private var urgentSessions: [AgentSession] { allSessions.filter { $0.attention.isUrgent } }
@@ -66,12 +69,18 @@ struct DashboardView: View {
                 footer
             }.frame(width: 860, height: 790).background(BarBoyStyle.panel)
                 .task { if refreshOnAppear { monitor.refresh() } }
-        } else { compactExpansion }
+        } else if surface.expanded { compactExpansion }
+        else {
+            CompactDashboardView()
+                .environmentObject(monitor)
+                .environmentObject(preferences)
+        }
     }
 
     private var compactExpansion: some View {
-        VStack(spacing: 0) {
-            CompactDashboardView(refreshOnAppear: false, expanded: true)
+        ScrollView(.vertical) {
+            VStack(spacing: 0) {
+                CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
             miniPageStrip
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
@@ -80,19 +89,24 @@ struct DashboardView: View {
             switch surface.pane {
             case .quickAsk: CommandPaletteView(embedded: true).environmentObject(preferences)
             case .voice: VoicePopup(embedded: true)
-            case .sessions: sessionsPane
+            case .sessions: expandedPage
             }
-            HStack {
-                Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                Spacer()
-                Button("QUICK ASK") { showNewAsk() }.barBoyButton()
-            }.padding(12)
+                HStack {
+                    Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("QUICK ASK") { showNewAsk() }.barBoyButton()
+                }.padding(12)
+            }
         }
         .frame(width: CompactDashboardView.canvasSize.width)
-        .frame(minHeight: 500)
+        .frame(minHeight: 500, maxHeight: expandedHeight)
         .background(BarBoyStyle.panel)
         .animation(paneAnimation, value: surface.pane)
         .task { if refreshOnAppear { monitor.refresh() } }
+    }
+
+    private var expandedHeight: CGFloat {
+        max(500, (NSScreen.main?.visibleFrame.height ?? 760) - 72)
     }
 
     /// Emil's frequency gate: a pane reached by keyboard shortcut must not animate.
@@ -122,32 +136,105 @@ struct DashboardView: View {
     private var miniPageStrip: some View {
         HStack(spacing: 6) {
             MiniPageButton(title: "HOME", symbol: "square.grid.2x2.fill", value: urgentCount == 0 ? "CLEAR" : "\(urgentCount) NEED") {
-                openWindow(id: "overview")
+                surface.page = .home
+                surface.attentionOnly = false
+                surface.show(.sessions)
             }
             MiniPageButton(title: "AGENTS", symbol: "sparkles", value: "\(liveCount) LIVE") {
-                openWindow(id: "overview")
+                surface.page = .agents
+                surface.attentionOnly = false
+                surface.show(.sessions)
             }
             MiniPageButton(title: "TOOLS", symbol: "square.stack.3d.up.fill", value: "\(skillTiles.count + integrationTiles.count)") {
-                openWindow(id: "overview")
+                surface.page = .tools
+                surface.attentionOnly = false
+                surface.show(.sessions)
             }
             MiniPageButton(title: "BRAIN", symbol: "point.3.connected.trianglepath.dotted", value: "\(allSessions.count) CHAT") {
-                openWindow(id: "overview")
+                surface.page = .network
+                surface.attentionOnly = false
+                surface.show(.sessions)
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
     }
 
+    @ViewBuilder
+    private var expandedPage: some View {
+        switch surface.page {
+        case .home:
+            if surface.selectedProvider != nil { providerWorkspace } else { sessionsPane }
+        case .agents: agentsPage
+        case .tools: toolsPage
+        case .network: networkPage
+        }
+    }
+
+    /// Provider-focused workbench shown inside the expanded menu. The folder
+    /// rail keeps the current chat context visible while the existing composer
+    /// preserves drafts and attachments through QuickAskContext.
+    private var providerWorkspace: some View {
+        let snapshot = enabledSnapshots.first { $0.provider == surface.selectedProvider }
+            ?? enabledSnapshots.first
+        let provider = snapshot?.provider ?? surface.selectedProvider ?? .codex
+        let folderDates = Dictionary(grouping: snapshot?.sessions ?? [], by: \.project).mapValues { sessions in
+            sessions.map(\.updatedAt).max() ?? .distantPast
+        }
+        let folders = folderDates.keys.sorted { (folderDates[$0] ?? .distantPast) > (folderDates[$1] ?? .distantPast) }
+        let displayedFolders = showAllFolders ? folders : Array(folders.prefix(3))
+        return HStack(alignment: .top, spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("FOLDERS").font(BarBoyStyle.sectionLabel)
+                Text(provider.name.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+                if folders.isEmpty {
+                    Text("No recorded folders yet.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                } else {
+                    ForEach(displayedFolders, id: \.self) { folder in
+                        Button {
+                            QuickAskContext.shared.newChat()
+                            surface.selectProvider(provider)
+                            QuickAskContext.shared.selectFolder(folder)
+                        } label: {
+                            Label(folder, systemImage: "folder")
+                                .font(BarBoyStyle.bodySmall)
+                                .lineLimit(1)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, 6)
+                        }.buttonStyle(.plain)
+                    }
+                    if folders.count > 3 {
+                        Button(showAllFolders ? "SHOW FEWER" : "+\(folders.count - 3) MORE FOLDERS") {
+                            showAllFolders.toggle()
+                        }
+                        .font(BarBoyStyle.microLabel)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+            }
+            .frame(width: 150, alignment: .topLeading)
+            .padding(14)
+            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
+            CommandPaletteView(embedded: true)
+                .environmentObject(preferences)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, minHeight: 420, alignment: .topLeading)
+    }
+
     private var overviewProviderStrip: some View {
         HStack(spacing: 8) {
             ForEach(enabledSnapshots) { snapshot in
                 Button {
-                    selectedProvider = snapshot.provider
+                    surface.selectProvider(snapshot.provider)
                     if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
                         openReply(session)
                     }
                 } label: {
-                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails, showUsageBar: preferences.showProviderUsageBars)
+                    CompactProviderCell(snapshot: snapshot, isSelected: surface.selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails, showUsageBar: preferences.showProviderUsageBars)
                 }
                 .buttonStyle(.plain)
                 .help("Open \(snapshot.provider.name) status and sessions")
@@ -182,9 +269,10 @@ struct DashboardView: View {
                                 Text("No sessions recorded. Process activity alone cannot identify a chat.")
                                     .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
                             }
-                            ForEach(Array(Set(snapshot.sessions.map(\.project))).sorted(), id: \.self) { folder in
+                            let sessions = surface.attentionOnly ? snapshot.sessions.filter(\.attention.isUrgent) : snapshot.sessions
+                            ForEach(Array(Set(sessions.map(\.project))).sorted(), id: \.self) { folder in
                                 Label(folder, systemImage: "folder").font(.headline).padding(.top, 6)
-                                ForEach(snapshot.sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
+                                ForEach(sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
                                     Button { openReply(session) } label: { SessionRow(session: session, showsFolder: false) }
                                         .buttonStyle(MomoActionButtonStyle())
                                         .background(BarBoyStyle.surface)
@@ -397,7 +485,15 @@ struct DashboardView: View {
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 
+    /// Network is the same in-place Brain workspace in both compact expansion
+    /// and the full overview. The old provider graph remains below as a
+    /// compatibility fallback for recorded-session inspection.
     private var networkPage: some View {
+        BrainWorkspaceView()
+            .frame(maxWidth: .infinity, minHeight: 520, alignment: .topLeading)
+    }
+
+    private var legacyNetworkPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -411,14 +507,14 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Check the local Ollama service")
-                    Button("ASK LOCAL AGENT") {
+                    Button(ollama.isGenerating ? "THINKING…" : "ASK LOCAL AGENT") {
                         Task {
                             let prompt = "Summarize the MOMO local graph in three concise bullets. Providers: \(enabledSnapshots.map { $0.provider.name }.joined(separator: ", ")). Projects: \(Set(allSessions.map(\.project)).joined(separator: ", ")). Chats: \(allSessions.prefix(8).map(\.title).joined(separator: " | ")). Only use these recorded names and say when data is missing."
                             ollamaInsight = await ollama.complete(prompt: prompt) ?? "Start Ollama and load a local model to ask the Brain agent."
                         }
                     }
                     .barBoyButton()
-                    .disabled(!ollama.isAvailable)
+                    .disabled(!ollama.isAvailable || ollama.isGenerating)
                     if !ollama.isAvailable {
                         Button("SET UP OLLAMA") { showOllamaSetup = true }
                             .barBoyButton()
@@ -649,7 +745,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
-    static let canvasSize = CGSize(width: 760, height: 284)
+    static let canvasSize = CGSize(width: 760, height: 320)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -658,7 +754,6 @@ struct CompactDashboardView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
-    @State private var selectedProvider: AIProvider?
     @ObservedObject private var surface = MomoSurface.shared
 
     private var snapshots: [ProviderSnapshot] {
@@ -670,43 +765,98 @@ struct CompactDashboardView: View {
     }
 
     private var urgentCount: Int { snapshots.reduce(0) { $0 + $1.needsAttentionCount } }
+    private var liveCount: Int { snapshots.reduce(0) { $0 + $1.activeCount } }
+    private var attentionColor: Color {
+        snapshots.contains(where: { $0.hasRecordedLimit() }) ? BarBoyStyle.coral : BarBoyStyle.amber
+    }
+    private var resetLabel: String {
+        let reset = snapshots.flatMap { snapshot in
+            let windows = snapshot.recordedQuotas.isEmpty ? snapshot.recordedQuota.map { [$0] } ?? [] : snapshot.recordedQuotas
+            return windows.compactMap(\.resetsAt)
+        }.filter { $0 > .now }.min()
+        guard let reset else { return "—" }
+        let seconds = reset.timeIntervalSinceNow
+        if seconds < 3600 { return "\(max(1, Int(seconds / 60)))M" }
+        if seconds < 86400 { return "\(Int(seconds / 3600))H" }
+        return "\(Int(seconds / 86400))D"
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                AnimatedMomoMark(size: 48, animated: animateMomo)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.2).foregroundStyle(.secondary)
-                    Text("MOMO").font(BarBoyStyle.display)
+            VStack(spacing: 0) {
+                HStack(spacing: 14) {
+                    AnimatedMomoMark(size: 34, animated: animateMomo)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
+                        Text("MOMO").font(BarBoyStyle.display)
+                    }
+                    Spacer(minLength: 10)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("LIVE \(liveCount) · RESET \(resetLabel)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Text(surface.page.label).font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }.frame(width: 86, alignment: .trailing)
+                    CompactHeaderNavigation(selected: surface.page) { page in
+                        surface.page = page
+                        surface.attentionOnly = false
+                        surface.show(.sessions)
+                    }
                 }
-                CompactHeaderNavigation(openOverview: { openWindow(id: "overview") })
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .frame(height: 64)
+
                 if urgentCount > 0 {
-                    Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
-                        .accessibilityLabel("\(urgentCount) sessions need you")
+                    HStack {
+                        Spacer()
+                        Button {
+                            surface.attentionOnly.toggle()
+                            surface.selectProvider(nil)
+                            surface.page = .home
+                            surface.expanded = true
+                            surface.show(.sessions)
+                        } label: {
+                            Text("\(urgentCount) NEED ATTENTION")
+                                .font(.system(size: 8, weight: .black, design: .monospaced))
+                                .foregroundStyle(surface.attentionOnly ? BarBoyStyle.inverseInk : attentionColor)
+                                .padding(.horizontal, 10).frame(height: 30)
+                                .background(surface.attentionOnly ? attentionColor : BarBoyStyle.raised)
+                                .overlay(Rectangle().stroke(attentionColor, lineWidth: 1))
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel("\(urgentCount) sessions need attention")
+                    }
+                    .padding(.horizontal, 18)
+                    .frame(height: 38)
                 }
+
+                HStack(spacing: 12) {
+                    Button("+ PROVIDER") { openSettings() }.buttonStyle(CompactToolbarStyle())
+                    Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.buttonStyle(CompactToolbarStyle())
+                    Button { toggleExpansion() } label: {
+                        Label(expanded ? "CONTRACT" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                            .font(BarBoyStyle.microLabel)
+                    }
+                    .buttonStyle(CompactToolbarStyle())
+                    .help(expanded ? "Contract MOMO into the menu bar" : "Expand MOMO from the menu bar")
+                    Button("OVERVIEW") { openWindow(id: "overview") }.buttonStyle(CompactToolbarStyle())
+                    Spacer(minLength: 0)
+                    Button { openSettings() } label: {
+                        Image(systemName: "gearshape.fill").font(.system(size: 18, weight: .semibold))
+                    }
+                    .buttonStyle(CompactToolbarStyle(width: 42)).accessibilityLabel("Settings").help("Provider authorization and settings")
+                    Button { NSApplication.shared.terminate(nil) } label: {
+                        Image(systemName: "power").font(.system(size: 20, weight: .medium))
+                    }
+                    .buttonStyle(CompactToolbarStyle(width: 42)).accessibilityLabel("Quit MOMO").help("Turn MOMO off")
+                }
+                .font(BarBoyStyle.microLabel)
+                .padding(.horizontal, 18).padding(.vertical, 10)
+                .frame(height: 78)
             }
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .frame(height: 80)
-            HStack {
-                Button("+ PROVIDER") { openSettings() }.barBoyButton().frame(minWidth: 106, minHeight: 42)
-                Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton().frame(minWidth: 106, minHeight: 42)
-                Button { toggleExpansion() } label: {
-                    Label(expanded ? "CONTRACT" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                        .font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton().frame(minWidth: 106, minHeight: 42)
-                .help(expanded ? "Contract MOMO into the menu bar" : "Expand MOMO from the menu bar")
-                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton().frame(minWidth: 106, minHeight: 42)
-                Spacer(minLength: 0)
-                Button { openSettings() } label: {
-                    Label("SETTINGS", systemImage: "gearshape.fill").font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton().frame(minWidth: 106, minHeight: 42).help("Provider authorization and settings")
-                Button { NSApplication.shared.terminate(nil) } label: {
-                    Label("OFF", systemImage: "power").font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton().frame(minWidth: 82, minHeight: 42).help("Turn MOMO off")
-            }.font(BarBoyStyle.microLabel).padding(.horizontal, 12).padding(.bottom, 8)
+            .background(BarBoyStyle.panel)
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(BarBoyStyle.hairline, lineWidth: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
 
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
 
@@ -717,8 +867,8 @@ struct CompactDashboardView: View {
                         .frame(maxWidth: .infinity, minHeight: 72)
                 }
                 ForEach(snapshots) { snapshot in
-                    Button { selectedProvider = snapshot.provider; openProvider(snapshot) } label: {
-                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded, showUsageBar: preferences.showProviderUsageBars)
+                    Button { surface.selectProvider(snapshot.provider); openProvider(snapshot) } label: {
+                    CompactProviderCell(snapshot: snapshot, isSelected: surface.selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded, showUsageBar: preferences.showProviderUsageBars)
                     }
                     .buttonStyle(.plain)
                     .help(snapshot.needsAttentionCount > 0
@@ -744,43 +894,67 @@ struct CompactDashboardView: View {
     }
 
     private func openProvider(_ snapshot: ProviderSnapshot) {
+        surface.selectProvider(snapshot.provider)
         let session = snapshot.sessions.first(where: { $0.attention.isUrgent })
             ?? snapshot.sessions.first
         guard let session else {
-            openWindow(id: "dashboard")
+            surface.page = .home
+            surface.expanded = true
+            surface.show(.sessions)
             return
         }
-        NotificationCenter.default.post(name: .showCommandPalette, object: session)
+        QuickAskContext.shared.select(session)
+        surface.page = .home
+        surface.expanded = true
+        surface.show(.sessions)
         MomoFeedback.perform()
     }
 }
 
-private struct CompactHeaderNavigation: View {
-    let openOverview: () -> Void
+private struct CompactToolbarStyle: ButtonStyle {
+    var width: CGFloat = 124
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: width, height: 40)
+            .background(BarBoyStyle.raised)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
 
-    private let items: [(String, String, String)] = [
-        ("HOME", "square.grid.2x2.fill", "Home"),
-        ("AGENTS", "sparkles", "Agents"),
-        ("TOOLS", "square.stack.3d.up.fill", "Tools"),
-        ("NETWORK", "point.3.connected.trianglepath.dotted", "MOMO Brain")
+private struct CompactHeaderNavigation: View {
+    let selected: DashboardTab
+    let select: (DashboardTab) -> Void
+
+    private let items: [(String, String, String, CGFloat)] = [
+        ("HOME", "square.grid.2x2.fill", "Home", 88),
+        ("AGENTS", "sparkles", "Agents", 106),
+        ("TOOLS", "square.stack.3d.up.fill", "Tools", 92),
+        ("NETWORK", "point.3.connected.trianglepath.dotted", "MOMO Brain", 120)
     ]
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                Button(action: openOverview) {
+                if index > 0 {
+                    Rectangle()
+                        .fill(BarBoyStyle.hairline)
+                        .frame(width: 1, height: 22)
+                }
+                Button { select(DashboardTab.allCases[index]) } label: {
                     Label(item.0, systemImage: item.1)
                         .font(BarBoyStyle.navLabel)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(index == 3 ? Color.primary : Color.clear)
-                        .foregroundStyle(index == 3 ? BarBoyStyle.inverseInk : Color.primary)
+                        .frame(width: item.3, height: 36)
+                        .background(selected == DashboardTab.allCases[index] ? Color.primary : Color.clear)
+                        .foregroundStyle(selected == DashboardTab.allCases[index] ? BarBoyStyle.inverseInk : Color.primary)
                 }
                 .buttonStyle(.plain)
                 .help(item.2)
                 .accessibilityLabel(item.2)
+                .accessibilityAddTraits(selected == DashboardTab.allCases[index] ? [.isSelected] : [])
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 58, maxHeight: 58)
+        .frame(width: 409, height: 44)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 2))
     }

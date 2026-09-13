@@ -40,14 +40,15 @@ struct RuntimeBridgeView: View {
                 MomoFeedback.perform()
                 if action == .quickAsk {
                     QuickAskContext.shared.activationLabel = "Shortcut received · \(shortcuts.bindings[action]?.label ?? action.title)"
+                    MomoSurface.shared.expanded = true
                     NotificationCenter.default.post(name: .showCommandPalette, object: nil)
                 } else {
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     if VoiceInput.shared.isActive { VoiceInput.shared.stop() }
                     else {
                         VoiceInput.shared.prepare(action)
+                        MomoSurface.shared.expanded = true
                         MomoSurface.shared.show(.voice, fromKeyboard: true)
-                        openWindow(id: "dashboard")
                         Task { await VoiceInput.shared.start() }
                     }
                 }
@@ -58,8 +59,11 @@ struct RuntimeBridgeView: View {
                 }
                 NSApplication.shared.activate(ignoringOtherApps: true)
                 // A shortcut-driven pane change must not animate.
+                MomoSurface.shared.expanded = true
                 MomoSurface.shared.show(.quickAsk, fromKeyboard: notification.object == nil)
-                openWindow(id: "dashboard")
+                QuickAskContext.shared.activationLabel = notification.object == nil
+                    ? "Shortcut received. MOMO is ready in the menu bar."
+                    : QuickAskContext.shared.activationLabel
             }
     }
 

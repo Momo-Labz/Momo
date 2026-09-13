@@ -11,17 +11,11 @@ struct BarBoyApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            if surface.expanded {
-                DashboardView()
-                    .environmentObject(monitor)
-                    .environmentObject(preferences)
-                    .environmentObject(deskDisplay)
-                    .environmentObject(attentionNotifier)
-            } else {
-                CompactDashboardView()
-                    .environmentObject(monitor)
-                    .environmentObject(preferences)
-            }
+            DashboardView()
+                .environmentObject(monitor)
+                .environmentObject(preferences)
+                .environmentObject(deskDisplay)
+                .environmentObject(attentionNotifier)
         } label: {
             ZStack {
                 MenuBarLabelView(snapshots: monitor.snapshots, compact: preferences.compactMenuBar, attentionNotifier: attentionNotifier)
