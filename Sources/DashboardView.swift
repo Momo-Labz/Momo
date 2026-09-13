@@ -397,38 +397,28 @@ struct DashboardView: View {
     private var networkPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "MOMO BRAIN", note: "AI + CHATS + TOOLS")
-                HStack(alignment: .top, spacing: 10) {
-                    BrainColumn(title: "AI", note: "\(enabledSnapshots.count) LINKED") {
-                        ForEach(enabledSnapshots) { snapshot in
-                            Button {
-                                providerFilter = snapshot.provider
-                                if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
-                                    openReply(session)
-                                }
-                            } label: {
-                                BrainProviderNode(snapshot: snapshot, selected: providerFilter == snapshot.provider)
-                            }
-                            .buttonStyle(.plain)
+                SectionHeader(title: "MOMO BRAIN", note: "OBSIDIAN-STYLE LOCAL GRAPH")
+                Text("Projects overlap with chats, source files, providers, skills, and tools. Click a chat or provider to inspect it.")
+                    .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                BrainGraphView(
+                    snapshots: enabledSnapshots,
+                    sessions: visibleSessions,
+                    capabilities: brainMemoryTiles,
+                    selectedProvider: providerFilter,
+                    onProvider: { snapshot in
+                        providerFilter = snapshot.provider
+                        if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
+                            openReply(session)
                         }
-                    }
-                    BrainColumn(title: "CHATS", note: "\(allSessions.count) RECORDED") {
-                        ForEach(Array(visibleSessions.prefix(8))) { session in
-                            Button { openReply(session) } label: { BrainSessionNode(session: session) }
-                                .buttonStyle(.plain)
-                        }
-                        if visibleSessions.isEmpty {
-                            EmptyCapabilityRow(text: "No recorded chats for this filter.")
-                        }
-                    }
-                    BrainColumn(title: "MEMORY", note: "\(skillTiles.count + integrationTiles.count) LINKS") {
-                        ForEach(Array(brainMemoryTiles.prefix(10))) { tile in
-                            BrainMemoryNode(tile: tile)
-                        }
-                        if brainMemoryTiles.isEmpty {
-                            EmptyCapabilityRow(text: "Skills and tools appear only when sessions record them.")
-                        }
-                    }
+                    },
+                    onSession: openReply
+                )
+                SectionHeader(title: "LINKED NOTES", note: "RECORDED EDGES")
+                HStack(spacing: 8) {
+                    BrainLegendItem(color: .white, label: "PROJECT")
+                    BrainLegendItem(color: BarBoyStyle.coral, label: "CHAT")
+                    BrainLegendItem(color: Color.cyan, label: "FILE")
+                    BrainLegendItem(color: Color.yellow, label: "SKILL / TOOL")
                 }
                 if enabledSnapshots.isEmpty {
                     Text("Authorize a provider to map its local folders and chats.")
@@ -638,18 +628,27 @@ struct CompactDashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                AnimatedMomoMark(size: 28, animated: animateMomo)
+                AnimatedMomoMark(size: 24, animated: animateMomo)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.2).foregroundStyle(.secondary)
-                    Text("MODELS").font(BarBoyStyle.display)
+                    Text("MOMO").font(BarBoyStyle.display)
                 }
                 Spacer()
+                HStack(spacing: 2) {
+                    CompactHeaderButton(symbol: "square.grid.2x2.fill", help: "Home") { openWindow(id: "overview") }
+                    CompactHeaderButton(symbol: "sparkles", help: "Agents") { openWindow(id: "overview") }
+                    CompactHeaderButton(symbol: "square.stack.3d.up.fill", help: "Tools") { openWindow(id: "overview") }
+                    CompactHeaderButton(symbol: "point.3.connected.trianglepath.dotted", help: "MOMO Brain") { openWindow(id: "overview") }
+                }
                 if urgentCount > 0 {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
                         .accessibilityLabel("\(urgentCount) sessions need you")
                 }
-                Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }
-                    .barBoyIconButton().help("Quit MOMO")
+                Button { NSApplication.shared.terminate(nil) } label: {
+                    Label("OFF", systemImage: "power")
+                        .font(BarBoyStyle.microLabel)
+                }
+                .barBoyButton().help("Turn MOMO off")
                 Button { toggleExpansion() } label: {
                     Label(expanded ? "COLLAPSE" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(BarBoyStyle.microLabel)
@@ -712,6 +711,24 @@ struct CompactDashboardView: View {
         }
         NotificationCenter.default.post(name: .showCommandPalette, object: session)
         MomoFeedback.perform()
+    }
+}
+
+private struct CompactHeaderButton: View {
+    let symbol: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .frame(width: 24, height: 24)
+                .background(BarBoyStyle.surface)
+                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(help)
     }
 }
 
@@ -877,6 +894,181 @@ private struct CapabilityTile: Identifiable {
     let provider: AIProvider
     var id: String { "\(provider.rawValue):\(kind.rawValue):\(name.lowercased())" }
     var monogram: String { String(name.prefix(2)).uppercased() }
+}
+
+private enum BrainGraphKind: String {
+    case provider, project, chat, file, capability
+
+    var label: String {
+        switch self {
+        case .provider: return "AI"
+        case .project: return "PROJECT"
+        case .chat: return "CHAT"
+        case .file: return "FILE"
+        case .capability: return "SKILL / TOOL"
+        }
+    }
+}
+
+private struct BrainGraphNode: Identifiable {
+    let id: String
+    let label: String
+    let kind: BrainGraphKind
+    let provider: AIProvider?
+    let session: AgentSession?
+    let capability: CapabilityTile?
+}
+
+private struct BrainGraphEdge: Identifiable {
+    let id: String
+    let from: String
+    let to: String
+}
+
+private struct BrainLegendItem: View {
+    let color: Color
+    let label: String
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle().fill(color).frame(width: 7, height: 7)
+            Text(label).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+        }
+    }
+}
+
+private struct BrainGraphView: View {
+    let snapshots: [ProviderSnapshot]
+    let sessions: [AgentSession]
+    let capabilities: [CapabilityTile]
+    let selectedProvider: AIProvider?
+    let onProvider: (ProviderSnapshot) -> Void
+    let onSession: (AgentSession) -> Void
+
+    private let canvasHeight: CGFloat = 390
+
+    private var nodes: [BrainGraphNode] {
+        var result: [BrainGraphNode] = []
+        result += snapshots.map {
+            BrainGraphNode(id: "provider:\($0.provider.rawValue)", label: $0.provider.name.uppercased(), kind: .provider, provider: $0.provider, session: nil, capability: nil)
+        }
+        let projects = Array(NSOrderedSet(array: sessions.map(\.project))) as? [String] ?? []
+        result += projects.enumerated().map { index, project in
+            BrainGraphNode(id: "project:\(project.lowercased())", label: project, kind: .project, provider: nil, session: nil, capability: nil)
+        }
+        result += sessions.prefix(8).map {
+            BrainGraphNode(id: "chat:\($0.id)", label: $0.title, kind: .chat, provider: $0.provider, session: $0, capability: nil)
+        }
+        let files = sessions.compactMap { session -> (String, AgentSession)? in
+            guard let url = session.sourceURL else { return nil }
+            return (url.lastPathComponent, session)
+        }
+        result += Array(Dictionary(files, uniquingKeysWith: { first, _ in first }).prefix(8)).map { file, session in
+            BrainGraphNode(id: "file:\(file.lowercased())", label: file, kind: .file, provider: session.provider, session: session, capability: nil)
+        }
+        result += capabilities.prefix(10).map {
+            BrainGraphNode(id: "cap:\($0.id)", label: $0.name, kind: .capability, provider: $0.provider, session: nil, capability: $0)
+        }
+        return result
+    }
+
+    private var edges: [BrainGraphEdge] {
+        var result: [BrainGraphEdge] = []
+        for session in sessions.prefix(8) {
+            let chat = "chat:\(session.id)"
+            result.append(BrainGraphEdge(id: "provider-\(chat)", from: "provider:\(session.provider.rawValue)", to: chat))
+            result.append(BrainGraphEdge(id: "project-\(chat)", from: "project:\(session.project.lowercased())", to: chat))
+            if let file = session.sourceURL?.lastPathComponent {
+                result.append(BrainGraphEdge(id: "file-\(chat)", from: "file:\(file.lowercased())", to: chat))
+            }
+            for capability in session.mcpServers.map({ ("mcp", $0) }) + session.skills.map({ ("skill", $0) }) + session.plugins.map({ ("plugin", $0) }) {
+                result.append(BrainGraphEdge(id: "\(capability.0)-\(capability.1)-\(chat)", from: "cap:\(session.provider.rawValue):\(capability.0):\(capability.1.lowercased())", to: chat))
+            }
+        }
+        return result.filter { edge in nodes.contains(where: { $0.id == edge.from }) && nodes.contains(where: { $0.id == edge.to }) }
+    }
+
+    private func position(for node: BrainGraphNode, index: Int, width: CGFloat) -> CGPoint {
+        let nodesOfKind = nodes.filter { $0.kind == node.kind }
+        let localIndex = nodesOfKind.firstIndex { $0.id == node.id } ?? index
+        let columns = max(1, Int(width / 190))
+        let x = 80 + CGFloat(localIndex % columns) * 185
+        switch node.kind {
+        case .provider: return CGPoint(x: x, y: 42)
+        case .project: return CGPoint(x: x, y: 140)
+        case .chat: return CGPoint(x: x, y: 245)
+        case .file: return CGPoint(x: x, y: 340)
+        case .capability: return CGPoint(x: min(width - 80, x + 70), y: 340)
+        }
+    }
+
+    private func color(for node: BrainGraphNode) -> Color {
+        switch node.kind {
+        case .provider: return node.provider.map { $0 == .codex ? BarBoyStyle.coral : ($0 == .claude ? Color.orange : Color.cyan) } ?? .white
+        case .project: return .white
+        case .chat: return BarBoyStyle.coral
+        case .file: return .cyan
+        case .capability: return .yellow
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = max(640, proxy.size.width)
+            ZStack {
+                Canvas { context, size in
+                    let positions = Dictionary(uniqueKeysWithValues: nodes.enumerated().map { ($1.id, position(for: $1, index: $0, width: width)) })
+                    for edge in edges {
+                        guard let from = positions[edge.from], let to = positions[edge.to] else { continue }
+                        var path = Path()
+                        path.move(to: from)
+                        path.addLine(to: to)
+                        context.stroke(path, with: .color(BarBoyStyle.hairline), lineWidth: 1)
+                    }
+                }
+                ForEach(Array(nodes.enumerated()), id: \.element.id) { index, node in
+                    let point = position(for: node, index: index, width: width)
+                    BrainGraphNodeView(node: node, color: color(for: node), selected: node.provider == selectedProvider) {
+                        if let snapshot = snapshots.first(where: { $0.provider == node.provider }), node.kind == .provider { onProvider(snapshot) }
+                        if let session = node.session, node.kind == .chat || node.kind == .file { onSession(session) }
+                    }
+                    .position(point)
+                }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .frame(minHeight: canvasHeight)
+        .padding(8)
+        .background(BarBoyStyle.raised)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+}
+
+private struct BrainGraphNodeView: View {
+    let node: BrainGraphNode
+    let color: Color
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Circle().fill(color).frame(width: node.kind == .project ? 14 : 10, height: node.kind == .project ? 14 : 10)
+                    .overlay(Circle().stroke(selected ? Color.white : .clear, lineWidth: 2).padding(-4))
+                Text(node.label.uppercased())
+                    .font(BarBoyStyle.microLabel)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 140)
+                Text(node.kind.label).font(.system(size: 7, weight: .bold, design: .monospaced)).foregroundStyle(.tertiary)
+            }
+            .padding(6)
+            .background(BarBoyStyle.surface.opacity(0.92))
+            .overlay(Rectangle().stroke(selected ? Color.white : color.opacity(0.45), lineWidth: selected ? 2 : 1))
+        }
+        .buttonStyle(.plain)
+        .help("\(node.kind.label.capitalized): \(node.label)")
+    }
 }
 
 private struct BrainColumn<Content: View>: View {

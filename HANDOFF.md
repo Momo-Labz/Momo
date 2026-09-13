@@ -200,3 +200,10 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - Settings → General → Show provider usage bars controls the bar without changing recorded values. Missing provider usage remains `—`; MOMO never derives a quota from process presence or token totals.
 - Screenshots: `/tmp/momo-compact-models.png` and `/tmp/momo-expanded-folders.png`. Latest build: `/tmp/momo-derived/Build/Products/Debug/MOMO.app`.
 - Full macOS validation after this pass: 64 tests, 2 skipped, 0 failures. A later snapshot-only rerun was blocked by the sandbox's Xcode DerivedData/CoreSimulator permissions.
+
+## Obsidian-style brain graph and compact header (2026-09-12)
+
+- MOMO BRAIN now uses a local graph view inspired by Obsidian: provider, project, chat, source-file, skill, MCP, and plugin nodes are connected by recorded edges. Nodes are derived only from authorized local session metadata; no vault-wide content is imported.
+- Chat and file nodes open the existing conversation inspector. Provider nodes open the most urgent recorded chat for that provider. The legend makes node types visible without requiring a separate explanation panel.
+- The compact surface now carries the MOMO header treatment, four mini navigation controls, and a labeled OFF button alongside Expand. The power action still terminates MOMO immediately and does not change provider authorization.
+- Validation after this pass: full macOS suite passed with 64 tests, 2 skipped, 0 failures; debug build completed. Screenshot: `/tmp/momo-network-brain.png`.
