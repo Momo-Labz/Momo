@@ -649,7 +649,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
-    static let canvasSize = CGSize(width: 760, height: 260)
+    static let canvasSize = CGSize(width: 760, height: 284)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -674,25 +674,19 @@ struct CompactDashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
-                AnimatedMomoMark(size: 24, animated: animateMomo)
+                AnimatedMomoMark(size: 48, animated: animateMomo)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.2).foregroundStyle(.secondary)
                     Text("MOMO").font(BarBoyStyle.display)
                 }
-                Spacer()
-                HStack(spacing: 2) {
-                    CompactHeaderButton(title: "HOME", symbol: "square.grid.2x2.fill", help: "Home") { openWindow(id: "overview") }
-                    CompactHeaderButton(title: "AGENTS", symbol: "sparkles", help: "Agents") { openWindow(id: "overview") }
-                    CompactHeaderButton(title: "TOOLS", symbol: "square.stack.3d.up.fill", help: "Tools") { openWindow(id: "overview") }
-                    CompactHeaderButton(title: "NETWORK", symbol: "point.3.connected.trianglepath.dotted", help: "MOMO Brain") { openWindow(id: "overview") }
-                }
+                CompactHeaderNavigation(openOverview: { openWindow(id: "overview") })
                 if urgentCount > 0 {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
                         .accessibilityLabel("\(urgentCount) sessions need you")
                 }
             }
-            .padding(.horizontal, 12)
-            .frame(height: 52)
+            .padding(.horizontal, 12).padding(.vertical, 10)
+            .frame(height: 80)
             HStack {
                 Button("+ PROVIDER") { openSettings() }.barBoyButton()
                 Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton()
@@ -761,23 +755,34 @@ struct CompactDashboardView: View {
     }
 }
 
-private struct CompactHeaderButton: View {
-    let title: String
-    let symbol: String
-    let help: String
-    let action: () -> Void
+private struct CompactHeaderNavigation: View {
+    let openOverview: () -> Void
+
+    private let items: [(String, String, String)] = [
+        ("HOME", "square.grid.2x2.fill", "Home"),
+        ("AGENTS", "sparkles", "Agents"),
+        ("TOOLS", "square.stack.3d.up.fill", "Tools"),
+        ("NETWORK", "point.3.connected.trianglepath.dotted", "MOMO Brain")
+    ]
 
     var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(BarBoyStyle.navLabel)
-                .padding(.horizontal, 12)
-                .frame(height: 42)
-                .background(BarBoyStyle.surface)
-                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        HStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                Button(action: openOverview) {
+                    Label(item.0, systemImage: item.1)
+                        .font(BarBoyStyle.navLabel)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(index == 3 ? Color.primary : Color.clear)
+                        .foregroundStyle(index == 3 ? BarBoyStyle.inverseInk : Color.primary)
+                }
+                .buttonStyle(.plain)
+                .help(item.2)
+                .accessibilityLabel(item.2)
+            }
         }
-        .buttonStyle(.plain)
-        .help(help)
+        .frame(maxWidth: .infinity, minHeight: 58, maxHeight: 58)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 2))
     }
 }
 

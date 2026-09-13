@@ -222,3 +222,4 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - Compact menu width is now 760 points so Home, Agents, Tools, and Network labels remain readable beside the MOMO identity. The control row keeps Provider, Refresh, Expand/Contract, Overview, Settings, and OFF in one proportionate toolbar.
 - Expand continues to reuse the same menu surface; the button changes to CONTRACT and returns to the compact state without opening a second dashboard shell.
 - Snapshot: `/tmp/momo-compact-models.png`. Full macOS suite after this pass: 64 tests, 2 skipped, 0 failures.
+- The header now uses a single bordered navigation rail with equal-width labeled segments and a fixed MOMO identity block, matching the supplied reference proportion. Latest snapshot: `/tmp/momo-compact-models.png`.
