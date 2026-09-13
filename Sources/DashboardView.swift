@@ -688,24 +688,24 @@ struct CompactDashboardView: View {
             .padding(.horizontal, 12).padding(.vertical, 10)
             .frame(height: 80)
             HStack {
-                Button("+ PROVIDER") { openSettings() }.barBoyButton()
-                Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton()
+                Button("+ PROVIDER") { openSettings() }.barBoyButton().frame(minWidth: 106, minHeight: 42)
+                Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton().frame(minWidth: 106, minHeight: 42)
                 Button { toggleExpansion() } label: {
                     Label(expanded ? "CONTRACT" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(BarBoyStyle.microLabel)
                 }
-                .barBoyButton()
+                .barBoyButton().frame(minWidth: 106, minHeight: 42)
                 .help(expanded ? "Contract MOMO into the menu bar" : "Expand MOMO from the menu bar")
-                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
+                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton().frame(minWidth: 106, minHeight: 42)
                 Spacer(minLength: 0)
                 Button { openSettings() } label: {
                     Label("SETTINGS", systemImage: "gearshape.fill").font(BarBoyStyle.microLabel)
                 }
-                .barBoyButton().help("Provider authorization and settings")
+                .barBoyButton().frame(minWidth: 106, minHeight: 42).help("Provider authorization and settings")
                 Button { NSApplication.shared.terminate(nil) } label: {
                     Label("OFF", systemImage: "power").font(BarBoyStyle.microLabel)
                 }
-                .barBoyButton().help("Turn MOMO off")
+                .barBoyButton().frame(minWidth: 82, minHeight: 42).help("Turn MOMO off")
             }.font(BarBoyStyle.microLabel).padding(.horizontal, 12).padding(.bottom, 8)
 
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)

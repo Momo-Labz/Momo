@@ -223,3 +223,4 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - Expand continues to reuse the same menu surface; the button changes to CONTRACT and returns to the compact state without opening a second dashboard shell.
 - Snapshot: `/tmp/momo-compact-models.png`. Full macOS suite after this pass: 64 tests, 2 skipped, 0 failures.
 - The header now uses a single bordered navigation rail with equal-width labeled segments and a fixed MOMO identity block, matching the supplied reference proportion. Latest snapshot: `/tmp/momo-compact-models.png`.
+- Compact toolbar controls now share a consistent minimum width and height, including Settings, so the control row reads as one aligned set.
