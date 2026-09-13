@@ -16,6 +16,7 @@ struct DashboardView: View {
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
     @State private var selectedProvider: AIProvider?
+    @State private var ollamaInsight: String?
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -409,6 +410,14 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Check the local Ollama service")
+                    Button("ASK LOCAL AGENT") {
+                        Task {
+                            let prompt = "Summarize the MOMO local graph in three concise bullets. Providers: \(enabledSnapshots.map { $0.provider.name }.joined(separator: ", ")). Projects: \(Set(allSessions.map(\.project)).joined(separator: ", ")). Chats: \(allSessions.prefix(8).map(\.title).joined(separator: " | ")). Only use these recorded names and say when data is missing."
+                            ollamaInsight = await ollama.complete(prompt: prompt) ?? "Start Ollama and load a local model to ask the Brain agent."
+                        }
+                    }
+                    .barBoyButton()
+                    .disabled(!ollama.isAvailable)
                 }
                 Text("Projects overlap with chats, source files, providers, skills, and tools. Click a chat or provider to inspect it.")
                     .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
@@ -425,6 +434,16 @@ struct DashboardView: View {
                     },
                     onSession: openReply
                 )
+                if let ollamaInsight {
+                    VStack(alignment: .leading, spacing: 5) {
+                        SectionHeader(title: "LOCAL AGENT", note: ollama.preferredModel?.uppercased() ?? "OLLAMA")
+                        Text(ollamaInsight).font(BarBoyStyle.bodySmall)
+                            .padding(10)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(BarBoyStyle.surface)
+                            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    }
+                }
                 SectionHeader(title: "LINKED NOTES", note: "RECORDED EDGES")
                 HStack(spacing: 8) {
                     BrainLegendItem(color: .white, label: "PROJECT")

@@ -214,3 +214,4 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - `OllamaService.complete(prompt:model:)` is the local-only seam for future Brain and agent actions. Prompts are bounded before sending, no remote fallback exists, and unavailable models leave the UI truthful.
 - On this Mac the `ollama` executable is installed, but the API was offline during validation. The app therefore reports `OLLAMA OFFLINE` until the user starts Ollama and has a model available.
 - The compact header was tightened to the MOMO navigation treatment: mini Home, Agents, Tools, and Brain buttons sit beside the status badge, labeled OFF control, and Expand.
+- When a local model is available, `ASK LOCAL AGENT` asks Ollama for a three-bullet graph summary using only recorded provider, project, and chat names. The result appears below the graph; the action is disabled while Ollama is offline.
