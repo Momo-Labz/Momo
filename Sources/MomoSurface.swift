@@ -9,9 +9,11 @@ enum MomoPane: String, CaseIterable, Identifiable {
     case sessions, quickAsk, voice
     var id: String { rawValue }
 
+    static var primaryCases: [MomoPane] { [.sessions, .quickAsk] }
+
     var title: String {
         switch self {
-        case .sessions: return "CHATS"
+        case .sessions: return "FOLDERS"
         case .quickAsk: return "ASK"
         case .voice: return "VOICE"
         }
@@ -30,6 +32,7 @@ enum MomoPane: String, CaseIterable, Identifiable {
 final class MomoSurface: ObservableObject {
     static let shared = MomoSurface()
     @Published var pane: MomoPane = .sessions
+    @Published var expanded = false
     /// True when the pane changed from a keyboard shortcut, which must not animate.
     @Published var lastChangeWasKeyboard = false
 

@@ -70,6 +70,8 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+            miniPageStrip
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
             paneBar
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
             switch surface.pane {
@@ -97,7 +99,7 @@ struct DashboardView: View {
 
     private var paneBar: some View {
         HStack(spacing: 0) {
-            ForEach(MomoPane.allCases) { item in
+            ForEach(MomoPane.primaryCases) { item in
                 Button { item == .quickAsk ? showNewAsk() : surface.show(item) } label: {
                     Label(item.title, systemImage: item.symbol)
                         .font(BarBoyStyle.microLabel)
@@ -112,6 +114,25 @@ struct DashboardView: View {
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 6)
+    }
+
+    private var miniPageStrip: some View {
+        HStack(spacing: 6) {
+            MiniPageButton(title: "HOME", symbol: "square.grid.2x2.fill", value: urgentCount == 0 ? "CLEAR" : "\(urgentCount) NEED") {
+                openWindow(id: "overview")
+            }
+            MiniPageButton(title: "AGENTS", symbol: "sparkles", value: "\(liveCount) LIVE") {
+                openWindow(id: "overview")
+            }
+            MiniPageButton(title: "TOOLS", symbol: "square.stack.3d.up.fill", value: "\(skillTiles.count + integrationTiles.count)") {
+                openWindow(id: "overview")
+            }
+            MiniPageButton(title: "BRAIN", symbol: "point.3.connected.trianglepath.dotted", value: "\(allSessions.count) CHAT") {
+                openWindow(id: "overview")
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
     }
 
     private var overviewProviderStrip: some View {
@@ -216,6 +237,8 @@ struct DashboardView: View {
             }
             Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
                 .barBoyIconButton().help("Refresh local activity")
+            Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }
+                .barBoyIconButton().help("Quit MOMO")
             Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
                 .barBoyIconButton().help("Settings")
         }
@@ -374,45 +397,38 @@ struct DashboardView: View {
     private var networkPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "WORK NETWORK", note: "PROVIDER → FOLDER → CHAT")
-                Text("See where each model is working, which folder owns the chat, and what capabilities it recorded.")
-                    .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
-                ForEach(enabledSnapshots) { snapshot in
-                    VStack(alignment: .leading, spacing: 9) {
-                        HStack(spacing: 8) {
-                            ProviderMark(provider: snapshot.provider, size: 24, active: snapshot.activeCount > 0)
-                            Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle)
-                            Spacer()
-                            Text(snapshot.statusLabel).font(BarBoyStyle.microLabel)
-                                .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
-                        }
-                        ForEach(Array(Set(snapshot.sessions.map(\.project)).sorted()), id: \.self) { folder in
-                            VStack(alignment: .leading, spacing: 5) {
-                                Label(folder, systemImage: "folder")
-                                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                                ForEach(snapshot.sessions.filter { $0.project == folder }.sorted { $0.updatedAt > $1.updatedAt }) { session in
-                                    HStack(spacing: 8) {
-                                        Circle().fill(session.attention.isUrgent ? BarBoyStyle.coral : (session.isRunning ? Color.green : BarBoyStyle.hairline))
-                                            .frame(width: 7, height: 7)
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(1)
-                                            Text([session.model, session.project, session.tokens.map { "\($0) TOKENS" }, session.capabilitySummary].compactMap { $0 }.joined(separator: " · "))
-                                                .font(.system(size: 8, weight: .medium, design: .monospaced)).foregroundStyle(.secondary).lineLimit(1)
-                                        }
-                                        Spacer()
-                                        Text(session.attention.label.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                                    }
-                                    .padding(8)
-                                    .background(BarBoyStyle.surface)
-                                    .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                SectionHeader(title: "MOMO BRAIN", note: "AI + CHATS + TOOLS")
+                HStack(alignment: .top, spacing: 10) {
+                    BrainColumn(title: "AI", note: "\(enabledSnapshots.count) LINKED") {
+                        ForEach(enabledSnapshots) { snapshot in
+                            Button {
+                                providerFilter = snapshot.provider
+                                if let session = snapshot.sessions.first(where: { $0.attention.isUrgent }) ?? snapshot.sessions.first {
+                                    openReply(session)
                                 }
+                            } label: {
+                                BrainProviderNode(snapshot: snapshot, selected: providerFilter == snapshot.provider)
                             }
-                            .padding(.leading, 14)
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding(10)
-                    .background(BarBoyStyle.raised)
-                    .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    BrainColumn(title: "CHATS", note: "\(allSessions.count) RECORDED") {
+                        ForEach(Array(visibleSessions.prefix(8))) { session in
+                            Button { openReply(session) } label: { BrainSessionNode(session: session) }
+                                .buttonStyle(.plain)
+                        }
+                        if visibleSessions.isEmpty {
+                            EmptyCapabilityRow(text: "No recorded chats for this filter.")
+                        }
+                    }
+                    BrainColumn(title: "MEMORY", note: "\(skillTiles.count + integrationTiles.count) LINKS") {
+                        ForEach(Array(brainMemoryTiles.prefix(10))) { tile in
+                            BrainMemoryNode(tile: tile)
+                        }
+                        if brainMemoryTiles.isEmpty {
+                            EmptyCapabilityRow(text: "Skills and tools appear only when sessions record them.")
+                        }
+                    }
                 }
                 if enabledSnapshots.isEmpty {
                     Text("Authorize a provider to map its local folders and chats.")
@@ -420,6 +436,14 @@ struct DashboardView: View {
                 }
             }
             .padding(18)
+        }
+    }
+
+    private var brainMemoryTiles: [CapabilityTile] {
+        (skillTiles + integrationTiles).sorted {
+            if $0.provider != $1.provider { return $0.provider.name < $1.provider.name }
+            if $0.kind != $1.kind { return $0.kind.rawValue < $1.kind.rawValue }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
     }
 
@@ -599,6 +623,7 @@ struct CompactDashboardView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @State private var selectedProvider: AIProvider?
+    @ObservedObject private var surface = MomoSurface.shared
 
     private var snapshots: [ProviderSnapshot] {
         monitor.snapshots.map { snapshot in
@@ -623,7 +648,9 @@ struct CompactDashboardView: View {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
                         .accessibilityLabel("\(urgentCount) sessions need you")
                 }
-                Button { if expanded { dismiss() } else { expand() } } label: {
+                Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }
+                    .barBoyIconButton().help("Quit MOMO")
+                Button { toggleExpansion() } label: {
                     Label(expanded ? "COLLAPSE" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
                         .font(BarBoyStyle.microLabel)
                 }
@@ -666,10 +693,14 @@ struct CompactDashboardView: View {
         .task { if refreshOnAppear { monitor.refresh() } }
     }
 
-    private func expand() {
-        let compactWindow = NSApplication.shared.keyWindow
-        openWindow(id: "dashboard")
-        DispatchQueue.main.async { compactWindow?.orderOut(nil) }
+    private func toggleExpansion() {
+        if expanded {
+            if surface.expanded { surface.expanded = false }
+            else { dismiss() }
+        } else {
+            surface.expanded = true
+            surface.show(.sessions)
+        }
     }
 
     private func openProvider(_ snapshot: ProviderSnapshot) {
@@ -789,6 +820,93 @@ private struct CapabilityTile: Identifiable {
     var monogram: String { String(name.prefix(2)).uppercased() }
 }
 
+private struct BrainColumn<Content: View>: View {
+    let title: String
+    let note: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: title, note: note)
+            VStack(alignment: .leading, spacing: 7) { content }
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(10)
+        .background(BarBoyStyle.raised)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+}
+
+private struct BrainProviderNode: View {
+    let snapshot: ProviderSnapshot
+    var selected = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProviderMark(provider: snapshot.provider, size: 24, active: snapshot.activeCount > 0)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle).lineLimit(1)
+                Text(snapshot.statusLabel.uppercased()).font(BarBoyStyle.microLabel)
+                    .foregroundStyle(snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : .secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text("\(snapshot.sessions.count)")
+                .font(BarBoyStyle.metricSmall)
+                .foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(selected ? Color.primary.opacity(0.08) : BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(selected ? Color.white : (snapshot.needsAttentionCount > 0 ? BarBoyStyle.coral : BarBoyStyle.hairline), lineWidth: selected ? 2 : 1))
+    }
+}
+
+private struct BrainSessionNode: View {
+    let session: AgentSession
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 7) {
+            Circle()
+                .fill(session.attention.isUrgent ? BarBoyStyle.coral : (session.isRunning ? Color.green : BarBoyStyle.hairline))
+                .frame(width: 7, height: 7)
+                .padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(2)
+                Text(session.project.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
+                if !session.capabilitySummary.isEmpty {
+                    Text(session.capabilitySummary).font(.system(size: 7, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.tertiary).lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+        .help(session.attentionReason ?? session.detail)
+    }
+}
+
+private struct BrainMemoryNode: View {
+    let tile: CapabilityTile
+
+    var body: some View {
+        HStack(spacing: 7) {
+            ProviderMark(provider: tile.provider, size: 18, active: true)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle).lineLimit(1)
+                Text("\(tile.kind.label) / \(tile.provider.name.uppercased())")
+                    .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(8)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .help("\(tile.name) was recorded by a \(tile.provider.name) session.")
+    }
+}
+
 private struct SectionHeader: View {
     let title: String
     let note: String
@@ -798,6 +916,33 @@ private struct SectionHeader: View {
             Spacer()
             Text(note).font(BarBoyStyle.microLabel).foregroundStyle(.tertiary)
         }
+    }
+}
+
+private struct MiniPageButton: View {
+    let title: String
+    let symbol: String
+    let value: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 10, weight: .bold))
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(title).font(BarBoyStyle.microLabel).lineLimit(1)
+                    Text(value.uppercased()).font(.system(size: 7, weight: .black, design: .monospaced))
+                        .foregroundStyle(.secondary).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 7)
+            .frame(height: 34)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+        .help(title.capitalized)
     }
 }
 
@@ -1003,12 +1148,16 @@ struct SessionInspectorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if session.attention.isUrgent {
-                        InspectorBlock(title: "RETURN", values: [session.attentionReason ?? "This agent needs your response"], alert: true)
+                        InspectorBlock(title: "WHAT HAPPENED", values: [whatHappened], alert: true)
                     }
-                    InspectorBlock(title: "CHAT / AUTO-RESUME", values: [
+                    InspectorBlock(title: "CHAT", values: [
                         "Chat: \(session.title)",
-                        "Folder: \(session.project)",
-                        "Auto-resume: \(autoResume.state(for: session))"
+                        "Folder: \(session.project)"
+                    ], alert: session.attention.isUrgent)
+                    InspectorBlock(title: "CONTINUATION", values: [
+                        "State: \(autoResume.state(for: session))",
+                        continuationContext,
+                        nextStep
                     ], alert: session.attention.isUrgent)
                     if let source = session.sourceURL {
                         InspectorBlock(title: "SOURCE", values: [source.path])
@@ -1021,7 +1170,7 @@ struct SessionInspectorView: View {
                     if session.stoppedAfterUsageGrowth {
                         InspectorBlock(title: "STOPPED AFTER USAGE", values: [
                             "This chat was working, then stopped after token usage increased.",
-                            "Open the source chat to inspect the provider’s exact error."
+                            "Open the source chat to inspect the provider’s exact error. MOMO does not infer the cause from token growth alone."
                         ], alert: true)
                     }
                     InspectorBlock(title: "MODEL", values: [session.model ?? "Not exposed by this session"])
@@ -1039,6 +1188,40 @@ struct SessionInspectorView: View {
         }
         .frame(width: 430, height: 470)
         .background(BarBoyStyle.panel)
+    }
+
+    private var whatHappened: String {
+        let reason = session.attentionReason ?? session.detail
+        if session.stoppedAfterUsageGrowth {
+            return "MOMO saw this chat stop after recorded token usage increased. Provider error: \(reason)"
+        }
+        return "\(session.provider.name) recorded \(session.attention.label.lowercased()): \(reason)"
+    }
+
+    private var continuationContext: String {
+        if AutoResumeService.supportsUnattendedResume(session) {
+            return "MOMO can continue this Codex CLI chat after a recorded usage reset when auto-resume is enabled."
+        }
+        if !session.recordedQuotaWindows.isEmpty {
+            return "MOMO can show the recorded reset timer, then bring you back to the chat. It cannot send an unattended turn for this provider yet."
+        }
+        if session.provider == .codex {
+            return "This Codex task is not a supported CLI auto-resume record, so desktop control has to open the task for you."
+        }
+        return "\(session.provider.name) has no verified unattended continuation path in this build."
+    }
+
+    private var nextStep: String {
+        switch session.provider {
+        case .codex:
+            return "Next: press CONTINUE THIS CHAT, then OPEN CODEX TASK. Paste the copied reply in Codex."
+        case .claude:
+            return "Next: press CONTINUE THIS CHAT, choose Claude, then paste the copied resume command in Terminal."
+        case .grok:
+            return "Next: press CONTINUE THIS CHAT, choose Grok, then paste the copied resume command in Terminal."
+        default:
+            return "Next: press CONTINUE THIS CHAT. MOMO copies the reply and opens the provider."
+        }
     }
 }
 

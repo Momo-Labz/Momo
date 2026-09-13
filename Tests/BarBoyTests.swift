@@ -6,6 +6,41 @@ import XCTest
 
 @MainActor
 final class BarBoyTests: XCTestCase {
+    final class CountingSessionAdapter: ProviderSessionAdapter, @unchecked Sendable {
+        let provider: AIProvider
+        private let lock = NSLock()
+        private var value = 0
+
+        init(provider: AIProvider) {
+            self.provider = provider
+        }
+
+        var count: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+
+        func session(from file: ProviderSessionFile, context: ProviderSessionContext) -> AgentSession? {
+            lock.lock()
+            value += 1
+            lock.unlock()
+            return AgentSession(
+                id: "\(provider.rawValue)-fixture",
+                provider: provider,
+                role: .main,
+                title: "\(provider.name) fixture",
+                detail: "Fixture",
+                project: "Fixture",
+                updatedAt: file.modifiedAt,
+                isRunning: false,
+                processID: nil,
+                tokens: nil,
+                attention: .unknown
+            )
+        }
+    }
+
     func testShortcutRebindingRejectsDuplicatesAndPersists() throws {
         let suite = "MomoShortcutTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -50,7 +85,7 @@ final class BarBoyTests: XCTestCase {
         XCTAssertTrue(snapshot.quotaLabels[0].hasPrefix("5HR 76%"), snapshot.quotaLabels[0])
         XCTAssertTrue(snapshot.quotaLabels[1].hasPrefix("WEEK 32%"), snapshot.quotaLabels[1])
         snapshot.recordedQuotas = [RecordedQuotaWindow(percent: 100, minutes: 300, resetsAt: .distantPast, observedAt: .distantPast)]
-        XCTAssertEqual(snapshot.quotaLabels, ["USAGE —", "LIMIT —"])
+        XCTAssertEqual(snapshot.quotaLabels, ["QUOTA —", "LONG —"])
     }
 
     func testVoicePopupRendersWithoutMicrophoneAccess() throws {
@@ -280,15 +315,184 @@ final class BarBoyTests: XCTestCase {
         let context = QuickAskContext()
         context.select(AgentSession(id: "reply-fixture", provider: .gemini, role: .main, title: "Repair dashboard session tracking", detail: "", project: "MOMO", updatedAt: .now, isRunning: false, processID: nil, tokens: nil, attention: .needsInput, attentionReason: "Choose which failed session to resume"))
         context.draft = "Resume this chat and verify the last recorded error."
-        let view = CommandPaletteView(context: context).environmentObject(PreferencesStore()).preferredColorScheme(.dark).frame(width: 552, height: 520)
+        let view = CommandPaletteView(embedded: true, context: context)
+            .environmentObject(ActivityMonitor(autoRefresh: false))
+            .environmentObject(PreferencesStore())
+            .preferredColorScheme(.dark)
+            .frame(width: 430, height: 520)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 552, height: 520)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 520)
         hostingView.appearance = NSAppearance(named: .darkAqua)
         hostingView.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
         hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
         let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: "/tmp/momo-chat-reply.png"))
+    }
+
+    func testRenderCompactModelsWithTopOffButton() throws {
+        let now = Date()
+        var codex = ProviderSnapshot(provider: .codex, sessions: [
+            AgentSession(id: "compact-codex", provider: .codex, role: .main, title: "Fix MOMO flow", detail: "", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: 58_600, attention: .needsInput, attentionReason: "Needs a reply", model: "gpt-fixture")
+        ], activeCount: 0, localTokensToday: 58_600, updatedAt: now)
+        codex.recordedQuotas = [
+            RecordedQuotaWindow(percent: 40, minutes: 10080, resetsAt: now.addingTimeInterval(6 * 86_400), observedAt: now)
+        ]
+        let snapshots = [
+            codex,
+            ProviderSnapshot(provider: .claude, sessions: [
+                AgentSession(id: "compact-claude", provider: .claude, role: .main, title: "Review copy", detail: "", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: 105_400, attention: .working)
+            ], activeCount: 0, localTokensToday: 105_400, updatedAt: now),
+            ProviderSnapshot(provider: .cursor, sessions: [], activeCount: 1, localTokensToday: 0, updatedAt: now)
+        ]
+        let defaults = UserDefaults(suiteName: "MomoCompactPreview")!
+        defer { defaults.removePersistentDomain(forName: "MomoCompactPreview") }
+        defaults.removePersistentDomain(forName: "MomoCompactPreview")
+        defaults.set(["codex", "claude", "cursor"], forKey: "authorizedLocalProviders.v1")
+        let view = CompactDashboardView(refreshOnAppear: false)
+            .environmentObject(ActivityMonitor(autoRefresh: false, snapshots: snapshots))
+            .environmentObject(PreferencesStore(defaults: defaults))
+            .preferredColorScheme(.dark)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 220)
+        hostingView.appearance = NSAppearance(named: .darkAqua)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/momo-compact-models.png"))
+    }
+
+    func testRenderExpandedFolderAskPath() throws {
+        MomoSurface.shared.expanded = true
+        MomoSurface.shared.show(.sessions)
+        let now = Date()
+        let snapshots = [
+            ProviderSnapshot(provider: .codex, sessions: [
+                AgentSession(id: "expanded-a", provider: .codex, role: .main, title: "MOMO network brain", detail: "Waiting for your reply", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: nil, attention: .needsInput, attentionReason: "Prompt needs a decision"),
+                AgentSession(id: "expanded-b", provider: .codex, role: .main, title: "ClearEC model package", detail: "Completed", project: "CLEAR-EC", updatedAt: now.addingTimeInterval(-600), isRunning: false, processID: nil, tokens: nil, attention: .completed)
+            ], activeCount: 0, localTokensToday: 0, updatedAt: now)
+        ]
+        let defaults = UserDefaults(suiteName: "MomoExpandedPreview")!
+        defer { defaults.removePersistentDomain(forName: "MomoExpandedPreview") }
+        defaults.removePersistentDomain(forName: "MomoExpandedPreview")
+        defaults.set(["codex"], forKey: "authorizedLocalProviders.v1")
+        let view = DashboardView(refreshOnAppear: false)
+            .environmentObject(ActivityMonitor(autoRefresh: false, snapshots: snapshots))
+            .environmentObject(PreferencesStore(defaults: defaults))
+            .environmentObject(DeskDisplayServer(defaults: defaults))
+            .environmentObject(AttentionNotifier())
+            .preferredColorScheme(.dark)
+            .frame(width: 430, height: 680)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 680)
+        hostingView.appearance = NSAppearance(named: .darkAqua)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/momo-expanded-folders.png"))
+    }
+
+    func testRenderNewPromptComposerWithRecentFolders() throws {
+        let context = QuickAskContext()
+        context.provider = .codex
+        context.draft = "Summarize what is blocked"
+        context.attach([URL(fileURLWithPath: "/tmp/HANDOFF.md")])
+        let now = Date()
+        let snapshots = [
+            ProviderSnapshot(provider: .codex, sessions: [
+                AgentSession(id: "a", provider: .codex, role: .main, title: "A", detail: "", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: nil),
+                AgentSession(id: "b", provider: .codex, role: .main, title: "B", detail: "", project: "CLEAR-EC", updatedAt: now.addingTimeInterval(-10), isRunning: false, processID: nil, tokens: nil),
+                AgentSession(id: "c", provider: .codex, role: .main, title: "C", detail: "", project: "Webpage", updatedAt: now.addingTimeInterval(-20), isRunning: false, processID: nil, tokens: nil)
+            ], activeCount: 0, localTokensToday: 0, updatedAt: now)
+        ]
+        let view = CommandPaletteView(embedded: true, context: context)
+            .environmentObject(ActivityMonitor(autoRefresh: false, snapshots: snapshots))
+            .environmentObject(PreferencesStore())
+            .preferredColorScheme(.dark)
+            .frame(width: 430, height: 520)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 520)
+        hostingView.appearance = NSAppearance(named: .darkAqua)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/momo-new-prompt.png"))
+    }
+
+    func testRenderNetworkBrainMap() throws {
+        let now = Date()
+        let sessions = [
+            AgentSession(
+                id: "brain-codex",
+                provider: .codex,
+                role: .main,
+                title: "Fix provider usage cards",
+                detail: "Codex is waiting for a reply",
+                project: "MOMO",
+                updatedAt: now,
+                isRunning: false,
+                processID: nil,
+                tokens: 1200,
+                attention: .needsInput,
+                attentionReason: "The latest task needs your reply",
+                model: "gpt-fixture",
+                mcpServers: ["github"],
+                skills: ["investigate"]
+            ),
+            AgentSession(
+                id: "brain-claude",
+                provider: .claude,
+                role: .main,
+                title: "Review dashboard copy",
+                detail: "Claude completed",
+                project: "MOMO",
+                updatedAt: now,
+                isRunning: false,
+                processID: nil,
+                tokens: 900,
+                attention: .completed,
+                model: "claude-fixture",
+                skills: ["ui-styling"]
+            )
+        ]
+        let snapshots = [
+            ProviderSnapshot(provider: .codex, sessions: [sessions[0]], activeCount: 0, localTokensToday: 1200, updatedAt: now),
+            ProviderSnapshot(provider: .claude, sessions: [sessions[1]], activeCount: 0, localTokensToday: 900, updatedAt: now)
+        ]
+        let defaults = UserDefaults(suiteName: "MomoNetworkPreview")!
+        defer { defaults.removePersistentDomain(forName: "MomoNetworkPreview") }
+        defaults.removePersistentDomain(forName: "MomoNetworkPreview")
+        defaults.set(["codex", "claude"], forKey: "authorizedLocalProviders.v1")
+        let view = DashboardView(refreshOnAppear: false, initialTab: .network, showsOverview: true)
+            .environmentObject(ActivityMonitor(autoRefresh: false, snapshots: snapshots))
+            .environmentObject(PreferencesStore(defaults: defaults))
+            .preferredColorScheme(.dark)
+        let hostingView = NSHostingView(rootView: view)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 860, height: 790)
+        hostingView.appearance = NSAppearance(named: .darkAqua)
+        hostingView.layoutSubtreeIfNeeded()
+        let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
+        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmap)
+        let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/momo-network-brain.png"))
+    }
+
+    func testQuickAskComposesImprovedPromptWithFolderAndAttachments() {
+        let context = QuickAskContext()
+        context.provider = .claude
+        context.draft = "Fix the provider cards"
+        context.selectFolder("MOMO")
+        context.attach([URL(fileURLWithPath: "/tmp/spec.md")])
+        let prompt = context.composedPrompt
+        XCTAssertTrue(prompt.contains("Task:\nFix the provider cards"))
+        XCTAssertTrue(prompt.contains("- Folder: MOMO"))
+        XCTAssertTrue(prompt.contains("- /tmp/spec.md"))
+        XCTAssertTrue(prompt.contains("do not invent capabilities or usage data"))
+        context.promptEnhancementEnabled = false
+        XCTAssertEqual(context.composedPrompt, "Fix the provider cards")
     }
 
     func testMomoFramesMatchBrandingIndex() throws {
@@ -525,6 +729,48 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(result.recordedQuota?.minutes, 300)
         XCTAssertTrue(result.quotaLabel.hasPrefix("5HR 76%"), result.quotaLabel)
         XCTAssertEqual(result.activeCount, 0)
+    }
+
+    func testScannerCacheKeepsOtherProvidersBetweenRefreshes() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let codexRoot = root.appendingPathComponent(".codex/sessions")
+        let claudeRoot = root.appendingPathComponent(".claude/projects")
+        try FileManager.default.createDirectory(at: codexRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: claudeRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data(#"{"fixture":true}"#.utf8).write(to: codexRoot.appendingPathComponent("codex.jsonl"))
+        try Data(#"{"fixture":true}"#.utf8).write(to: claudeRoot.appendingPathComponent("claude.jsonl"))
+
+        let codex = CountingSessionAdapter(provider: .codex)
+        let claude = CountingSessionAdapter(provider: .claude)
+        let scanner = LocalActivityScanner(adapters: [codex, claude], home: root, detectProcesses: false)
+        _ = await scanner.scan(providers: [.codex, .claude])
+        XCTAssertEqual(codex.count, 1)
+        XCTAssertEqual(claude.count, 1)
+
+        _ = await scanner.scan(providers: [.codex, .claude])
+        XCTAssertEqual(codex.count, 1)
+        XCTAssertEqual(claude.count, 1)
+    }
+
+    func testScannerParsesOnlyNewestBoundedSessionFiles() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let codexRoot = root.appendingPathComponent(".codex/sessions")
+        try FileManager.default.createDirectory(at: codexRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let reference = Date(timeIntervalSince1970: 2_000_000_000)
+        for index in 0..<35 {
+            let file = codexRoot.appendingPathComponent("session-\(index).jsonl")
+            try Data(#"{"fixture":true}"#.utf8).write(to: file)
+            try FileManager.default.setAttributes([.modificationDate: reference.addingTimeInterval(TimeInterval(index))], ofItemAtPath: file.path)
+        }
+
+        let adapter = CountingSessionAdapter(provider: .codex)
+        let scanner = LocalActivityScanner(adapters: [adapter], home: root, detectProcesses: false)
+        let snapshots = await scanner.scan(providers: [.codex])
+        XCTAssertEqual(adapter.count, LocalActivityScanner.recentFileLimit)
+        XCTAssertEqual(snapshots.first?.sessions.count, 1, "fixture adapter returns a stable ID that scanner deduplicates")
     }
 
     func testScannerUsesGrokAdapterForAuthorizedSessionRoot() async throws {

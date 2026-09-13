@@ -116,6 +116,7 @@ private actor CapabilityInventoryScanner {
 }
 
 actor LocalActivityScanner {
+    static let recentFileLimit = 20
     private let fileManager = FileManager.default
     private let home: URL
     private let detectProcesses: Bool
@@ -214,7 +215,7 @@ actor LocalActivityScanner {
 
     /// Preserve every detected live process while bounding only inactive history.
     /// This keeps the product's "all running at once" promise without re-parsing
-    /// an unbounded archive on every 15-second refresh.
+    /// an unbounded archive on every refresh.
     static func prioritizedSessions(_ sessions: [AgentSession], recentHistoryLimit: Int = 12) -> [AgentSession] {
         let running = sessions.filter(\.isRunning)
         let history = sessions.filter { !$0.isRunning }.prefix(recentHistoryLimit)
@@ -253,7 +254,7 @@ actor LocalActivityScanner {
         let adapter = adapters.adapter(for: provider)
         let selectedFiles = files
             .sorted { $0.modifiedAt > $1.modifiedAt }
-            .prefix(20)
+            .prefix(Self.recentFileLimit)
         let selectedPaths = Set(selectedFiles.map { "\(provider.rawValue)|\($0.url.path)" })
         return await withTaskGroup(of: (Int, AgentSession?).self) { group in
             for (index, file) in selectedFiles.enumerated() {
@@ -265,7 +266,10 @@ actor LocalActivityScanner {
             for await (index, session) in group {
                 if let session { parsed.append((index, session)) }
             }
-            sessionCache = sessionCache.filter { selectedPaths.contains($0.key) }
+            let prefix = "\(provider.rawValue)|"
+            sessionCache = sessionCache.filter { key, _ in
+                !key.hasPrefix(prefix) || selectedPaths.contains(key)
+            }
             return parsed.sorted { $0.0 < $1.0 }.map(\.1)
         }
     }
@@ -317,6 +321,10 @@ actor LocalActivityScanner {
                       let modified = values?.contentModificationDate,
                       modified >= sevenDaysAgo else { continue }
                 files.append((file, modified))
+                if files.count > Self.recentFileLimit {
+                    files.sort { $0.modifiedAt > $1.modifiedAt }
+                    files.removeSubrange(Self.recentFileLimit...)
+                }
             }
         }
         return files

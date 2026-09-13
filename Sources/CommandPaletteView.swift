@@ -9,13 +9,18 @@ final class QuickAskContext: ObservableObject {
     @Published var activationLabel: String?
     @Published var provider: AIProvider = .codex
     @Published var targetProvider: AIProvider = .codex
+    @Published var promptEnhancementEnabled = true
     @Published private var drafts: [String: String] = [:]
+    @Published private var attachmentSets: [String: [URL]] = [:]
+    @Published private var folderSelections: [String: String] = [:]
 
     private var draftKey: String { session.map { "chat:\($0.id)" } ?? "new:\(provider.rawValue)" }
     var draft: String {
         get { drafts[draftKey] ?? "" }
         set { drafts[draftKey] = newValue }
     }
+    var attachments: [URL] { attachmentSets[draftKey] ?? [] }
+    var selectedFolder: String? { folderSelections[draftKey] }
 
     func select(_ session: AgentSession) {
         self.session = session
@@ -24,6 +29,48 @@ final class QuickAskContext: ObservableObject {
     }
 
     func newChat() { session = nil }
+
+    func attach(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        var current = attachmentSets[draftKey] ?? []
+        for url in urls where !current.contains(url) { current.append(url) }
+        attachmentSets[draftKey] = current
+    }
+
+    func removeAttachment(_ url: URL) {
+        attachmentSets[draftKey] = attachments.filter { $0 != url }
+    }
+
+    func selectFolder(_ name: String) {
+        let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        folderSelections[draftKey] = cleaned.isEmpty ? nil : cleaned
+    }
+
+    var composedPrompt: String {
+        let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard promptEnhancementEnabled else { return trimmed }
+        var lines: [String] = [
+            "Task:",
+            trimmed
+        ]
+        if let selectedFolder, !selectedFolder.isEmpty {
+            lines += ["", "Working context:", "- Folder: \(selectedFolder)"]
+        }
+        if !attachments.isEmpty {
+            lines += ["", "Attached local files:"]
+            lines += attachments.map { "- \($0.path)" }
+        }
+        lines += [
+            "",
+            "Please respond with:",
+            "- The likely root cause or best next step.",
+            "- The exact action to take next.",
+            "- Any missing information needed before acting.",
+            "",
+            "Keep the answer specific to this chat and do not invent capabilities or usage data."
+        ]
+        return lines.joined(separator: "\n")
+    }
 }
 
 struct CommandPaletteView: View {
@@ -37,6 +84,7 @@ struct CommandPaletteView: View {
     @ObservedObject var context = QuickAskContext.shared
     @FocusState private var editorFocused: Bool
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @State private var routingMessage: String?
     @State private var showDetails = false
@@ -60,11 +108,12 @@ struct CommandPaletteView: View {
             }
 
             if let session = context.session {
-                HStack {
-                    Text(session.attentionReason ?? session.detail)
-                        .font(BarBoyStyle.bodySmall).lineLimit(3)
-                        .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : Color.secondary)
-                    Spacer()
+                VStack(alignment: .leading, spacing: 8) {
+                    ReturnContextPanel(
+                        session: session,
+                        autoResumeState: autoResume.state(for: session),
+                        targetProvider: context.targetProvider
+                    )
                     Button("NEW CHAT") { context.newChat(); routingMessage = nil }.barBoyButton()
                 }
             } else {
@@ -81,21 +130,37 @@ struct CommandPaletteView: View {
                         editedName = session.title; editedFolder = session.project; editingLabel = true
                     }.barBoyButton()
                 }.font(.caption)
-                Text("Auto-resume: \(autoResume.state(for: session))").font(.caption).foregroundStyle(.secondary)
                 Picker("Continue with", selection: $context.targetProvider) {
                     ForEach(AIProvider.allCases) { provider in Text(provider.name).tag(provider) }
                 }.pickerStyle(.menu)
             }
 
-            TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
-                .font(.system(size: 14, design: .monospaced))
-                .scrollContentBackground(.hidden)
-                .focused($editorFocused)
-                .padding(9)
-                .background(BarBoyStyle.surface)
-                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-                .frame(height: 90)
-                .accessibilityLabel(context.session.map { "Reply to \($0.title)" } ?? "New prompt")
+            HStack(alignment: .top, spacing: 10) {
+                PromptAssistPanel(
+                    provider: context.session?.provider ?? context.provider,
+                    folders: recentFolders(for: context.session?.provider ?? context.provider),
+                    selectedFolder: context.selectedFolder ?? context.session?.project,
+                    attachments: context.attachments,
+                    enhancePrompt: $context.promptEnhancementEnabled,
+                    selectFolder: { context.selectFolder($0) },
+                    attachFiles: attachFiles,
+                    removeAttachment: { context.removeAttachment($0) }
+                )
+                .frame(width: 128)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
+                        .font(.system(size: 14, design: .monospaced))
+                        .scrollContentBackground(.hidden)
+                        .focused($editorFocused)
+                        .padding(9)
+                        .background(BarBoyStyle.surface)
+                        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                        .frame(height: context.session == nil ? 142 : 116)
+                        .accessibilityLabel(context.session.map { "Reply to \($0.title)" } ?? "New prompt")
+                    VoiceInlineBar()
+                }
+            }
 
             Text(routingMessage ?? context.activationLabel ?? (context.session == nil
                 ? "Copies your text, then opens the provider."
@@ -103,21 +168,23 @@ struct CommandPaletteView: View {
                 .font(.caption).foregroundStyle(.secondary)
 
             HStack {
-                Button("VOICE") { NotificationCenter.default.post(name: .momoShortcut, object: ShortcutAction.handsFree) }.barBoyButton()
                 if context.session != nil {
                     Button("DETAILS") { showDetails = true }.barBoyButton()
                 }
                 if let session = context.session {
                     Button(continueLabel(for: session)) { continueConversation(session) }.barBoyButton()
+                        .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
                 if let source = context.session?.sourceURL, context.session?.provider != .codex {
                     Button("OPEN SESSION FILE") { NSWorkspace.shared.open(source) }.barBoyButton()
                 }
                 Spacer()
                 Button("CLOSE") { leave() }.barBoyButton()
-                Button(context.session == nil || context.provider == .codex ? "COPY + OPEN" : "COPY REPLY") { routePrompt() }
-                    .barBoyButton()
-                    .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                if context.session == nil {
+                    Button("COPY + OPEN") { routePrompt() }
+                        .barBoyButton()
+                        .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
         }
         .padding(16)
@@ -170,7 +237,7 @@ struct CommandPaletteView: View {
 
     private func routePrompt() {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(context.draft, forType: .string)
+        NSPasteboard.general.setString(context.composedPrompt, forType: .string)
         if let session = context.session {
             continueConversation(session)
         } else if context.session != nil {
@@ -190,7 +257,7 @@ struct CommandPaletteView: View {
 
     private func continueConversation(_ session: AgentSession) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(context.draft, forType: .string)
+        NSPasteboard.general.setString(context.composedPrompt, forType: .string)
         switch context.targetProvider {
         case .codex:
             openCodexTask(session)
@@ -224,6 +291,196 @@ struct CommandPaletteView: View {
             if let url = context.targetProvider.conversationURL { NSWorkspace.shared.open(url) }
             routingMessage = "Reply copied. This provider’s exact chat continuation is not recorded."
         }
+    }
+
+    private func recentFolders(for provider: AIProvider) -> [String] {
+        var seen = Set<String>()
+        return monitor.snapshot(for: provider).sessions
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .compactMap { session in
+                let folder = session.project.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !folder.isEmpty, seen.insert(folder).inserted else { return nil }
+                return folder
+            }
+            .prefix(3)
+            .map { $0 }
+    }
+
+    private func attachFiles() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.prompt = "Attach"
+        if panel.runModal() == .OK {
+            context.attach(panel.urls)
+            MomoFeedback.perform()
+        }
+    }
+}
+
+private struct PromptAssistPanel: View {
+    let provider: AIProvider
+    let folders: [String]
+    let selectedFolder: String?
+    let attachments: [URL]
+    @Binding var enhancePrompt: Bool
+    let selectFolder: (String) -> Void
+    let attachFiles: () -> Void
+    let removeAttachment: (URL) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(provider.name.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            Toggle("IMPROVE PROMPT", isOn: $enhancePrompt)
+                .font(BarBoyStyle.microLabel)
+                .toggleStyle(.checkbox)
+                .help("Copy a cleaner prompt with task, context, files, next steps, and truth checks.")
+            Button("ATTACH") { attachFiles() }.barBoyButton()
+            if folders.isEmpty && attachments.isEmpty {
+                Text("No recent folders")
+                    .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+            } else {
+                FolderList(items: folders, selected: selectedFolder, action: selectFolder)
+                if !attachments.isEmpty {
+                    FolderList(items: attachments.map(\.lastPathComponent), selected: nil) { name in
+                        if let match = attachments.first(where: { $0.lastPathComponent == name }) {
+                            removeAttachment(match)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(10)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+}
+
+private struct FolderList: View {
+    let items: [String]
+    let selected: String?
+    let action: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(items, id: \.self) { item in
+                Button { action(item) } label: {
+                    Text(item.uppercased())
+                        .font(BarBoyStyle.microLabel)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(.horizontal, 7)
+                        .frame(maxWidth: .infinity, minHeight: 24, alignment: .leading)
+                        .background(selected == item ? Color.primary.opacity(0.12) : BarBoyStyle.raised)
+                        .overlay(Rectangle().stroke(selected == item ? Color.white : BarBoyStyle.hairline, lineWidth: selected == item ? 1.5 : 1))
+                }
+                .buttonStyle(.plain)
+                .help(item)
+            }
+        }
+    }
+}
+
+private struct VoiceInlineBar: View {
+    @ObservedObject private var voice = VoiceInput.shared
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(voice.isActive ? "STOP" : "HANDS-FREE") {
+                if voice.isActive { voice.stop() }
+                else {
+                    voice.prepare(.handsFree)
+                    Task { await voice.start() }
+                }
+            }.barBoyButton()
+            Button("USE VOICE") { voice.useDraft() }
+                .barBoyButton()
+                .disabled(voice.text.isEmpty || voice.isActive)
+            Text(voice.text.isEmpty ? voice.state.rawValue : voice.text)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(voice.isActive ? BarBoyStyle.coral : .secondary)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .help(voice.message)
+    }
+}
+
+private struct ReturnContextPanel: View {
+    let session: AgentSession
+    let autoResumeState: String
+    let targetProvider: AIProvider
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ReturnContextRow(title: "RECORDED", value: recordedLine, alert: session.attention.isUrgent)
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+            ReturnContextRow(title: "CONTINUE", value: resumeLine, alert: autoResumeState.hasPrefix("Manual") || autoResumeState.contains("unavailable"))
+            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+            ReturnContextRow(title: "NEXT", value: nextStepLine, alert: false)
+        }
+        .background(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.08) : BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var recordedLine: String {
+        let reason = session.attentionReason ?? session.detail
+        let state = session.stoppedAfterUsageGrowth ? "Stopped after usage grew" : session.attention.label.capitalized
+        return "\(state): \(reason)"
+    }
+
+    private var resumeLine: String {
+        if AutoResumeService.supportsUnattendedResume(session) {
+            return "Auto-resume: \(autoResumeState). Codex CLI can continue without you."
+        }
+        if autoResumeState.hasPrefix("Manual · resets in") {
+            return "\(autoResumeState). MOMO will bring you back when it opens."
+        }
+        if autoResumeState == "Authorize to continue" {
+            return "Auto-resume needs provider access. Copy and open is manual now."
+        }
+        if session.provider == .codex && session.recordedSource != "cli" {
+            return "\(autoResumeState). Open the task and paste the reply."
+        }
+        return "\(autoResumeState). Copy and open is manual for now."
+    }
+
+    private var nextStepLine: String {
+        switch targetProvider {
+        case .codex:
+            return "Press OPEN CODEX TASK. Paste the copied reply there."
+        case .claude:
+            return "Press RESUME CLAUDE. Paste the copied command in Terminal."
+        case .grok:
+            return "Press RESUME GROK. Paste the copied command in Terminal."
+        default:
+            return "Press COPY + OPEN \(targetProvider.name.uppercased()). Paste the copied reply there."
+        }
+    }
+}
+
+private struct ReturnContextRow: View {
+    let title: String
+    let value: String
+    var alert = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(title)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(alert ? BarBoyStyle.coral : Color.secondary)
+                .frame(width: 62, alignment: .leading)
+            Text(value)
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(alert ? BarBoyStyle.coral : Color.primary)
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
     }
 }
 

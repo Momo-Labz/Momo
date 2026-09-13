@@ -7,12 +7,21 @@ struct BarBoyApp: App {
     @StateObject private var deskDisplay = DeskDisplayServer()
     @StateObject private var attentionNotifier = AttentionNotifier()
     @StateObject private var shortcuts = GlobalShortcutService.shared
+    @StateObject private var surface = MomoSurface.shared
 
     var body: some Scene {
         MenuBarExtra {
-            CompactDashboardView()
-                .environmentObject(monitor)
-                .environmentObject(preferences)
+            if surface.expanded {
+                DashboardView()
+                    .environmentObject(monitor)
+                    .environmentObject(preferences)
+                    .environmentObject(deskDisplay)
+                    .environmentObject(attentionNotifier)
+            } else {
+                CompactDashboardView()
+                    .environmentObject(monitor)
+                    .environmentObject(preferences)
+            }
         } label: {
             ZStack {
                 MenuBarLabelView(snapshots: monitor.snapshots, compact: preferences.compactMenuBar, attentionNotifier: attentionNotifier)

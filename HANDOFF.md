@@ -2,7 +2,7 @@
 
 ## Current state
 
-Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO RELAY companion, and a printable Agent Desk prototype. The Mac opens as a compact models-only strip and expands into a horizontal Home, Agents, and Tools workspace. Both apps prioritize the human return queue and expose model/MCP/plugin/skill provenance when sessions provide it. The Mac separately inventories installed MCP servers, plugins, marketplaces, and skills and marks only capabilities with recorded session evidence as `USED`. Core monitoring remains local and requires no provider credentials.
+Version 0.5 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO RELAY companion, and a printable Agent Desk prototype. The Mac opens as a compact models-only strip and expands in place into a Chat/Ask workflow plus mini Home, Agents, Tools, and Brain previews. Both apps prioritize the human return queue and expose model/MCP/plugin/skill provenance when sessions provide it. The Mac separately inventories installed MCP servers, plugins, marketplaces, and skills and marks only capabilities with recorded session evidence as `USED`. Core monitoring remains local and requires no provider credentials.
 
 ## Before public distribution
 
@@ -12,7 +12,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 4. Implement `SMAppService.mainApp.register()` before enabling Launch at Login.
 5. Confirm that the GitHub Sponsors URL is the intended Support Us destination.
 6. Run a privacy review against real session files for every enabled adapter after schema changes.
-7. Treat needs-attention parsing as conservative. Claude, Codex, and Cursor have sanitized schema fixtures; add equivalent fixtures before replacing the generic Gemini or Grok adapters.
+7. Treat needs-attention parsing as conservative. Claude, Codex, Cursor, Gemini public-schema, and Grok documented-schema fixtures exist; add sanitized real-account fixtures before broadening either Gemini or Grok behavior.
 8. Validate the enclosure against the actual purchased LCD PCB and connector locations before a production print.
 9. Replace local HTTP with an authenticated encrypted channel before selling pre-paired hardware.
 10. Add the Momo Labz Apple Developer Team, iOS app icon, signing, and TestFlight configuration before installing MOMO RELAY on customer iPhones.
@@ -22,7 +22,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 ## Architecture
 
 - `BarBoyApp.swift`: menu-bar, settings, and preview window scenes.
-- `ActivityMonitor.swift`: enabled-provider process scanning, parallel recent-session parsing, installed-inventory refresh, and the 30-second refresh loop. Parsed sessions are cached by provider, path, modification date, and file size; cache entries are pruned to the current recent-file set. Its process pipe must be drained before waiting or large process tables can deadlock.
+- `ActivityMonitor.swift`: enabled-provider process scanning, parallel recent-session parsing, installed-inventory refresh, and the 30-second refresh loop. Each provider keeps only the newest 20 candidate files while walking folders. Parsed metadata is cached by provider, path, modification date, and file size; each provider prunes only its own stale cache entries. Its process pipe must be drained before waiting or large process tables can deadlock.
 - `Adapters/ProviderSessionAdapter.swift`: provider parser seam and generic fallbacks.
 - `Adapters/{Claude,Codex,Cursor}SessionAdapter.swift`: streaming, provider-specific local session readers.
 - `Adapters/CapabilityInventory.swift`: metadata-only installed MCP/plugin/marketplace/skill inventory. It does not retain config values, commands, paths, or secrets.
@@ -38,7 +38,7 @@ Version 0.4 is a buildable native macOS 14 menu-bar app, a buildable iOS 17 MOMO
 - `Hardware/`: kiosk setup, OpenSCAD source, STL exporter, and generated printable parts.
 - `Tests/Fixtures/`: sanitized Claude, Codex, Cursor, and installed-inventory fixtures.
 
-## Verified 0.4 checks
+## Verified 0.5 checks
 
 - `BAR_BOY_REAL_DATA_CHECK=1 BAR_BOY_RENDER_SNAPSHOTS=1` runs the complete 20-test suite, live metadata smoke check, and six Mac snapshot states.
 - The real-machine smoke test reports aggregate inventory/session counts only; it does not emit names, paths, titles, prompts, or details.
@@ -55,14 +55,14 @@ Implemented and tested in this checkout:
 - Local provider scans default off. Legacy visibility preferences do not count as consent. Settings explicitly requests local-folder authorization per provider, and revocation clears published sessions and rejects stale scan results.
 - Clicking a session opens Quick Ask directly with that session's title and recorded problem. The global shortcut retains the selected session. Drafts are isolated by session ID and stored in memory only; the editor supports the user's macOS Dictation shortcut. Details remains a secondary action.
 - Replies currently copy to clipboard. Exact provider-chat reopening is not implemented; the UI states this rather than opening a generic destination. The source session file can be opened separately when recorded.
-- Capability extraction ignores arbitrary nested prompt/catalog text. Codex turn metadata and actual function calls, and Claude assistant model/tool-call records, are selected explicitly. Unverified Gemini, Grok, and Cursor capability schemas fail closed.
+- Capability extraction ignores arbitrary nested prompt/catalog text. Codex turn metadata and actual function calls, Claude assistant model/tool-call records, Cursor schema fields, and Grok documented `updates.jsonl` init records are selected explicitly. Gemini tool names are not treated as capability evidence.
 - A running provider process no longer marks an unrelated disk session live. Other session-state and token heuristics still require replacement.
 
 Validation: macOS xcodebuild test passed 15 tests with zero failures using `/tmp/momo-truth-build`. Rendered and inspected `/tmp/momo-chat-reply.png`. This is a source/build update, not an installed release. Live shortcut focus, notification routing, and dictation still require interactive validation.
 
 Remaining full-goal work:
-- User authorization for Gemini fixture capture is pending; Grok authorization must be requested separately. No account-specific permission should be inferred from an automatic goal continuation. Do not read those account session files until authorized.
-- Capture sanitized real schemas and implement fixture-backed Gemini/Grok adapters. Local provider permission currently covers a Mac user's folders, not individual account identity; do not call it remote account authorization.
+- User authorization for Gemini fixture capture covered the absent default `.gemini/tmp` folder only; Grok authorization must be requested separately. No account-specific permission should be inferred from an automatic goal continuation. Do not read those account session files until authorized.
+- Capture sanitized real Gemini and Grok local schemas after the user approves each account folder. Local provider permission currently covers selected Mac folders, not individual remote account identity; do not call it remote account authorization.
 - Verified exact-chat destinations and notification-to-chat routing.
 - Expanded view as a longer continuation of the existing provider strip; full per-provider session state lists, including recorded stops after usage growth.
 - Source-recorded quota window percentages/reset times, truthful unknown states, and actionable timing notifications. No invented usage-window percentages or causal rate-limit claims.
@@ -76,7 +76,7 @@ Remaining full-goal work:
 
 - Expanded dashboard now continues the same 430-point compact strip downward into all returned sessions grouped by provider. Quota percentage/window has a dedicated line beneath tokens; absent/invalid source data renders `QUOTA —`. The 76% / 5HR screenshot value is synthetic test data, not live account usage.
 - Gemini public-schema adapter handles full JSON and JSONL message replacement, checkpoints, and rewinds, keeping unsupported capabilities/liveness unknown. Model and complete per-message token totals come only from selected schema fields. `gemini-public-*` fixtures are synthetic public-schema tests, NOT sanitized local captures. The upstream references are in Tests/Fixtures/README.md.
-- Grok session parsing fails closed pending an identified and authorized schema; process detection remains separate.
+- Grok has a schema-specific documented-session adapter for `summary.json` plus `updates.jsonl`. Real account captures remain pending explicit Grok folder authorization, and process detection remains separate.
 - Structured lifecycle extraction replaces recursive error detection. Nested tool errors do not classify their containing session as failed. Missing lifecycle state is UNKNOWN; an old recorded working state is displayed as LAST: WORKING when liveness is not established.
 - Session observations can mark a failed/interrupted session as STOPPED AFTER USAGE when it was previously working and recorded tokens increased. Recovery resets this marker. It does not infer rate-limit causation or historical transitions before monitoring began.
 - Notification default-action routing now opens the matching current chat reply draft. Revoked or resolved sessions are no longer actionable through the stored notification mapping. Delivery, cold-launch behavior, and global shortcut focus still need interactive validation.
@@ -84,7 +84,7 @@ Remaining full-goal work:
 
 Latest verification: 22 macOS tests, zero failures; light/dark expanded screenshots inspected at `/tmp/barboy-light.png` and `/tmp/barboy-dark.png`. No installation or release overwrite performed.
 
-Still required for the full goal: separate account authorization and sanitized real Gemini/Grok captures; Grok schema-specific adapter; actual quota/reset data adapters and timing optimization; verified provider chat reopening; live notification/shortcut/dictation validation; account-level identity boundaries beyond the explicit local-provider-folder consent.
+Still required for the full goal: separate account authorization and sanitized real Gemini/Grok captures; actual quota/reset data adapters and timing optimization beyond Codex-recorded windows; verified provider chat reopening; live notification/shortcut/dictation validation; account-level identity boundaries beyond the explicit local-provider-folder consent.
 
 
 ## Authorized Gemini capture check
@@ -115,7 +115,7 @@ Verification before upstream merge: 29 macOS tests passed; onboarding screenshot
 
 ### Upstream integration
 
-Merged origin/main through 6216ec3, preserving its MOMO product naming, relay fixes, installed-capability reader and schema-specific Codex/Claude/Cursor adapters. The consent gate now also covers capability configuration; revocation clears both session snapshots and the inventory. Gemini uses public-schema fixtures, Grok fails closed. Codex quota observations and source links now flow through the full-stream Codex adapter. Provider process presence no longer marks a specific transcript as running. Distinct historical task IDs remain separate even when titles match. The requested expanded view replaces the previous tabbed hub layout.
+Merged origin/main through 6216ec3, preserving its MOMO product naming, relay fixes, installed-capability reader and schema-specific Codex/Claude/Cursor adapters. The consent gate now also covers capability configuration; revocation clears both session snapshots and the inventory. Gemini uses public-schema fixtures; Grok uses a documented `summary.json` plus `updates.jsonl` fixture adapter and still needs real authorized account captures. Codex quota observations and source links now flow through the full-stream Codex adapter. Provider process presence no longer marks a specific transcript as running. Distinct historical task IDs remain separate even when titles match. The requested expanded view replaces the previous tabbed hub layout.
 
 Combined verification: 40 macOS tests, 1 explicitly skipped live-account check, 0 failures. Dark compact/expanded and onboarding screenshots inspected. Desktop deep-link dispatch is based on installed app code and synthetic UUID tests; real-account navigation and automatic CLI continuation have not been exercised. Desktop unattended turn submission remains an integration gap and is not advertised as supported.
 
@@ -127,6 +127,14 @@ Combined verification: 40 macOS tests, 1 explicitly skipped live-account check, 
 - Compact mode now has Add Provider, Refresh and Overview. Overview restores Home/Agents/Tools; Expand remains the longer provider strip. Both observed usage windows are displayed below tokens; a week is labeled WEEK. Missing/expired values remain dashes.
 - Authorized Codex scans resolve names from its append-only session_index.jsonl (last name update wins), then group tasks by the recorded folder. Unknown names use an ID-based fallback instead of the prompt. Process-only rows explicitly remain unlinked to a chat.
 - Quick Ask → Edit Name / Folder stores MOMO-only labels keyed by provider and task ID. This does not rename provider chats or move working directories. Each conversation shows auto-resume state, including unsupported connections, reset waiting and attempts. The global setting still controls future verified Codex CLI continuations only. Universal desktop/provider automatic continuation remains unfinished and is explicitly marked unavailable.
+
+## UI and memory-pressure cleanup (2026-09-12)
+
+- The menu-bar Expand action now grows the same MOMO menu surface downward through `MomoSurface.expanded` instead of opening a separate dashboard shell. The standalone dashboard window remains for shortcuts and fallback opening paths.
+- The expanded menu adds compact Home, Agents, Tools, and Brain preview buttons above the Chat/Ask/Voice pane switcher. The Network page is now `MOMO BRAIN`: provider nodes, recent chat nodes, and recorded skill/MCP/plugin nodes.
+- Quick Ask shows the top three recent folders for the selected provider, supports local file/folder attachments, and copies an improved prompt structure with task, working context, attached paths, requested output, and a truth check. Prompt text and attachments stay in memory until the user copies/opens.
+- The return/reply panel now says what MOMO recorded, whether continuation is automatic or manual, and the next action to press. Details uses the same language and no longer leaves the user at a generic failure line.
+- Memory pressure guardrails: scans never internalize every historical chat, candidate file lists are bounded while enumerating, parsed sessions are metadata-only, and unavailable quota/capability fields remain dashes rather than guessed values.
 
 Primary API/schema references: https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/requiresondevicerecognition and https://github.com/openai/codex/blob/main/codex-rs/rollout/src/session_index.rs . No real microphone recording, speech accuracy, physical haptic sensation, or external-account continuation was exercised by automated tests. The installed app must be replaced/relaunched to use this build.
 
