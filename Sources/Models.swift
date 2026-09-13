@@ -145,6 +145,8 @@ struct AgentSession: Identifiable, Hashable {
     let sourceURL: URL?
     let conversationID: String?
     var stoppedAfterUsageGrowth = false
+    /// True only when the provider explicitly recorded a session/account limit event.
+    let limitReached: Bool
     let recordedQuotaWindows: [RecordedQuotaWindow]
     let recordedSource: String?
 
@@ -168,7 +170,8 @@ struct AgentSession: Identifiable, Hashable {
         sourceURL: URL? = nil,
         conversationID: String? = nil,
         recordedQuotaWindows: [RecordedQuotaWindow] = [],
-        recordedSource: String? = nil
+        recordedSource: String? = nil,
+        limitReached: Bool = false
     ) {
         self.id = id
         self.provider = provider
@@ -190,6 +193,7 @@ struct AgentSession: Identifiable, Hashable {
         self.conversationID = conversationID
         self.recordedQuotaWindows = recordedQuotaWindows
         self.recordedSource = recordedSource
+        self.limitReached = limitReached
     }
 
     var ageLabel: String {
@@ -359,6 +363,7 @@ struct ProviderSnapshot: Identifiable {
     var id: AIProvider { provider }
     var needsAttentionCount: Int { sessions.filter { $0.attention.isUrgent }.count }
     func hasRecordedLimit(now: Date = .now) -> Bool {
+        if sessions.contains(where: { $0.limitReached }) { return true }
         let windows = recordedQuotas.isEmpty ? recordedQuota.map { [$0] } ?? [] : recordedQuotas
         return windows.contains { $0.percent >= 100 && ($0.resetsAt == nil || $0.resetsAt! > now) }
     }

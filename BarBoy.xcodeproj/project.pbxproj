@@ -57,6 +57,7 @@
 		E4A49EFBC2617E137AAF8F2E /* DeskDisplayServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */; };
 		E8074D2914582CC7BF9D7902 /* sanitized-session.jsonl in Resources */ = {isa = PBXBuildFile; fileRef = 565A99CF9A48BCAF334924C8 /* sanitized-session.jsonl */; };
 		E8C81DC057C767DD6DB7AEE3 /* BrainWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1D379A0AD44CAB4D3F533E /* BrainWorkspaceView.swift */; };
+		EE3C8E96A98EDE01EECDA4A8 /* MenuBarWindowPositioner.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECB42B6C5E91853E8FEBF5E5 /* MenuBarWindowPositioner.swift */; };
 		F06E90CA1CF97B2742E00922 /* RelayModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 479945A2B783FEEB67F51BD8 /* RelayModels.swift */; };
 		F17FFB4218519015022F8478 /* VaultIndexService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15C114ABCEFAED659EEBE0D9 /* VaultIndexService.swift */; };
 		F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */; };
@@ -131,6 +132,7 @@
 		DFA88FAF21DD058E0841EFFB /* updates.jsonl */ = {isa = PBXFileReference; path = updates.jsonl; sourceTree = "<group>"; };
 		E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RuntimeBridgeView.swift; sourceTree = "<group>"; };
 		E97EABE168680367E8C4D28E /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
+		ECB42B6C5E91853E8FEBF5E5 /* MenuBarWindowPositioner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarWindowPositioner.swift; sourceTree = "<group>"; };
 		F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayContract.swift; sourceTree = "<group>"; };
 		F8F744DA44565866EDA3D383 /* codex-session.jsonl */ = {isa = PBXFileReference; path = "codex-session.jsonl"; sourceTree = "<group>"; };
 		F95FF5C03D51270D6F53B0FF /* config.toml */ = {isa = PBXFileReference; path = config.toml; sourceTree = "<group>"; };
@@ -220,6 +222,7 @@
 				4EACB478E463A22F205E5DEE /* DeskDisplayServer.swift */,
 				9E3EAEA3C41BF7BCFF4316EC /* GlobalShortcutService.swift */,
 				6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */,
+				ECB42B6C5E91853E8FEBF5E5 /* MenuBarWindowPositioner.swift */,
 				914544FD481DF77821FAFD11 /* Models.swift */,
 				5874E9B2BAD42C1998849812 /* MomoSurface.swift */,
 				7186CCEFF286C3FE6572CFF1 /* OllamaService.swift */,
@@ -599,6 +602,7 @@
 				3D52ABEF6E98F2279C0F37A2 /* GlobalShortcutService.swift in Sources */,
 				C2A73E0109B10AA59A4608BB /* GrokSessionAdapter.swift in Sources */,
 				F7729A9003F1193C260B2FC1 /* MenuBarLabelView.swift in Sources */,
+				EE3C8E96A98EDE01EECDA4A8 /* MenuBarWindowPositioner.swift in Sources */,
 				64CBEEAE3E84FEF2DD4A2704 /* Models.swift in Sources */,
 				AA2E8342A7F784656E2CB139 /* MomoSurface.swift in Sources */,
 				28D384AEEE6CA04FA5562F01 /* OllamaService.swift in Sources */,

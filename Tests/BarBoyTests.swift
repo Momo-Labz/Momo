@@ -231,6 +231,23 @@ final class BarBoyTests: XCTestCase {
         XCTAssertNotEqual(answered.attention, .needsInput)
     }
 
+    func testClaudeExplicitSessionLimitIsRecordedAsLimit() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("momo-claude-limit-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("limit.jsonl")
+        let body = #"{"type":"error","message":{"content":[{"type":"text","text":"Session limit reached; try again later"}]}}"#
+        try body.write(to: url, atomically: true, encoding: .utf8)
+        let session = try XCTUnwrap(ClaudeSessionAdapter().session(
+            from: ProviderSessionFile(url: url, modifiedAt: .now, index: 0),
+            context: ProviderSessionContext(now: .now, isProviderRunning: false)
+        ))
+        XCTAssertTrue(session.limitReached)
+        XCTAssertEqual(session.attentionReason, "Claude session limit reached")
+        let snapshot = ProviderSnapshot(provider: .claude, sessions: [session], activeCount: 0, localTokensToday: 0, updatedAt: .now)
+        XCTAssertTrue(snapshot.hasRecordedLimit())
+    }
+
     func testNotifierDetectsARecentlyReopenedWindowOnce() {
         let now = Date()
         func session(reset: TimeInterval) -> AgentSession {

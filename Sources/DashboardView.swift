@@ -68,11 +68,14 @@ struct DashboardView: View {
                 footer
             }.frame(width: 860, height: 790).background(BarBoyStyle.panel)
                 .task { if refreshOnAppear { monitor.refresh() } }
-        } else if surface.expanded { compactExpansion }
+        } else if surface.expanded {
+            compactExpansion.background(MenuBarWindowPositioner().frame(width: 0, height: 0))
+        }
         else {
             CompactDashboardView()
                 .environmentObject(monitor)
                 .environmentObject(preferences)
+                .background(MenuBarWindowPositioner().frame(width: 0, height: 0))
         }
     }
 

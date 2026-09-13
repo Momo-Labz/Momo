@@ -3,6 +3,8 @@ import Foundation
 /// Parses Claude Code's JSONL transcript format without sampling away mid-session provenance.
 struct ClaudeSessionAdapter: ProviderSessionAdapter {
     let provider: AIProvider = .claude
+    /// How quiet an open tool call must go before it reads as a prompt on screen.
+    static let idleToolGrace: TimeInterval = 20
     func session(
         from file: ProviderSessionFile,
         context: ProviderSessionContext
@@ -13,6 +15,12 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
         var metadata = ClaudeSessionMetadata()
         forEachJSONLine(in: handle) { object in
             metadata.consume(object)
+        }
+        if (metadata.attention == .working || metadata.attention == .unknown),
+           !metadata.openToolCalls.isEmpty,
+           context.now.timeIntervalSince(file.modifiedAt) >= Self.idleToolGrace {
+            metadata.attention = .needsInput
+            metadata.attentionReason = "Claude may be waiting: \(metadata.openToolCalls.last?.name ?? "tool") has been open with no new activity."
         }
 
         let fallbackName = humanized(file.url.deletingPathExtension().lastPathComponent)
@@ -34,7 +42,8 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
             skills: metadata.skills.sorted(),
             plugins: [],
             sourceURL: file.url,
-            conversationID: metadata.sessionID
+            conversationID: metadata.sessionID,
+            limitReached: metadata.limitReached
         )
     }
 
@@ -98,6 +107,7 @@ private struct ClaudeSessionMetadata {
     var skills: Set<String> = []
     /// Tool calls with no matching tool_result yet, newest last.
     var openToolCalls: [(id: String, name: String)] = []
+    var limitReached = false
 
     mutating func consume(_ event: [String: Any]) {
         if sessionID == nil { sessionID = nonemptyString(event["sessionId"]) ?? nonemptyString(event["session_id"]) }
@@ -122,6 +132,12 @@ private struct ClaudeSessionMetadata {
             if title == nil { title = clean(text, max: 68) }
         } else if eventType == "assistant", let text = cleanText(from: content, max: 88) {
             detail = text
+        }
+
+        if containsLimitSignal(event) {
+            limitReached = true
+            attention = .failed
+            attentionReason = "Claude session limit reached"
         }
 
         // A tool_result closes the call it answers.
@@ -150,10 +166,15 @@ private struct ClaudeSessionMetadata {
         } else if isCompleted(message: message, type: eventType, subtype: subtype, status: status) {
             attention = .completed
             attentionReason = "Claude finished the latest task"
-        } else if eventType == "user" || eventType == "assistant" {
+        } else if !limitReached && (eventType == "user" || eventType == "assistant") {
             attention = .working
             attentionReason = nil
         }
+    }
+
+    private func containsLimitSignal(_ event: [String: Any]) -> Bool {
+        let text = String(describing: event).lowercased()
+        return text.contains("session limit") || text.contains("rate limit") || text.contains("usage limit") || text.contains("limit reached")
     }
 
     private mutating func addUsage(_ usage: [String: Any]) {
