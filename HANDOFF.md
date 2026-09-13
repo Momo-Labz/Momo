@@ -207,3 +207,10 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - Chat and file nodes open the existing conversation inspector. Provider nodes open the most urgent recorded chat for that provider. The legend makes node types visible without requiring a separate explanation panel.
 - The compact surface now carries the MOMO header treatment, four mini navigation controls, and a labeled OFF button alongside Expand. The power action still terminates MOMO immediately and does not change provider authorization.
 - Validation after this pass: full macOS suite passed with 64 tests, 2 skipped, 0 failures; debug build completed. Screenshot: `/tmp/momo-network-brain.png`.
+
+## Local Ollama bridge (2026-09-12)
+
+- MOMO Brain checks the local Ollama API at `127.0.0.1:11434` and shows its model count/status in the Brain header. The service is only contacted from the Brain page, uses short timeouts, and stays offline when Ollama is not running.
+- `OllamaService.complete(prompt:model:)` is the local-only seam for future Brain and agent actions. Prompts are bounded before sending, no remote fallback exists, and unavailable models leave the UI truthful.
+- On this Mac the `ollama` executable is installed, but the API was offline during validation. The app therefore reports `OLLAMA OFFLINE` until the user starts Ollama and has a model available.
+- The compact header was tightened to the MOMO navigation treatment: mini Home, Agents, Tools, and Brain buttons sit beside the status badge, labeled OFF control, and Expand.

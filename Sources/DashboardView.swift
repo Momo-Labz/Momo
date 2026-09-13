@@ -11,6 +11,7 @@ struct DashboardView: View {
     @Environment(\.openSettings) private var openSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var surface = MomoSurface.shared
+    @StateObject private var ollama = OllamaService()
     @State private var tab: DashboardTab = .home
     @State private var providerFilter: AIProvider?
     @State private var inspectedSession: AgentSession?
@@ -397,7 +398,18 @@ struct DashboardView: View {
     private var networkPage: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeader(title: "MOMO BRAIN", note: "OBSIDIAN-STYLE LOCAL GRAPH")
+                HStack {
+                    SectionHeader(title: "MOMO BRAIN", note: "OBSIDIAN-STYLE LOCAL GRAPH")
+                    Button {
+                        Task { await ollama.refresh() }
+                    } label: {
+                        Label(ollama.statusText, systemImage: ollama.isAvailable ? "bolt.horizontal.circle.fill" : "bolt.horizontal.circle")
+                            .font(BarBoyStyle.microLabel)
+                            .foregroundStyle(ollama.isAvailable ? Color.green : .secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Check the local Ollama service")
+                }
                 Text("Projects overlap with chats, source files, providers, skills, and tools. Click a chat or provider to inspect it.")
                     .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
                 BrainGraphView(
@@ -427,6 +439,7 @@ struct DashboardView: View {
             }
             .padding(18)
         }
+        .task { await ollama.refresh() }
     }
 
     private var brainMemoryTiles: [CapabilityTile] {
