@@ -12,6 +12,9 @@ final class PreferencesStore: ObservableObject {
     @Published var showProviderCardDetails: Bool {
         didSet { defaults.set(showProviderCardDetails, forKey: Keys.showProviderCardDetails) }
     }
+    @Published var showProviderUsageBars: Bool {
+        didSet { defaults.set(showProviderUsageBars, forKey: Keys.showProviderUsageBars) }
+    }
     @Published var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
@@ -37,6 +40,7 @@ final class PreferencesStore: ObservableObject {
         static let compactMenuBar = "compactMenuBar"
         static let hideIdleProviders = "hideIdleProviders"
         static let showProviderCardDetails = "showProviderCardDetails"
+        static let showProviderUsageBars = "showProviderUsageBars"
         static let launchAtLogin = "launchAtLogin"
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
@@ -56,6 +60,7 @@ final class PreferencesStore: ObservableObject {
         compactMenuBar = defaults.object(forKey: Keys.compactMenuBar) as? Bool ?? false
         hideIdleProviders = defaults.object(forKey: Keys.hideIdleProviders) as? Bool ?? false
         showProviderCardDetails = defaults.object(forKey: Keys.showProviderCardDetails) as? Bool ?? true
+        showProviderUsageBars = defaults.object(forKey: Keys.showProviderUsageBars) as? Bool ?? true
         launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
         deskDisplayEnabled = defaults.object(forKey: Keys.deskDisplayEnabled) as? Bool ?? false
         showDeskDisplayTitles = defaults.object(forKey: Keys.showDeskDisplayTitles) as? Bool ?? true

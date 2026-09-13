@@ -144,7 +144,7 @@ struct DashboardView: View {
                         openReply(session)
                     }
                 } label: {
-                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails)
+                    CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails, showUsageBar: preferences.showProviderUsageBars)
                 }
                 .buttonStyle(.plain)
                 .help("Open \(snapshot.provider.name) status and sessions")
@@ -613,7 +613,7 @@ struct DashboardView: View {
 }
 
 struct CompactDashboardView: View {
-    static let canvasSize = CGSize(width: 430, height: 220)
+    static let canvasSize = CGSize(width: 430, height: 238)
     var refreshOnAppear = true
     var animateMomo = true
     var expanded = false
@@ -678,7 +678,7 @@ struct CompactDashboardView: View {
                 }
                 ForEach(snapshots) { snapshot in
                     Button { selectedProvider = snapshot.provider; openProvider(snapshot) } label: {
-                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded)
+                        CompactProviderCell(snapshot: snapshot, isSelected: selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded, showUsageBar: preferences.showProviderUsageBars)
                     }
                     .buttonStyle(.plain)
                     .help(snapshot.needsAttentionCount > 0
@@ -688,7 +688,7 @@ struct CompactDashboardView: View {
             }
             .padding(12)
         }
-        .frame(width: 430, height: 220)
+        .frame(width: 430, height: Self.canvasSize.height)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
@@ -719,6 +719,7 @@ private struct CompactProviderCell: View {
     let snapshot: ProviderSnapshot
     var isSelected = false
     var showDetails = true
+    var showUsageBar = true
 
     /// The conversation actually running for this provider, if any.
     private var running: AgentSession? {
@@ -753,43 +754,101 @@ private struct CompactProviderCell: View {
         return snapshot.statusLabel.split(separator: "·", maxSplits: 1).first.map(String.init) ?? snapshot.statusLabel
     }
 
+    private var statusColor: Color {
+        if snapshot.hasRecordedLimit() { return BarBoyStyle.coral }
+        if snapshot.hasErrorOrApproval { return BarBoyStyle.amber }
+        return .secondary
+    }
+
+    private var strokeColor: Color {
+        isSelected ? Color.white : (snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : BarBoyStyle.hairline))
+    }
+
+    private var usagePercent: Double? {
+        let windows = snapshot.recordedQuotas.isEmpty ? snapshot.recordedQuota.map { [$0] } ?? [] : snapshot.recordedQuotas
+        return windows.sorted { $0.minutes < $1.minutes }.first?.percent
+    }
+
+    private var usageText: String {
+        usagePercent.map { "\(String(format: "%.0f", $0))%" } ?? "—"
+    }
+
+    private var usageLine: String {
+        "\(snapshot.tokenLabel.replacingOccurrences(of: "TOKENS · ", with: "")) / USAGE \(usageText)"
+    }
+
+    private var sessionLine: String {
+        "\(snapshot.activeCount) RUNNING / \(snapshot.sessions.count) SESSIONS"
+    }
+
     var body: some View {
-        VStack(spacing: 5) {
-            ZStack(alignment: .topTrailing) {
-                ProviderMark(provider: snapshot.provider, size: 30, active: snapshot.activeCount > 0)
-                if snapshot.hasRecordedLimit() {
-                    Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 12).offset(x: 4, y: -3)
-                } else if snapshot.hasErrorOrApproval {
-                    Rectangle().fill(BarBoyStyle.amber).frame(width: 5, height: 12).offset(x: 4, y: -3)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                ZStack(alignment: .topTrailing) {
+                    ProviderMark(provider: snapshot.provider, size: 28, active: snapshot.activeCount > 0)
+                    if snapshot.hasRecordedLimit() {
+                        Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 12).offset(x: 4, y: -3)
+                    } else if snapshot.hasErrorOrApproval {
+                        Rectangle().fill(BarBoyStyle.amber).frame(width: 5, height: 12).offset(x: 4, y: -3)
+                    }
                 }
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(snapshot.provider.name.uppercased()).font(.system(size: 10, weight: .black, design: .monospaced)).lineLimit(1)
+                    Text(conciseStatus.uppercased()).font(.system(size: 8, weight: .black, design: .monospaced))
+                        .foregroundStyle(statusColor).lineLimit(1)
+                }
+                Spacer(minLength: 0)
             }
-            Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
-            Text(runningLine).font(.system(size: 7, weight: .bold, design: .monospaced))
+            Text(runningLine).font(.system(size: 8, weight: .bold, design: .monospaced))
                 .foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
                 .help(runningHelp)
-            if showDetails, let runningMeta {
-                Text(runningMeta).font(.system(size: 6, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+            Text(sessionLine).font(.system(size: 8, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary).lineLimit(1)
+            if showUsageBar {
+                UsageMeter(percent: usagePercent, alert: snapshot.hasRecordedLimit())
             }
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                Text(snapshot.tokenLabel).font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(.secondary).lineLimit(1)
-                Text(snapshot.quotaLabels(now: context.date).joined(separator: " · "))
-                    .font(.system(size: 7, weight: .bold, design: .monospaced))
+                Text(usageLine).font(.system(size: 8, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary).lineLimit(1)
                     .help(snapshot.recordedQuota?.explanation ?? "No recorded usage window. A dash means unavailable.")
-                Text("\(conciseStatus.trimmingCharacters(in: .whitespaces)) · \(snapshot.resetLabel(now: context.date))")
-                    .font(.system(size: 7, weight: .bold, design: .monospaced))
-                    .foregroundStyle(snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : .secondary))
+                Text(snapshot.resetLabel(now: context.date))
+                    .font(.system(size: 8, weight: .bold, design: .monospaced))
+                    .foregroundStyle(statusColor)
                     .lineLimit(1).truncationMode(.tail)
                     .help("\(snapshot.statusLabel) · \(snapshot.resetLabel(now: context.date))")
             }
+            if showDetails, let runningMeta {
+                Text(runningMeta).font(.system(size: 7, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.tertiary).lineLimit(1).truncationMode(.middle)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 104)
+        .padding(8)
+        .frame(maxWidth: .infinity, minHeight: 114, alignment: .topLeading)
         .background(BarBoyStyle.surface)
-        .overlay(Rectangle().stroke(isSelected ? Color.white : (snapshot.hasRecordedLimit() ? BarBoyStyle.coral : (snapshot.hasErrorOrApproval ? BarBoyStyle.amber : BarBoyStyle.hairline)), lineWidth: isSelected ? 2 : 1))
+        .overlay(Rectangle().stroke(strokeColor, lineWidth: isSelected ? 2 : 1))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(snapshot.provider.name), \(snapshot.usageText), \(snapshot.quotaLabels.joined(separator: ", ")), \(snapshot.statusLabel), \(snapshot.resetLabel(now: .now)), \(snapshot.activeCount) active")
+    }
+}
+
+private struct UsageMeter: View {
+    let percent: Double?
+    var alert = false
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(BarBoyStyle.hairline.opacity(0.5))
+                if let percent {
+                    Rectangle()
+                        .fill(alert || percent >= 100 ? BarBoyStyle.coral : BarBoyStyle.amber)
+                        .frame(width: proxy.size.width * CGFloat(min(max(percent, 0), 100) / 100))
+                }
+            }
+        }
+        .frame(height: 6)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .help(percent.map { "Recorded usage \(String(format: "%.0f", $0))%" } ?? "No recorded usage percentage")
     }
 }
 

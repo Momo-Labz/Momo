@@ -193,3 +193,10 @@ Settings now names each provider's local session roots in its authorization dial
 The scanner now has a dedicated Grok integration test (`0ab62f9`) that builds an isolated authorized `.grok/sessions` tree and verifies the production scanner publishes the adapter's recorded MCP and skill fields. The test source parses cleanly; rerunning it requires a functioning macOS testmanagerd service.
 
 Custom local roots are persisted per provider. Settings → Providers → Choose local session folder opens a native folder picker, then shows the provider-specific authorization confirmation. The scanner applies those roots on settings launch and after authorization; revoking a provider still removes it from scanning. Latest implementation commits: `fb5b807` and `3c920a7`.
+
+## Provider card usage controls (2026-09-12)
+
+- Compact and expanded provider cards now show a larger hierarchy: provider, live state, token count, running/total session count, an optional usage bar, recorded usage percentage, and a reset countdown. Red is reserved for a recorded limit; amber marks an action or approval; white marks the selected card.
+- Settings → General → Show provider usage bars controls the bar without changing recorded values. Missing provider usage remains `—`; MOMO never derives a quota from process presence or token totals.
+- Screenshots: `/tmp/momo-compact-models.png` and `/tmp/momo-expanded-folders.png`. Latest build: `/tmp/momo-derived/Build/Products/Debug/MOMO.app`.
+- Full macOS validation after this pass: 64 tests, 2 skipped, 0 failures. A later snapshot-only rerun was blocked by the sandbox's Xcode DerivedData/CoreSimulator permissions.

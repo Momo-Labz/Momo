@@ -128,6 +128,16 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(session.title, "Original")
     }
 
+    func testProviderUsageBarPreferencePersists() {
+        let suite = "MomoUsageBarPreference-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = PreferencesStore(defaults: defaults)
+        XCTAssertTrue(preferences.showProviderUsageBars)
+        preferences.showProviderUsageBars = false
+        XCTAssertFalse(PreferencesStore(defaults: defaults).showProviderUsageBars)
+    }
+
     func testAutoResumeNeverClaimsOtherProvidersAreConnected() {
         let service = AutoResumeService(defaults: UserDefaults(suiteName: "MomoResumeVisibility")!)
         service.update(snapshots: [], enabled: true, authorized: Set(AIProvider.allCases))
@@ -354,7 +364,7 @@ final class BarBoyTests: XCTestCase {
             .environmentObject(PreferencesStore(defaults: defaults))
             .preferredColorScheme(.dark)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 220)
+        hostingView.frame = NSRect(origin: .zero, size: CompactDashboardView.canvasSize)
         hostingView.appearance = NSAppearance(named: .darkAqua)
         hostingView.layoutSubtreeIfNeeded()
         let bitmap = try XCTUnwrap(hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds))
@@ -1249,9 +1259,9 @@ final class BarBoyTests: XCTestCase {
             .environmentObject(monitor)
             .environmentObject(preferences)
             .preferredColorScheme(preferredScheme)
-            .frame(width: 430, height: 220)
+            .frame(width: CompactDashboardView.canvasSize.width, height: CompactDashboardView.canvasSize.height)
         let hostingView = NSHostingView(rootView: view)
-        hostingView.frame = NSRect(x: 0, y: 0, width: 430, height: 220)
+        hostingView.frame = NSRect(origin: .zero, size: CompactDashboardView.canvasSize)
         hostingView.appearance = NSAppearance(named: preferredScheme == .dark ? .darkAqua : .aqua)
         hostingView.layoutSubtreeIfNeeded()
         guard let bitmap = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds) else {
