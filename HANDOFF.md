@@ -215,3 +215,4 @@ Custom local roots are persisted per provider. Settings → Providers → Choose
 - On this Mac the `ollama` executable is installed, but the API was offline during validation. The app therefore reports `OLLAMA OFFLINE` until the user starts Ollama and has a model available.
 - The compact header was tightened to the MOMO navigation treatment: mini Home, Agents, Tools, and Brain buttons sit beside the status badge, labeled OFF control, and Expand.
 - When a local model is available, `ASK LOCAL AGENT` asks Ollama for a three-bullet graph summary using only recorded provider, project, and chat names. The result appears below the graph; the action is disabled while Ollama is offline.
+- When Ollama is offline, Brain shows `SET UP OLLAMA`. The button requires an explicit confirmation, then opens Ollama's official macOS download page; MOMO never downloads or installs a server silently.

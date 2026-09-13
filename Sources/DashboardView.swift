@@ -17,6 +17,7 @@ struct DashboardView: View {
     @State private var inspectedSession: AgentSession?
     @State private var selectedProvider: AIProvider?
     @State private var ollamaInsight: String?
+    @State private var showOllamaSetup = false
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -418,6 +419,11 @@ struct DashboardView: View {
                     }
                     .barBoyButton()
                     .disabled(!ollama.isAvailable)
+                    if !ollama.isAvailable {
+                        Button("SET UP OLLAMA") { showOllamaSetup = true }
+                            .barBoyButton()
+                            .help("Open the official Ollama download page")
+                    }
                 }
                 Text("Projects overlap with chats, source files, providers, skills, and tools. Click a chat or provider to inspect it.")
                     .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
@@ -459,6 +465,14 @@ struct DashboardView: View {
             .padding(18)
         }
         .task { await ollama.refresh() }
+        .alert("Set up local Ollama", isPresented: $showOllamaSetup) {
+            Button("Open Download") {
+                if let url = URL(string: "https://ollama.com/download/mac") { NSWorkspace.shared.open(url) }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("MOMO can open Ollama's official download page. Ollama runs locally and MOMO will only use it after you install it and start the local server.")
+        }
     }
 
     private var brainMemoryTiles: [CapabilityTile] {
@@ -676,27 +690,26 @@ struct CompactDashboardView: View {
                     Text("!\(urgentCount)").font(BarBoyStyle.alertLabel).foregroundStyle(BarBoyStyle.coral)
                         .accessibilityLabel("\(urgentCount) sessions need you")
                 }
-                Button { NSApplication.shared.terminate(nil) } label: {
-                    Label("OFF", systemImage: "power")
-                        .font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton().help("Turn MOMO off")
-                Button { toggleExpansion() } label: {
-                    Label(expanded ? "COLLAPSE" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                        .font(BarBoyStyle.microLabel)
-                }
-                .barBoyButton()
-                .help("Open the full MOMO hub")
             }
             .padding(.horizontal, 12)
             .frame(height: 52)
             HStack {
                 Button("+ PROVIDER") { openSettings() }.barBoyButton()
                 Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.barBoyButton()
+                Button { toggleExpansion() } label: {
+                    Label(expanded ? "CONTRACT" : "EXPAND", systemImage: expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                        .font(BarBoyStyle.microLabel)
+                }
+                .barBoyButton()
+                .help(expanded ? "Contract MOMO into the menu bar" : "Expand MOMO from the menu bar")
+                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
+                Spacer(minLength: 0)
                 Button { openSettings() } label: { Image(systemName: "gearshape.fill") }
                     .barBoyIconButton().help("Provider authorization and settings")
-                Spacer()
-                Button("OVERVIEW") { openWindow(id: "overview") }.barBoyButton()
+                Button { NSApplication.shared.terminate(nil) } label: {
+                    Label("OFF", systemImage: "power").font(BarBoyStyle.microLabel)
+                }
+                .barBoyButton().help("Turn MOMO off")
             }.font(BarBoyStyle.microLabel).padding(.horizontal, 12).padding(.bottom, 8)
 
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
