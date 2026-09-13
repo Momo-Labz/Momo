@@ -17,7 +17,6 @@ struct DashboardView: View {
     @State private var inspectedSession: AgentSession?
     @State private var ollamaInsight: String?
     @State private var showOllamaSetup = false
-    @State private var showAllFolders = false
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -78,24 +77,15 @@ struct DashboardView: View {
     }
 
     private var compactExpansion: some View {
-        ScrollView(.vertical) {
-            VStack(spacing: 0) {
-                CompactDashboardView(refreshOnAppear: false, expanded: true)
+        VStack(spacing: 0) {
+            CompactDashboardView(refreshOnAppear: false, expanded: true)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            miniPageStrip
-            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            paneBar
-            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-            switch surface.pane {
-            case .quickAsk: CommandPaletteView(embedded: true).environmentObject(preferences)
-            case .voice: VoicePopup(embedded: true)
-            case .sessions: expandedPage
-            }
-                HStack {
-                    Text(lastUpdateLabel).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                    Spacer()
-                    Button("QUICK ASK") { showNewAsk() }.barBoyButton()
-                }.padding(12)
+            ScrollView(.vertical) {
+                switch surface.pane {
+                case .quickAsk: CommandPaletteView(embedded: true).environmentObject(preferences)
+                case .voice: VoicePopup(embedded: true)
+                case .sessions: expandedPage
+                }
             }
         }
         .frame(width: CompactDashboardView.canvasSize.width)
@@ -114,115 +104,26 @@ struct DashboardView: View {
         reduceMotion || surface.lastChangeWasKeyboard ? nil : BarBoyStyle.pageAnimation
     }
 
-    private var paneBar: some View {
-        HStack(spacing: 0) {
-            ForEach(MomoPane.primaryCases) { item in
-                Button { item == .quickAsk ? showNewAsk() : surface.show(item) } label: {
-                    Label(item.title, systemImage: item.symbol)
-                        .font(BarBoyStyle.microLabel)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 7)
-                        .background(surface.pane == item ? Color.primary : Color.clear)
-                        .foregroundStyle(surface.pane == item ? BarBoyStyle.inverseInk : Color.primary)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(surface.pane == item ? [.isSelected] : [])
-            }
-        }
-        .padding(.horizontal, 12).padding(.vertical, 6)
-    }
-
-    private var miniPageStrip: some View {
-        HStack(spacing: 6) {
-            MiniPageButton(title: "HOME", symbol: "square.grid.2x2.fill", value: urgentCount == 0 ? "CLEAR" : "\(urgentCount) NEED") {
-                surface.page = .home
-                surface.attentionOnly = false
-                surface.show(.sessions)
-            }
-            MiniPageButton(title: "AGENTS", symbol: "sparkles", value: "\(liveCount) LIVE") {
-                surface.page = .agents
-                surface.attentionOnly = false
-                surface.show(.sessions)
-            }
-            MiniPageButton(title: "TOOLS", symbol: "square.stack.3d.up.fill", value: "\(skillTiles.count + integrationTiles.count)") {
-                surface.page = .tools
-                surface.attentionOnly = false
-                surface.show(.sessions)
-            }
-            MiniPageButton(title: "BRAIN", symbol: "point.3.connected.trianglepath.dotted", value: "\(allSessions.count) CHAT") {
-                surface.page = .network
-                surface.attentionOnly = false
-                surface.show(.sessions)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-    }
 
     @ViewBuilder
     private var expandedPage: some View {
         switch surface.page {
         case .home:
-            if surface.selectedProvider != nil { providerWorkspace } else { sessionsPane }
+            if surface.attentionOnly { sessionsPane }
+            else if surface.selectedProvider != nil { providerWorkspace } else { sessionsPane }
         case .agents: agentsPage
         case .tools: toolsPage
         case .network: networkPage
         }
     }
 
-    /// Provider-focused workbench shown inside the expanded menu. The folder
-    /// rail keeps the current chat context visible while the existing composer
-    /// preserves drafts and attachments through QuickAskContext.
+    /// Provider-focused workbench shown inside the expanded menu. The embedded
+    /// composer owns its conversation sidebar and preserves drafts and
+    /// attachments through QuickAskContext.
     private var providerWorkspace: some View {
-        let snapshot = enabledSnapshots.first { $0.provider == surface.selectedProvider }
-            ?? enabledSnapshots.first
-        let provider = snapshot?.provider ?? surface.selectedProvider ?? .codex
-        let folderDates = Dictionary(grouping: snapshot?.sessions ?? [], by: \.project).mapValues { sessions in
-            sessions.map(\.updatedAt).max() ?? .distantPast
-        }
-        let folders = folderDates.keys.sorted { (folderDates[$0] ?? .distantPast) > (folderDates[$1] ?? .distantPast) }
-        let displayedFolders = showAllFolders ? folders : Array(folders.prefix(3))
-        return HStack(alignment: .top, spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("FOLDERS").font(BarBoyStyle.sectionLabel)
-                Text(provider.name.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-                if folders.isEmpty {
-                    Text("No recorded folders yet.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
-                } else {
-                    ForEach(displayedFolders, id: \.self) { folder in
-                        Button {
-                            QuickAskContext.shared.newChat()
-                            surface.selectProvider(provider)
-                            QuickAskContext.shared.selectFolder(folder)
-                        } label: {
-                            Label(folder, systemImage: "folder")
-                                .font(BarBoyStyle.bodySmall)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.vertical, 6)
-                        }.buttonStyle(.plain)
-                    }
-                    if folders.count > 3 {
-                        Button(showAllFolders ? "SHOW FEWER" : "+\(folders.count - 3) MORE FOLDERS") {
-                            showAllFolders.toggle()
-                        }
-                        .font(BarBoyStyle.microLabel)
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                Spacer()
-            }
-            .frame(width: 150, alignment: .topLeading)
-            .padding(14)
-            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
-            CommandPaletteView(embedded: true)
-                .environmentObject(preferences)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
-        .frame(maxWidth: .infinity, minHeight: 420, alignment: .topLeading)
+        return CommandPaletteView(embedded: true)
+            .environmentObject(preferences)
+            .frame(maxWidth: .infinity, minHeight: 420, alignment: .topLeading)
     }
 
     private var overviewProviderStrip: some View {
@@ -781,35 +682,36 @@ struct CompactDashboardView: View {
         return "\(Int(seconds / 86400))D"
     }
 
+    private var sessions: [AgentSession] {
+        SessionPresentation.relevant(snapshots.flatMap(\.sessions), limit: 12)
+    }
+
+    private var capabilityTiles: [CompactCapability] {
+        var seen = Set<String>()
+        var result: [CompactCapability] = []
+        for session in snapshots.flatMap(\.sessions) {
+            let entries: [(String, String)] = session.skills.map { ("SKILL", $0) }
+                + session.mcpServers.map { ("MCP", $0) }
+                + session.plugins.map { ("PLUGIN", $0) }
+            for (kind, name) in entries {
+                let key = "\(kind):\(name.lowercased())"
+                if seen.insert(key).inserted {
+                    result.append(CompactCapability(kind: kind, name: name, provider: session.provider))
+                }
+            }
+        }
+        return result
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 0) {
-                HStack(spacing: 14) {
+            HStack(spacing: 9) {
                     AnimatedMomoMark(size: 34, animated: animateMomo)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("MOMO LABZ").font(BarBoyStyle.microLabel).tracking(1.35).foregroundStyle(.secondary)
                         Text("MOMO").font(BarBoyStyle.display)
                     }
-                    Spacer(minLength: 10)
-                    VStack(alignment: .trailing, spacing: 1) {
-                        Text("LIVE \(liveCount) · RESET \(resetLabel)")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                        Text(surface.page.label).font(.system(size: 8, weight: .bold, design: .monospaced))
-                            .foregroundStyle(.tertiary)
-                    }.frame(width: 86, alignment: .trailing)
-                    CompactHeaderNavigation(selected: surface.page) { page in
-                        surface.page = page
-                        surface.attentionOnly = false
-                        surface.show(.sessions)
-                    }
-                }
-                .padding(.horizontal, 14).padding(.vertical, 8)
-                .frame(height: 64)
-
-                if urgentCount > 0 {
-                    HStack {
-                        Spacer()
+                    if urgentCount > 0 {
                         Button {
                             surface.attentionOnly.toggle()
                             surface.selectProvider(nil)
@@ -817,20 +719,34 @@ struct CompactDashboardView: View {
                             surface.expanded = true
                             surface.show(.sessions)
                         } label: {
-                            Text("\(urgentCount) NEED ATTENTION")
+                            Text("\(urgentCount) NEED")
                                 .font(.system(size: 8, weight: .black, design: .monospaced))
                                 .foregroundStyle(surface.attentionOnly ? BarBoyStyle.inverseInk : attentionColor)
-                                .padding(.horizontal, 10).frame(height: 30)
+                                .padding(.horizontal, 7).frame(height: 28)
                                 .background(surface.attentionOnly ? attentionColor : BarBoyStyle.raised)
                                 .overlay(Rectangle().stroke(attentionColor, lineWidth: 1))
                         }.buttonStyle(.plain)
                             .accessibilityLabel("\(urgentCount) sessions need attention")
                     }
-                    .padding(.horizontal, 18)
-                    .frame(height: 38)
+                    Spacer(minLength: 4)
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text("LIVE \(liveCount) · RESET \(resetLabel)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                    }.frame(width: 86, alignment: .trailing)
+                    CompactHeaderNavigation(selected: surface.page) { page in
+                        surface.page = page
+                        surface.attentionOnly = false
+                        surface.show(.sessions)
+                    }
                 }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .frame(height: urgentCount > 0 ? 72 : 64)
+            .background(BarBoyStyle.panel)
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(BarBoyStyle.hairline, lineWidth: 2))
+            .clipShape(RoundedRectangle(cornerRadius: 14))
 
-                HStack(spacing: 12) {
+            HStack(spacing: 8) {
                     Button("+ PROVIDER") { openSettings() }.buttonStyle(CompactToolbarStyle())
                     Button("REFRESH") { monitor.refresh(); MomoFeedback.perform() }.buttonStyle(CompactToolbarStyle())
                     Button { toggleExpansion() } label: {
@@ -851,36 +767,91 @@ struct CompactDashboardView: View {
                     .buttonStyle(CompactToolbarStyle(width: 42)).accessibilityLabel("Quit MOMO").help("Turn MOMO off")
                 }
                 .font(BarBoyStyle.microLabel)
-                .padding(.horizontal, 18).padding(.vertical, 10)
-                .frame(height: 78)
-            }
-            .background(BarBoyStyle.panel)
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(BarBoyStyle.hairline, lineWidth: 2))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .frame(height: 58)
 
-            Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
-
-            HStack(spacing: 7) {
-                if snapshots.isEmpty {
-                    Button("AUTHORIZE LOCAL PROVIDERS") { openSettings() }
-                        .barBoyButton()
-                        .frame(maxWidth: .infinity, minHeight: 72)
-                }
-                ForEach(snapshots) { snapshot in
-                    Button { surface.selectProvider(snapshot.provider); openProvider(snapshot) } label: {
-                    CompactProviderCell(snapshot: snapshot, isSelected: surface.selectedProvider == snapshot.provider, showDetails: preferences.showProviderCardDetails && expanded, showUsageBar: preferences.showProviderUsageBars)
-                    }
-                    .buttonStyle(.plain)
-                    .help(snapshot.needsAttentionCount > 0
-                        ? "Open the issue in \(snapshot.provider.name) and inspect the exact chat"
-                        : "Open \(snapshot.provider.name) sessions")
-                }
+            if !expanded {
+                Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+                ScrollView(.vertical) { compactPageContent.padding(12) }
             }
-            .padding(12)
         }
-        .frame(width: Self.canvasSize.width, height: Self.canvasSize.height)
+        .frame(width: Self.canvasSize.width, height: expanded ? 130 : Self.canvasSize.height)
         .background(BarBoyStyle.panel)
         .task { if refreshOnAppear { monitor.refresh() } }
+    }
+
+    @ViewBuilder
+    private var compactPageContent: some View {
+        switch surface.page {
+        case .home:
+            if snapshots.isEmpty {
+                Button("AUTHORIZE LOCAL PROVIDERS") { openSettings() }
+                    .barBoyButton().frame(maxWidth: .infinity, minHeight: 70)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 168), spacing: 8)], spacing: 8) {
+                    ForEach(snapshots) { snapshot in
+                        Button { surface.selectProvider(snapshot.provider); openProvider(snapshot) } label: {
+                            CompactProviderCell(snapshot: snapshot, isSelected: surface.selectedProvider == snapshot.provider, showDetails: false, showUsageBar: preferences.showProviderUsageBars)
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+        case .agents:
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "AGENTS", note: "\(sessions.count) RELEVANT")
+                ForEach(sessions.prefix(3)) { session in
+                    Button { openSession(session) } label: {
+                        HStack(spacing: 8) {
+                            Rectangle().fill(session.attention.isUrgent ? BarBoyStyle.coral : Color.primary).frame(width: 4, height: 30)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(SessionPresentation.title(for: session)).font(BarBoyStyle.rowTitle).lineLimit(1)
+                                Text("\(session.provider.name.uppercased()) · \(session.attention.label)").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }.padding(8).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    }.buttonStyle(.plain)
+                }
+                if sessions.isEmpty { EmptyCapabilityRow(text: "No recorded sessions yet.") }
+            }
+        case .tools:
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "CAPABILITIES", note: "RECORDED LOCALLY")
+                if capabilityTiles.isEmpty { EmptyCapabilityRow(text: "Capabilities appear when sessions record them.") }
+                else {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], spacing: 8) {
+                        ForEach(capabilityTiles) { tile in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(tile.kind).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                                Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle).lineLimit(1)
+                                Text(tile.provider.name.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.tertiary)
+                            }.padding(8).frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                                .background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                        }
+                    }
+                }
+            }
+        case .network:
+            VStack(alignment: .leading, spacing: 8) {
+                SectionHeader(title: "MOMO BRAIN", note: "LOCAL VAULT")
+                HStack(spacing: 10) {
+                    Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 22))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("VAULT PREVIEW").font(BarBoyStyle.rowTitle)
+                        Text("Connect a local vault to explore notes and links.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("CONNECT") { surface.expanded = true; surface.show(.sessions) }.barBoyButton()
+                }.padding(10).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            }
+        }
+    }
+
+    private func openSession(_ session: AgentSession) {
+        QuickAskContext.shared.select(session)
+        surface.selectProvider(session.provider)
+        surface.expanded = true
+        surface.show(.sessions)
+        NotificationCenter.default.post(name: .showCommandPalette, object: session)
     }
 
     private func toggleExpansion() {
@@ -927,10 +898,10 @@ private struct CompactHeaderNavigation: View {
     let select: (DashboardTab) -> Void
 
     private let items: [(String, String, String, CGFloat)] = [
-        ("HOME", "square.grid.2x2.fill", "Home", 88),
-        ("AGENTS", "sparkles", "Agents", 106),
-        ("TOOLS", "square.stack.3d.up.fill", "Tools", 92),
-        ("NETWORK", "point.3.connected.trianglepath.dotted", "MOMO Brain", 120)
+        ("HOME", "square.grid.2x2.fill", "Home", 64),
+        ("AGENTS", "sparkles", "Agents", 76),
+        ("TOOLS", "square.stack.3d.up.fill", "Tools", 66),
+        ("NETWORK", "point.3.connected.trianglepath.dotted", "MOMO Brain", 86)
     ]
 
     var body: some View {
@@ -954,7 +925,7 @@ private struct CompactHeaderNavigation: View {
                 .accessibilityAddTraits(selected == DashboardTab.allCases[index] ? [.isSelected] : [])
             }
         }
-        .frame(width: 409, height: 44)
+        .frame(width: 295, height: 40)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 2))
     }
@@ -1114,6 +1085,13 @@ enum DashboardTab: String, CaseIterable, Identifiable {
 private enum CapabilityKind: String {
     case skill, mcp, plugin
     var label: String { self == .skill ? "SKILL" : (self == .mcp ? "MCP" : "PLUGIN") }
+}
+
+private struct CompactCapability: Identifiable {
+    let kind: String
+    let name: String
+    let provider: AIProvider
+    var id: String { "\(kind):\(provider.rawValue):\(name.lowercased())" }
 }
 
 private struct CapabilityTile: Identifiable {
@@ -1350,7 +1328,7 @@ private struct BrainSessionNode: View {
                 .frame(width: 7, height: 7)
                 .padding(.top, 5)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(2)
+                Text(SessionPresentation.title(for: session)).font(BarBoyStyle.rowTitle).lineLimit(2)
                 Text(session.project.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1)
                 if !session.capabilitySummary.isEmpty {
                     Text(session.capabilitySummary).font(.system(size: 7, weight: .bold, design: .monospaced))
@@ -1568,7 +1546,7 @@ private struct SessionRow: View {
         HStack(spacing: 9) {
             ProviderMark(provider: session.provider, size: 28, active: session.isRunning)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.title).font(BarBoyStyle.rowTitle).lineLimit(2).help(session.title)
+                Text(SessionPresentation.title(for: session)).font(BarBoyStyle.rowTitle).lineLimit(2).help(SessionPresentation.title(for: session))
                 if session.processID == nil {
                     HStack(spacing: 4) {
                         if showsFolder {
@@ -1610,17 +1588,18 @@ struct SessionInspectorView: View {
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var autoResume = AutoResumeService.shared
     let session: AgentSession
+    var onDone: (() -> Void)? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
                 ProviderMark(provider: session.provider, size: 36, active: session.isRunning)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(session.title).font(.headline).lineLimit(2)
+                    Text(SessionPresentation.title(for: session)).font(.headline).lineLimit(2)
                     Text("\(session.provider.name.uppercased()) / \(session.role.rawValue.uppercased()) / \(session.project.uppercased())")
                         .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("DONE") { dismiss() }.barBoyButton()
+                Button("DONE") { close() }.barBoyButton()
             }
             .padding(16)
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
@@ -1630,7 +1609,7 @@ struct SessionInspectorView: View {
                         InspectorBlock(title: "WHAT HAPPENED", values: [whatHappened], alert: true)
                     }
                     InspectorBlock(title: "CHAT", values: [
-                        "Chat: \(session.title)",
+                        "Chat: \(SessionPresentation.title(for: session))",
                         "Folder: \(session.project)"
                     ], alert: session.attention.isUrgent)
                     InspectorBlock(title: "CONTINUATION", values: [
@@ -1658,7 +1637,7 @@ struct SessionInspectorView: View {
                     InspectorBlock(title: "PLUGINS", values: session.plugins.isEmpty ? ["None recorded"] : session.plugins)
                     InspectorBlock(title: "LATEST", values: [session.detail])
                     Button("CONTINUE THIS CHAT") {
-                        dismiss()
+                        close()
                         NotificationCenter.default.post(name: .showCommandPalette, object: session)
                     }.barBoyButton()
                 }
@@ -1667,6 +1646,10 @@ struct SessionInspectorView: View {
         }
         .frame(width: 430, height: 470)
         .background(BarBoyStyle.panel)
+    }
+
+    private func close() {
+        if let onDone { onDone() } else { dismiss() }
     }
 
     private var whatHappened: String {

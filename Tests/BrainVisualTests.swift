@@ -80,6 +80,15 @@ final class BrainVisualTests: XCTestCase {
         try capture(DashboardView(refreshOnAppear: false).environmentObject(monitor).environmentObject(preferences).environmentObject(desk), size: CGSize(width: 760, height: 760), name: "momo-expanded-current")
         surface.attentionOnly = true
         try capture(DashboardView(refreshOnAppear: false).environmentObject(monitor).environmentObject(preferences).environmentObject(desk), size: CGSize(width: 760, height: 760), name: "momo-attention-current")
+        surface.attentionOnly = false
+        for page in [DashboardTab.agents, .tools, .network] {
+            surface.page = page
+            surface.expanded = false
+            try capture(CompactDashboardView(refreshOnAppear: false, animateMomo: false).environmentObject(monitor).environmentObject(preferences), size: CompactDashboardView.canvasSize, name: "momo-compact-\(page.rawValue)")
+            surface.expanded = true
+            try capture(DashboardView(refreshOnAppear: false).environmentObject(monitor).environmentObject(preferences).environmentObject(desk), size: CGSize(width: 760, height: 760), name: "momo-expanded-\(page.rawValue)")
+        }
+        surface.page = .home
         surface.expanded = false; surface.attentionOnly = false
     }
 

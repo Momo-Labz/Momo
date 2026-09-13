@@ -3,9 +3,6 @@ import Foundation
 /// Parses Claude Code's JSONL transcript format without sampling away mid-session provenance.
 struct ClaudeSessionAdapter: ProviderSessionAdapter {
     let provider: AIProvider = .claude
-    /// How quiet an open tool call must go before it reads as a prompt on screen.
-    static let idleToolGrace: TimeInterval = 20
-
     func session(
         from file: ProviderSessionFile,
         context: ProviderSessionContext
@@ -18,21 +15,9 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
             metadata.consume(object)
         }
 
-        // A transcript cannot tell "waiting for permission" apart from "the tool is
-        // still running". When a call has been open with no new activity for a
-        // while, say it MAY be waiting rather than asserting that it is.
-        var attention = metadata.attention
-        var attentionReason = metadata.attentionReason
-        if attention == .working || attention == .unknown,
-           let open = metadata.openToolCalls.last,
-           context.now.timeIntervalSince(file.modifiedAt) >= Self.idleToolGrace {
-            attention = .needsInput
-            attentionReason = "Claude may be waiting: \(open.name) has been open with no new activity."
-        }
-
         let fallbackName = humanized(file.url.deletingPathExtension().lastPathComponent)
         return AgentSession(
-            id: "claude-\(file.url.path)",
+            id: metadata.sessionID ?? "claude-\(file.url.path)",
             provider: provider,
             role: metadata.isSidechain ? .subagent : .main,
             title: metadata.title ?? metadata.slug.map(humanized) ?? fallbackName,
@@ -42,8 +27,8 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
             isRunning: context.isLikelyRunning(file),
             processID: nil,
             tokens: metadata.tokens > 0 ? metadata.tokens : nil,
-            attention: attention,
-            attentionReason: attentionReason,
+            attention: metadata.attention,
+            attentionReason: metadata.attentionReason,
             model: metadata.model,
             mcpServers: metadata.mcpServers.sorted(),
             skills: metadata.skills.sorted(),

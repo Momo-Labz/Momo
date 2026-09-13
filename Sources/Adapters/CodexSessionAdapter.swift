@@ -157,10 +157,14 @@ private extension CodexSessionAdapter {
                 consumeTokenCount(payload)
             case "user_message":
                 setTitleIfNeeded(nonemptyString(payload["message"]))
+                attention = .working
+                attentionReason = nil
             case "agent_message":
                 if let message = nonemptyString(payload["message"]) {
                     detail = clean(message, maximumLength: 88)
                 }
+                attention = .working
+                attentionReason = nil
             case "thread_goal_updated":
                 consumeGoal(payload["goal"])
             case "turn_aborted":
@@ -202,16 +206,22 @@ private extension CodexSessionAdapter {
             case "function_call", "custom_tool_call":
                 consumeToolCall(payload)
             case "function_call_output", "custom_tool_call_output":
+                attention = .working
+                attentionReason = nil
                 if let callID = nonemptyString(payload["call_id"]), blockingCallIDs.remove(callID) != nil {
-                    attention = .working
-                    attentionReason = nil
+                    blockingCallIDs.remove(callID)
                 }
             case "message":
                 let text = contentText(payload["content"])
                 switch string(payload["role"]) {
-                case "user": setTitleIfNeeded(text)
+                case "user":
+                    setTitleIfNeeded(text)
+                    attention = .working
+                    attentionReason = nil
                 case "assistant":
                     if let text { detail = clean(text, maximumLength: 88) }
+                    attention = .working
+                    attentionReason = nil
                 default: break
                 }
             default:
@@ -262,6 +272,8 @@ private extension CodexSessionAdapter {
                 mcpServers.insert(server)
             }
 
+            attention = .working
+            attentionReason = nil
             guard let normalizedName = name?.lowercased() else { return }
             let blockingNames: Set<String> = [
                 "approval_request", "request_user_input", "requires_action",

@@ -1,5 +1,47 @@
 import Foundation
 
+enum ProviderUsageSource: Equatable, Sendable {
+    case recordedSessionEvents
+    case unavailable(reason: String)
+}
+
+/// Describes what MOMO can establish from each provider's local files. This is
+/// deliberately separate from numeric values so a missing value never reads as zero.
+struct ProviderUsageAvailability: Equatable, Sendable {
+    let sessionTokens: ProviderUsageSource
+    let accountQuota: ProviderUsageSource
+
+    static func current(for provider: AIProvider) -> ProviderUsageAvailability {
+        switch provider {
+        case .codex:
+            return .init(
+                sessionTokens: .recordedSessionEvents,
+                accountQuota: .recordedSessionEvents
+            )
+        case .claude:
+            return .init(
+                sessionTokens: .recordedSessionEvents,
+                accountQuota: .unavailable(reason: "Claude Code transcripts do not expose consumer account quota.")
+            )
+        case .gemini:
+            return .init(
+                sessionTokens: .recordedSessionEvents,
+                accountQuota: .unavailable(reason: "Gemini conversation records do not expose account quota.")
+            )
+        case .cursor:
+            return .init(
+                sessionTokens: .unavailable(reason: "Cursor agent transcripts do not expose token usage."),
+                accountQuota: .unavailable(reason: "Cursor agent transcripts do not expose account quota.")
+            )
+        case .grok:
+            return .init(
+                sessionTokens: .recordedSessionEvents,
+                accountQuota: .unavailable(reason: "Grok session records do not expose account quota.")
+            )
+        }
+    }
+}
+
 /// A session file selected by `LocalActivityScanner` for provider-specific parsing.
 struct ProviderSessionFile: Sendable {
     let url: URL

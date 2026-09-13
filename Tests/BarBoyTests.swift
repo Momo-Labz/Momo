@@ -277,6 +277,30 @@ final class BarBoyTests: XCTestCase {
         XCTAssertTrue(monitor.snapshots.isEmpty)
     }
 
+    func testNewDraftsStayWithSelectedProject() {
+        let context = QuickAskContext()
+        context.beginChat(in: "Project A"); context.draft = "Draft A"
+        context.beginChat(in: "Project B")
+        XCTAssertEqual(context.draft, "")
+        context.draft = "Draft B"
+        context.beginChat(in: "Project A")
+        XCTAssertEqual(context.draft, "Draft A")
+    }
+
+    func testDraftIdentityIncludesProviderAndSwitchingRestoresChatDraft() {
+        let context = QuickAskContext()
+        let codex = AgentSession(id: "same", provider: .codex, role: .main, title: "One", detail: "", project: "MOMO", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
+        let claude = AgentSession(id: "same", provider: .claude, role: .main, title: "Two", detail: "", project: "MOMO", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)
+        context.select(codex); context.draft = "Codex draft"
+        context.select(claude)
+        XCTAssertEqual(context.draft, "")
+        context.switchProvider(.cursor)
+        XCTAssertNil(context.session)
+        context.select(codex)
+        XCTAssertEqual(context.draft, "Codex draft")
+        XCTAssertFalse(AIProvider.codex.applicationBundleIdentifiers.contains("com.openai.chat"))
+    }
+
     func testQuickAskDraftsStayWithTheirChat() {
         let context = QuickAskContext()
         let first = AgentSession(id: "a", provider: .gemini, role: .main, title: "First", detail: "", project: "", updatedAt: .now, isRunning: false, processID: nil, tokens: nil)

@@ -13,14 +13,15 @@ final class QuickAskContext: ObservableObject {
     @Published private var drafts: [String: String] = [:]
     @Published private var attachmentSets: [String: [URL]] = [:]
     @Published private var folderSelections: [String: String] = [:]
+    @Published private var newFolders: [AIProvider: String] = [:]
 
-    private var draftKey: String { session.map { "chat:\($0.id)" } ?? "new:\(provider.rawValue)" }
+    private var draftKey: String { session.map { "chat:\($0.provider.rawValue):\($0.conversationID ?? $0.id)" } ?? "new:\(provider.rawValue):\(newFolders[provider] ?? "")" }
     var draft: String {
         get { drafts[draftKey] ?? "" }
         set { drafts[draftKey] = newValue }
     }
     var attachments: [URL] { attachmentSets[draftKey] ?? [] }
-    var selectedFolder: String? { folderSelections[draftKey] }
+    var selectedFolder: String? { session == nil ? newFolders[provider] : folderSelections[draftKey] }
 
     func select(_ session: AgentSession) {
         self.session = session
@@ -29,6 +30,17 @@ final class QuickAskContext: ObservableObject {
     }
 
     func newChat() { session = nil }
+
+    func beginChat(in folder: String) {
+        session = nil
+        selectFolder(folder)
+    }
+
+    func switchProvider(_ provider: AIProvider) {
+        if session?.provider != provider { session = nil }
+        self.provider = provider
+        targetProvider = provider
+    }
 
     func attach(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
@@ -43,7 +55,8 @@ final class QuickAskContext: ObservableObject {
 
     func selectFolder(_ name: String) {
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        folderSelections[draftKey] = cleaned.isEmpty ? nil : cleaned
+        if session == nil { newFolders[provider] = cleaned.isEmpty ? nil : cleaned }
+        else { folderSelections[draftKey] = cleaned.isEmpty ? nil : cleaned }
     }
 
     var composedPrompt: String {
@@ -87,6 +100,7 @@ struct CommandPaletteView: View {
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @State private var routingMessage: String?
+    @State private var originalChatURL: URL?
     @State private var showDetails = false
     @State private var editingLabel = false
     @State private var editedName = ""
@@ -94,60 +108,49 @@ struct CommandPaletteView: View {
     @ObservedObject private var autoResume = AutoResumeService.shared
 
     var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ConversationSidebar(context: context)
+                .frame(width: embedded ? 200 : 150)
+            composer
+        }
+        .padding(12)
+        .background(BarBoyStyle.panel)
+    }
+
+    private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 AnimatedMomoMark(size: 32, motion: .wave)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(context.session == nil ? "MOMO LABZ / QUICK ASK" : "REPLY / \(context.provider.name.uppercased())")
                         .font(BarBoyStyle.sectionLabel)
-                    Text(context.session?.title ?? "Type a thought or use macOS Dictation")
+                    Text(context.session.map { SessionPresentation.title(for: $0) } ?? "New chat · Type or use voice")
                         .font(BarBoyStyle.bodySmall).lineLimit(2)
                 }
                 Spacer()
                 Text(GlobalShortcutService.shared.bindings[.quickAsk]?.label ?? "").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
 
-            if let session = context.session {
-                VStack(alignment: .leading, spacing: 8) {
-                    ReturnContextPanel(
-                        session: session,
-                        autoResumeState: autoResume.state(for: session),
-                        targetProvider: context.targetProvider
-                    )
-                    Button("NEW CHAT") { context.newChat(); routingMessage = nil }.barBoyButton()
-                }
-            } else {
-                Picker("Provider", selection: $context.provider) {
-                    ForEach(AIProvider.allCases) { item in Text(item.name).tag(item) }
-                }.pickerStyle(.segmented)
+            Text("\(context.selectedFolder ?? context.session?.project ?? "Choose a project") / \(context.session.map { SessionPresentation.title(for: $0) } ?? "New chat")")
+                .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary).lineLimit(2)
+            if let session = context.session, session.attention.isUrgent {
+                Text(session.attentionReason ?? session.detail)
+                    .font(BarBoyStyle.bodySmall).foregroundStyle(BarBoyStyle.amber).lineLimit(3)
             }
-
-            if let session = context.session {
-                HStack {
-                    Label(session.project, systemImage: "folder").lineLimit(1)
-                    Spacer()
-                    Button("EDIT NAME / FOLDER") {
-                        editedName = session.title; editedFolder = session.project; editingLabel = true
-                    }.barBoyButton()
-                }.font(.caption)
-                Picker("Continue with", selection: $context.targetProvider) {
-                    ForEach(AIProvider.allCases) { provider in Text(provider.name).tag(provider) }
-                }.pickerStyle(.menu)
+            HStack {
+                Toggle("Improve prompt", isOn: $context.promptEnhancementEnabled).toggleStyle(.checkbox)
+                Spacer()
+                Button("ATTACH") { attachFiles() }.barBoyButton()
+            }.font(BarBoyStyle.bodySmall)
+            if !context.attachments.isEmpty {
+                Text(context.attachments.map(\.lastPathComponent).joined(separator: ", "))
+                    .font(BarBoyStyle.bodySmall).lineLimit(2)
+                Button("CLEAR ATTACHMENTS") {
+                    for url in context.attachments { context.removeAttachment(url) }
+                }.barBoyButton()
             }
 
             HStack(alignment: .top, spacing: 10) {
-                PromptAssistPanel(
-                    provider: context.session?.provider ?? context.provider,
-                    folders: recentFolders(for: context.session?.provider ?? context.provider),
-                    selectedFolder: context.selectedFolder ?? context.session?.project,
-                    attachments: context.attachments,
-                    enhancePrompt: $context.promptEnhancementEnabled,
-                    selectFolder: { context.selectFolder($0) },
-                    attachFiles: attachFiles,
-                    removeAttachment: { context.removeAttachment($0) }
-                )
-                .frame(width: 128)
-
                 VStack(alignment: .leading, spacing: 8) {
                     TextEditor(text: Binding(get: { context.draft }, set: { context.draft = $0 }))
                         .font(.system(size: 14, design: .monospaced))
@@ -175,8 +178,8 @@ struct CommandPaletteView: View {
                     Button(continueLabel(for: session)) { continueConversation(session) }.barBoyButton()
                         .disabled(context.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                if let source = context.session?.sourceURL, context.session?.provider != .codex {
-                    Button("OPEN SESSION FILE") { NSWorkspace.shared.open(source) }.barBoyButton()
+                if let url = originalChatURL {
+                    Button("OPEN ORIGINAL CHAT") { NSWorkspace.shared.open(url) }.barBoyButton()
                 }
                 Spacer()
                 Button("CLOSE") { leave() }.barBoyButton()
@@ -188,8 +191,7 @@ struct CommandPaletteView: View {
             }
         }
         .padding(16)
-        .frame(maxWidth: embedded ? .infinity : 520)
-        .frame(width: embedded ? nil : 520)
+        .frame(maxWidth: .infinity)
         .background(BarBoyStyle.panel)
         .sheet(isPresented: $editingLabel) {
             VStack(alignment: .leading, spacing: 14) {
@@ -210,12 +212,39 @@ struct CommandPaletteView: View {
                 }
             }.padding(24).frame(width: 390)
         }
-        .sheet(isPresented: $showDetails) {
+        // A sheet launched from MenuBarExtra is attached to the transient
+        // menu window. Dismissing it also dismisses the menu, which made the
+        // inspector's Done button appear to quit MOMO. Keep the inspector in
+        // the same surface when embedded; standalone palettes may still use
+        // a sheet.
+        .sheet(isPresented: Binding(
+            get: { showDetails && !embedded },
+            set: { showDetails = $0 }
+        )) {
             if let session = context.session { SessionInspectorView(session: session) }
+        }
+        .overlay {
+            if embedded && showDetails, let session = context.session {
+                ZStack {
+                    BarBoyStyle.panel.opacity(0.96)
+                    SessionInspectorView(session: session, onDone: { showDetails = false })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+                .transition(.opacity)
+                .zIndex(10)
+            }
         }
         .onAppear {
             editorFocused = true
-            if context.session?.attention.isUrgent == true { showDetails = true }
+
+        }
+        .task(id: context.session?.id) {
+            originalChatURL = nil
+            guard let session = context.session, session.provider == .codex,
+                  CodexDesktopConnection.applicationURL != nil else { return }
+            let source = session.sourceURL
+            let url = await Task.detached(priority: .utility) { CodexDesktopConnection.taskURL(source: source) }.value
+            if !Task.isCancelled { originalChatURL = url }
         }
         .task(id: context.activationLabel) {
             guard context.activationLabel != nil else { return }
@@ -228,7 +257,7 @@ struct CommandPaletteView: View {
 
     private func openCodexTask(_ session: AgentSession) {
         guard preferences.isEnabled(.codex) else { routingMessage = "Authorize Codex in Settings first."; return }
-        guard let url = CodexDesktopConnection.taskURL(source: session.sourceURL),
+        guard session.provider == .codex, let url = CodexDesktopConnection.taskURL(source: session.sourceURL),
               CodexDesktopConnection.applicationURL != nil else {
             routingMessage = "No recorded task ID or Codex desktop installation available."; return
         }
@@ -258,6 +287,11 @@ struct CommandPaletteView: View {
     private func continueConversation(_ session: AgentSession) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(context.composedPrompt, forType: .string)
+        guard context.targetProvider == session.provider else {
+            if let url = context.targetProvider.conversationURL { NSWorkspace.shared.open(url) }
+            routingMessage = "Reply copied. Opened provider; this is not the original conversation."
+            return
+        }
         switch context.targetProvider {
         case .codex:
             openCodexTask(session)
