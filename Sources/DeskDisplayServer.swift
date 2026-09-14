@@ -32,6 +32,8 @@ final class DeskDisplayServer: ObservableObject {
     private var listener: NWListener?
     private var activePort = preferredPort
     private var statusJSON = Data("{\"providers\":[],\"sessions\":[]}".utf8)
+    private var statusETag = DeskDisplayServer.etag(for: Data("{\"providers\":[],\"sessions\":[]}".utf8))
+    private var providerIconCache: [String: Data] = [:]
 
     init(defaults: UserDefaults = .standard) {
         if let saved = defaults.string(forKey: "deskDisplayPairingToken"), saved.count >= 20 {
@@ -112,6 +114,7 @@ final class DeskDisplayServer: ObservableObject {
         let data = Self.makeStatusJSON(snapshots: snapshots, includeTitles: includeTitles)
         lock.lock()
         statusJSON = data
+        statusETag = Self.etag(for: data)
         lock.unlock()
     }
 
@@ -165,14 +168,19 @@ final class DeskDisplayServer: ObservableObject {
             guard headerAuthorized || cookieAuthorized else { return Self.unauthorizedResponse() }
             lock.lock()
             let body = statusJSON
+            let etag = statusETag
             lock.unlock()
-            return Self.httpResponse(status: "200 OK", type: "application/json; charset=utf-8", body: body)
+            let headers = ["ETag: \(etag)", "X-Relay-Schema: \(RelayStatus.currentSchemaVersion)"]
+            if Self.matchesETag(parsed.headers["if-none-match"], etag: etag) {
+                return Self.httpResponse(status: "304 Not Modified", type: "application/json; charset=utf-8", body: Data(), extraHeaders: headers, cacheControl: "no-cache")
+            }
+            return Self.httpResponse(status: "200 OK", type: "application/json; charset=utf-8", body: body, extraHeaders: headers, cacheControl: "no-cache")
         }
 
         if components.path.hasPrefix("/provider-icon/") {
             guard headerAuthorized || cookieAuthorized else { return Self.unauthorizedResponse() }
             let providerID = String(components.path.dropFirst("/provider-icon/".count))
-            guard let body = Self.providerIconPNG(providerID: providerID) else {
+            guard let body = providerIconPNG(providerID: providerID) else {
                 return Self.httpResponse(status: "404 Not Found", type: "text/plain; charset=utf-8", body: Data("Not found".utf8))
             }
             return Self.httpResponse(status: "200 OK", type: "image/png", body: body)
@@ -298,17 +306,24 @@ final class DeskDisplayServer: ObservableObject {
           document.getElementById('sessions').innerHTML=sessions.slice(0,5).map(s=>{const cap=[s.model,s.capabilityCount?`${s.capabilityCount} CAP`:null].filter(Boolean).join(' / ');return `<div class="session">${providerMark(s.provider,s.mark)}<div><div class="title">${esc(s.title)}</div><div class="meta">${esc(s.urgent?(s.attentionReason||s.attentionLabel):(cap||`${s.role} / ${s.project}`))}</div></div><div class="state ${s.urgent?'alert':''}">${esc(s.urgent?s.attentionLabel:s.age)}</div></div>`}).join('');
         }
         async function poll(){try{const r=await fetch('/api/status',{cache:'no-store',credentials:'same-origin'});if(!r.ok)throw Error();render(await r.json())}catch(e){const s=document.getElementById('signal');s.textContent='OFFLINE';s.className='signal offline'}}
-        setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);setInterval(poll,2500);poll();
+        const timer={id:0};function schedule(immediate=false){clearTimeout(timer.id);if(immediate)poll();timer.id=setTimeout(()=>schedule(true),document.hidden?60000:15000)}document.addEventListener('visibilitychange',()=>schedule(!document.hidden));setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),1000);schedule(true);
         </script>
         </body></html>
-        """
+        """.replacingOccurrences(of: "\n", with: "")
     }
 
     static func dashboardHTML(token _: String) -> String {
         dashboardHTML()
     }
 
-    private static func providerIconPNG(providerID: String) -> Data? {
+    private func providerIconPNG(providerID: String) -> Data? {
+        lock.lock()
+        if let cached = providerIconCache[providerID] {
+            lock.unlock()
+            return cached
+        }
+        lock.unlock()
+
         let assetName: String
         switch providerID.lowercased() {
         case "codex": assetName = "ProviderCodex"
@@ -320,12 +335,16 @@ final class DeskDisplayServer: ObservableObject {
         guard let image = NSImage(named: assetName),
               let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
-        return bitmap.representation(using: .png, properties: [:])
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { return nil }
+        lock.lock()
+        providerIconCache[providerID] = data
+        lock.unlock()
+        return data
     }
 
-    private static func httpResponse(status: String, type: String, body: Data, extraHeaders: [String] = []) -> Data {
+    private static func httpResponse(status: String, type: String, body: Data, extraHeaders: [String] = [], cacheControl: String = "no-store") -> Data {
         let additional = extraHeaders.isEmpty ? "" : extraHeaders.joined(separator: "\r\n") + "\r\n"
-        let header = "HTTP/1.1 \(status)\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\n\(additional)Connection: close\r\n\r\n"
+        let header = "HTTP/1.1 \(status)\r\nContent-Type: \(type)\r\nContent-Length: \(body.count)\r\nCache-Control: \(cacheControl)\r\nX-Content-Type-Options: nosniff\r\nX-Frame-Options: DENY\r\n\(additional)Connection: close\r\n\r\n"
         var response = Data(header.utf8)
         response.append(body)
         return response
@@ -396,6 +415,15 @@ final class DeskDisplayServer: ObservableObject {
         let rhs = Array(expected.utf8)
         guard lhs.count == rhs.count else { return false }
         return zip(lhs, rhs).reduce(UInt8(0)) { $0 | ($1.0 ^ $1.1) } == 0
+    }
+
+    private static func etag(for data: Data) -> String {
+        let value = data.reduce(UInt64(1_469_598_103_934_665_603)) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
+        return "\"\(String(value, radix: 16))\""
+    }
+
+    private static func matchesETag(_ header: String?, etag: String) -> Bool {
+        header?.split(separator: ",").contains { $0.trimmingCharacters(in: .whitespaces) == etag } == true
     }
 
     private static func isAllowedHost(_ authority: String, port: UInt16) -> Bool {

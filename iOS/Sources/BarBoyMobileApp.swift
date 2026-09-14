@@ -6,7 +6,7 @@ struct BarBoyMobileApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RelayRootView()
+            ContentView()
                 .environmentObject(store)
                 .preferredColorScheme(nil)
         }

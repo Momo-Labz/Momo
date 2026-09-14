@@ -58,7 +58,11 @@ struct DashboardView: View {
     }
 
     var body: some View {
-        if showsOverview {
+        TrackingDashboardView(refreshOnAppear: refreshOnAppear, showsOverview: showsOverview)
+            .environmentObject(monitor)
+            .environmentObject(preferences)
+            .environmentObject(deskDisplay)
+        /*if showsOverview {
             VStack(spacing: 0) {
                 header
                 overviewProviderStrip
@@ -74,7 +78,7 @@ struct DashboardView: View {
             CompactDashboardView()
                 .environmentObject(monitor)
                 .environmentObject(preferences)
-        }
+        }*/
     }
 
     private var compactExpansion: some View {

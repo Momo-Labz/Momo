@@ -1,12 +1,12 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-14
+Updated: 2026-09-14 (tracking-first integration)
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
 
 ## Overall project handoff
 
-MOMO began as a compact menu-bar monitor for Codex, Claude, and Cursor work. The project grew into a single local workspace that combines provider activity, recent project/chat navigation, a Quick Ask composer, voice input, an Obsidian-style knowledge graph, and optional Ollama assistance. The product is intended to reduce context switching: a person should be able to glance at the menu, see what finished or needs attention, expand the same surface when more context is needed, choose a relevant folder and named chat, and continue work without opening a separate dashboard for every provider.
+MOMO is now a tracking-first utility for Codex, Claude, Gemini, Cursor, and Grok. The MVP monitors recorded provider activity, verified usage observations, completions, failures, approvals, and resets. It does not try to replace provider chat interfaces. Obsidian Brain remains an optional local extension with Ollama used only on explicit requests.
 
 The project is deliberately local-first. Provider sessions are read from authorized local folders, Brain data comes from an explicitly connected Obsidian vault, and Ollama is contacted only through its loopback server when the person asks for an answer or suggestion. MOMO must distinguish recorded facts from unavailable provider data and from AI suggestions. It should never imply that an account quota, running state, chat destination, or continuation is known when the source did not record it.
 
@@ -18,15 +18,17 @@ The next chat should treat this document as the working contract: preserve the l
 
 MOMO is a local-first macOS menu-bar workspace for seeing when AI work finishes, what is running, which provider needs attention, and which project or chat should be opened next. The compact menu should stay readable and low distraction. Expand should grow from the same menu surface rather than opening a second browser or detached workflow.
 
-## Interface direction requested
+## Current interface direction
 
 - Keep the dark MOMO identity, restrained status colors, larger readable type, consistent spacing, and dividers between Home, Agents, Tools, and Network.
 - Keep the brand block, compact provider cards, settings control, power/off control, refresh, provider, expand/contract, and overview actions proportional.
 - Place the attention control beside the MOMO/live/reset header information. Use amber for errors or approvals and red only for a recorded provider limit.
 - Show running-session count and the nearest recorded reset in the header gap.
-- Compact Home, Agents, Tools, and Network should each show page-specific content instead of only repeating navigation.
-- Expand grows downward from the same menu surface. Contract returns to compact mode while preserving provider selection, folder selection, and drafts.
-- The expanded Ask surface shows only relevant recent folders and chats first, with search and an explicit way to show more. It must display chat names, not opaque IDs, and clearly say when ChatGPT history is not connected.
+- Activity, Usage, and Brain replace the former Home, Agents, Tools, and Network navigation.
+- The provider strip stays above the active page and displays all five providers without horizontal scrolling.
+- The panel is pinned to the right edge of the active display. Expand grows the same surface leftward and downward; Contract restores compact mode while preserving selection.
+- Settings replaces the content inside the same menu-bar panel. Back restores the state that was active before Settings opened.
+- Relevant sessions load in bounded pages and display readable names instead of opaque IDs.
 - Provide “Open original chat” only when MOMO has a verified destination.
 - The attention inspector must remain inside MOMO. Done/Contract must not close the entire app.
 
@@ -48,15 +50,12 @@ The safe future path for Claude/Cursor account usage is an explicit “Analyze u
 
 ## Implemented architecture
 
-- `MomoSurface` stores page, selected provider, pane, attention filter, and expansion state together.
+- `MomoSurface` stores the tracker page, selected provider/session, expansion state, and in-panel Settings route together.
 - `ActivityMonitor` performs bounded provider scans, coalesces refresh requests, slows polling while the menu is closed, and caches unchanged session files by modification time and size.
 - Session history is bounded and deduplicated by provider plus conversation identity. Process presence alone is not treated as proof that every chat is running.
 - `ClaudeSessionAdapter`, `CodexSessionAdapter`, and `CursorSessionAdapter` preserve provider-specific provenance and leave unsupported fields unavailable.
 - `SessionPresentation` supplies relevant recent chats and readable names.
-- `ConversationSidebar` provides project/chat search, recent folders, bounded chat lists, provider switching, and folder selection.
-- `CommandPaletteView` is embedded in the MOMO surface. It supports text, voice, attachments, original-chat routing when verified, and continuation guidance.
-- File URLs can be dragged into the prompt editor. Attachments remain in the in-memory draft and the menu panel is configured to remain present while Finder or an attachment panel is active.
-- Voice partial recognition is mirrored into the prompt draft while speaking, so words are visible inside the text editor before the user stops.
+- `TrackingDashboardView` keeps the provider strip above Activity, Usage, and Brain, paginates recent evidence, and embeds Settings in the same panel.
 - Refresh is limited to once per minute while the menu is open and every five minutes while it is closed. Ollama availability checks are throttled to two minutes.
 - `MenuBarWindowPositioner` keeps the compact menu aligned to the right side of the active display.
 
@@ -91,11 +90,9 @@ This is an unsigned development build. If macOS blocks the first launch, right-c
 ## Remaining work
 
 1. Add the explicit copy-and-analyze usage flow for Claude and Cursor, with validated structured output and clear provenance.
-2. Test drag-and-drop from Finder against the real menu-bar surface, including multiple files, denied security-scoped access, and menu dismissal behavior.
-3. Test live speech with microphone permission denied, unavailable on-device recognition, partial-result replacement, Stop, and Use Voice.
-4. Run a real-vault Brain profile and verify that unchanged refreshes do not re-index note bodies.
-5. Rebuild and capture compact, expanded, attention, and Brain screenshots after any further UI changes.
-6. Push the latest local commits to `main` when remote approval is available.
+2. Run a real-vault Brain profile and verify that unchanged refreshes do not re-index note bodies.
+3. Capture compact, expanded, attention, Usage, Settings, and Brain screenshots after the tracking-first UI change.
+4. Complete a signed and notarized release after the local behavior is accepted.
 
 ## Working constraints
 

@@ -12,12 +12,15 @@ final class ActivityMonitor: ObservableObject {
 
     @Published private(set) var snapshots: [ProviderSnapshot] = .placeholder
     @Published private(set) var capabilityInventory: CapabilityInventory
+    @Published private(set) var sessionEvidence: [SessionEvidence] = []
+    @Published private(set) var usageObservations: [ProviderUsageObservation] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastUpdated: Date?
 
     private var timer: Timer?
     private var menuIsVisible = false
     private let scanner: LocalActivityScanner
+    private let trackingCache: TrackingCache
     private let inventoryScanner: CapabilityInventoryScanner
     private var authorizedProviders: Set<AIProvider>?
     private var authorizationRevision = 0
@@ -32,12 +35,14 @@ final class ActivityMonitor: ObservableObject {
         enabledProviders: @escaping @MainActor () -> Set<AIProvider> = ActivityMonitor.persistedEnabledProviders,
         sessionAdapters: [any ProviderSessionAdapter]? = nil,
         capabilityReader: CapabilityInventoryReader = CapabilityInventoryReader(),
-        scanner: LocalActivityScanner? = nil
+        scanner: LocalActivityScanner? = nil,
+        trackingCache: TrackingCache = TrackingCache()
     ) {
         self.snapshots = snapshots
         self.capabilityInventory = capabilityInventory
         self.enabledProviders = enabledProviders
         self.scanner = scanner ?? LocalActivityScanner(adapters: sessionAdapters ?? Self.productionSessionAdapters)
+        self.trackingCache = trackingCache
         inventoryScanner = CapabilityInventoryScanner(reader: capabilityReader)
         if autoRefresh {
             refresh()
@@ -60,6 +65,8 @@ final class ActivityMonitor: ObservableObject {
         authorizationRevision += 1
         progress = SessionProgressTracker()
         snapshots = snapshots.filter { providers.contains($0.provider) }
+        sessionEvidence.removeAll()
+        usageObservations.removeAll()
         capabilityInventory = .empty
         refresh()
     }
@@ -88,7 +95,11 @@ final class ActivityMonitor: ObservableObject {
                     refreshRequested = true
                     continue
                 }
-                snapshots = progress.update(latest)
+                let updatedSnapshots = progress.update(latest)
+                snapshots = updatedSnapshots
+                sessionEvidence = Self.evidence(from: updatedSnapshots)
+                _ = await trackingCache.accept(Self.usage(from: updatedSnapshots), now: .now)
+                usageObservations = await trackingCache.observations(now: .now)
                 capabilityInventory = installed.markingUsed(by: latest.flatMap(\.sessions))
                 lastUpdated = .now
             }
@@ -117,6 +128,41 @@ final class ActivityMonitor: ObservableObject {
 
     private static var productionSessionAdapters: [any ProviderSessionAdapter] {
         [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter(), GrokSessionAdapter()]
+    }
+
+    private static func evidence(from snapshots: [ProviderSnapshot]) -> [SessionEvidence] {
+        snapshots.flatMap { snapshot in
+            snapshot.sessions.map { session in
+                SessionEvidence(
+                    provider: session.provider,
+                    sessionID: session.id,
+                    conversationID: session.conversationID,
+                    event: session.attentionReason ?? session.attention.rawValue,
+                    state: session.attention,
+                    observedAt: session.updatedAt,
+                    source: session.recordedSource ?? session.sourceURL?.lastPathComponent ?? "local session"
+                )
+            }
+        }
+    }
+
+    private static func usage(from snapshots: [ProviderSnapshot]) -> [ProviderUsageObservation] {
+        snapshots.flatMap { snapshot in
+            let windows = snapshot.recordedQuotas.isEmpty
+                ? snapshot.recordedQuota.map { [$0] } ?? []
+                : snapshot.recordedQuotas
+            return windows.map { window in
+                ProviderUsageObservation(
+                    provider: snapshot.provider,
+                    metric: window.durationLabel,
+                    percentage: Int(window.percent.rounded()),
+                    resetsAt: window.resetsAt,
+                    capturedAt: window.observedAt,
+                    freshness: TrackingCache.acceptedObservationFreshness,
+                    provenance: .providerEvent
+                )
+            }
+        }
     }
 }
 
@@ -206,13 +252,17 @@ actor LocalActivityScanner {
                 updatedAt: now,
                 isInstalled: !providerProcesses.isEmpty || hasSessionRoot(for: provider)
             )
-            snapshot.recordedQuota = diskSessions.flatMap(\.recordedQuotaWindows).sorted {
+            let freshWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
+                now >= $0.observedAt
+                    && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
+            }
+            snapshot.recordedQuota = freshWindows.sorted {
                 if $0.observedAt != $1.observedAt { return $0.observedAt > $1.observedAt }
                 return $0.minutes < $1.minutes
             }.first
             if let latest = snapshot.recordedQuota?.observedAt {
                 var durations = Set<Int>()
-                snapshot.recordedQuotas = diskSessions.flatMap(\.recordedQuotaWindows)
+                snapshot.recordedQuotas = freshWindows
                     .filter { $0.observedAt == latest && durations.insert($0.minutes).inserted }
             }
             snapshots.append(snapshot)

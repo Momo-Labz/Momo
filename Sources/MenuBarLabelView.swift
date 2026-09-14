@@ -50,7 +50,10 @@ struct MenuBarLabelView: View {
 
     static let statusIcon: NSImage = {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: true) { bounds in
-            NSColor.black.setFill()
+            // Keep the menu-bar mark readable against the dark MOMO surface.
+            // This is intentionally an explicit white mark rather than a
+            // template image so AppKit does not tint it gray in compact mode.
+            NSColor.white.setFill()
             let scale = min(bounds.width, bounds.height) / 16
             let origin = CGPoint(x: bounds.midX - 8 * scale, y: bounds.midY - 8 * scale)
 
@@ -71,7 +74,7 @@ struct MenuBarLabelView: View {
             block(4, 14, 3, 1); block(10, 14, 3, 1); block(3, 15, 3, 1); block(11, 15, 3, 1)
             return true
         }
-        image.isTemplate = true
+        image.isTemplate = false
         return image
     }()
 }

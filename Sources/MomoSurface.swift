@@ -1,5 +1,10 @@
 import SwiftUI
 
+enum MomoScreen: String {
+    case tracking
+    case settings
+}
+
 /// Which pane the one MOMO window is showing.
 ///
 /// MOMO used to open a separate window for Quick Ask and for Voice. They are
@@ -31,8 +36,16 @@ enum MomoPane: String, CaseIterable, Identifiable {
 @MainActor
 final class MomoSurface: ObservableObject {
     static let shared = MomoSurface()
+    static let compactWidth: CGFloat = 700
+    static let expandedWidth: CGFloat = 920
+    static let compactHeight: CGFloat = 310
+    static let expandedHeight: CGFloat = 620
+
     @Published var pane: MomoPane = .sessions
     @Published var expanded = false
+    @Published var screen: MomoScreen = .tracking
+    @Published var trackerTab: TrackerTab = .activity
+    @Published var selectedSessionID: String?
     /// State shared by the compact menu and its in-place expanded surface.
     /// Keeping this here prevents the menu and the expanded content from
     /// drifting apart when the user changes provider or page.
@@ -41,6 +54,7 @@ final class MomoSurface: ObservableObject {
     @Published var attentionOnly = false
     /// True when the pane changed from a keyboard shortcut, which must not animate.
     @Published var lastChangeWasKeyboard = false
+    private var expansionBeforeSettings = false
 
     func show(_ pane: MomoPane, fromKeyboard: Bool = false) {
         lastChangeWasKeyboard = fromKeyboard
@@ -49,8 +63,23 @@ final class MomoSurface: ObservableObject {
 
     func selectProvider(_ provider: AIProvider?) {
         selectedProvider = provider
-        guard let provider else { return }
-        QuickAskContext.shared.provider = provider
-        QuickAskContext.shared.targetProvider = provider
+    }
+
+    func selectSession(_ session: AgentSession?) {
+        selectedSessionID = session?.id
+        if let session { selectProvider(session.provider) }
+    }
+
+    func showSettings(fromKeyboard: Bool = false) {
+        lastChangeWasKeyboard = fromKeyboard
+        expansionBeforeSettings = expanded
+        screen = .settings
+        expanded = true
+    }
+
+    func leaveSettings(fromKeyboard: Bool = false) {
+        lastChangeWasKeyboard = fromKeyboard
+        screen = .tracking
+        expanded = expansionBeforeSettings
     }
 }

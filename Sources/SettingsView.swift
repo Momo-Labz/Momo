@@ -3,18 +3,26 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct SettingsView: View {
+    var embedded = false
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
-    @ObservedObject private var autoResume = AutoResumeService.shared
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var shortcutService = GlobalShortcutService.shared
     @State private var recordingShortcut: ShortcutAction?
     @State private var shortcutError: String?
     @State private var shortcutNotice: String?
     @AppStorage("hapticFeedback") private var hapticFeedback = true
+    @AppStorage("notifyNeedsInput") private var notifyNeedsInput = true
+    @AppStorage("notifyFailure") private var notifyFailure = true
+    @AppStorage("notifyCompletion") private var notifyCompletion = true
+    @AppStorage("notifyUsageReset") private var notifyUsageReset = true
+    @AppStorage("notifyThreshold50") private var notifyThreshold50 = false
+    @AppStorage("notifyThreshold75") private var notifyThreshold75 = true
+    @AppStorage("notifyThreshold90") private var notifyThreshold90 = true
+    @AppStorage("notifyThreshold100") private var notifyThreshold100 = true
     @State private var pendingProvider: AIProvider?
     @State private var pendingRoot: String?
     private var refreshIntervalLabel: String {
@@ -30,14 +38,15 @@ struct SettingsView: View {
                 .tabItem { Label("Access", systemImage: "key.horizontal") }
             general
                 .tabItem { Label("General", systemImage: "gearshape") }
+            notifications
+                .tabItem { Label("Notifications", systemImage: "bell") }
             deskDisplaySettings
                 .tabItem { Label("Desk Display", systemImage: "display") }
-            shortcutsSettings
-                .tabItem { Label("Shortcuts", systemImage: "command") }
             privacy
                 .tabItem { Label("Privacy", systemImage: "hand.raised") }
         }
-        .frame(width: 590, height: 480)
+        .frame(width: embedded ? nil : 590, height: embedded ? nil : 480)
+        .frame(maxWidth: embedded ? .infinity : nil, maxHeight: embedded ? .infinity : nil)
         .alert("Authorize local access", isPresented: Binding(
             get: { pendingProvider != nil },
             set: { if !$0 { pendingProvider = nil; pendingRoot = nil } }
@@ -204,19 +213,30 @@ struct SettingsView: View {
                 }
             ))
             LabeledContent("Alert permission", value: attentionNotifier.authorizationLabel)
-            Toggle("Auto-resume after usage reset", isOn: $preferences.autoResumeAfterReset)
-            Text("Automatically continue authorized local Codex CLI chats after a recorded usage reset. No confirmation per chat. One attempt per reset; manual stops and other errors are excluded. Desktop chats and other providers are not supported yet.")
-                .font(.caption).foregroundStyle(.secondary)
-            Text(autoResume.status).font(.caption).foregroundStyle(.secondary)
-            ForEach(AIProvider.allCases) { provider in
-                LabeledContent(provider.name, value: provider == .codex ? "CLI supported · desktop unavailable" : "Auto-resume unavailable")
-                    .font(.caption)
-            }
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
             LabeledContent("Refresh interval", value: refreshIntervalLabel)
             LabeledContent("Version", value: BarBoyAppInfo.marketingVersion)
+        }
+        .formStyle(.grouped)
+        .padding(10)
+    }
+
+    private var notifications: some View {
+        Form {
+            Toggle("Enable notifications", isOn: $preferences.attentionAlertsEnabled)
+            Toggle("Completion", isOn: $notifyCompletion)
+            Toggle("Approval or input needed", isOn: $notifyNeedsInput)
+            Toggle("Failure", isOn: $notifyFailure)
+            Toggle("Usage limit reset", isOn: $notifyUsageReset)
+            Text("Usage thresholds").font(.headline)
+            Toggle("50%", isOn: $notifyThreshold50)
+            Toggle("75%", isOn: $notifyThreshold75)
+            Toggle("90%", isOn: $notifyThreshold90)
+            Toggle("100%", isOn: $notifyThreshold100)
+            Text("MOMO notifies once per crossing for the selected thresholds.")
+                .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)
         .padding(10)

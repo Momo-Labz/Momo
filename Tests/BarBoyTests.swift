@@ -1176,6 +1176,43 @@ final class BarBoyTests: XCTestCase {
         XCTAssertTrue(html.contains("overflow:hidden"))
         XCTAssertTrue(html.contains("NEED"))
         XCTAssertTrue(html.contains("/provider-icon/"))
+        XCTAssertTrue(html.contains("document.hidden"))
+        XCTAssertTrue(html.contains("60000"))
+        XCTAssertFalse(html.contains("\n"), "Inline desk-display assets should stay minified.")
+    }
+
+    func testDeskDisplayStatusUsesETagRevalidation() async throws {
+        let suiteName = "BarBoyDeskDisplayETagTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        let server = DeskDisplayServer(defaults: defaults)
+        defer {
+            server.stop()
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+
+        server.start()
+        try await waitUntilReady(server)
+        guard server.state == .ready else {
+            throw XCTSkip("Desk Display listener could not start: \(server.errorMessage ?? server.state.label)")
+        }
+
+        let request = "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:\(server.port)\r\nAuthorization: Bearer \(server.token)\r\nConnection: close\r\n\r\n"
+        let initial = try rawHTTPResponse(port: server.port, request: request)
+        XCTAssertTrue(initial.hasPrefix("HTTP/1.1 200 OK"))
+        XCTAssertTrue(initial.contains("Cache-Control: no-cache"))
+        XCTAssertTrue(initial.contains("X-Relay-Schema: 1"))
+        let etag = try XCTUnwrap(initial.components(separatedBy: "\r\n").first { $0.hasPrefix("ETag: ") }.map { String($0.dropFirst(6)) })
+
+        let conditional = "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:\(server.port)\r\nAuthorization: Bearer \(server.token)\r\nIf-None-Match: \(etag)\r\nConnection: close\r\n\r\n"
+        let unchanged = try rawHTTPResponse(port: server.port, request: conditional)
+        XCTAssertTrue(unchanged.hasPrefix("HTTP/1.1 304 Not Modified"))
+        XCTAssertTrue(unchanged.contains("Content-Length: 0"))
+
+        let snapshot = ProviderSnapshot(provider: .codex, sessions: [], activeCount: 1, localTokensToday: 1, updatedAt: .now)
+        server.update(snapshots: [snapshot], includeTitles: true)
+        let changed = try rawHTTPResponse(port: server.port, request: conditional)
+        XCTAssertTrue(changed.hasPrefix("HTTP/1.1 200 OK"))
     }
 
     func testCapabilityProvenanceInference() {

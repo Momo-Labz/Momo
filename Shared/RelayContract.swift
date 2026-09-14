@@ -1,9 +1,9 @@
 import Foundation
 
 /// The single transport contract shared by MOMO, MOMO RELAY, and the desk display.
-/// Optional provenance fields keep 0.3 payloads decodable during the 0.4 migration.
+/// Schema v2 adds policy-independent tracking observations while retaining v1 decoding.
 struct RelayStatus: Codable {
-    static let currentSchemaVersion = 1
+    static let currentSchemaVersion = 2
 
     let schemaVersion: Int?
     let updated: String
@@ -11,6 +11,69 @@ struct RelayStatus: Codable {
     let attentionCount: Int
     let providers: [RelayProvider]
     let sessions: [RelaySession]
+    let usageObservations: [RelayUsageObservation]
+    let evidence: [RelaySessionEvidence]
+
+    init(
+        schemaVersion: Int?,
+        updated: String,
+        activeCount: Int,
+        attentionCount: Int,
+        providers: [RelayProvider],
+        sessions: [RelaySession],
+        usageObservations: [RelayUsageObservation] = [],
+        evidence: [RelaySessionEvidence] = []
+    ) {
+        self.schemaVersion = schemaVersion
+        self.updated = updated
+        self.activeCount = activeCount
+        self.attentionCount = attentionCount
+        self.providers = providers
+        self.sessions = sessions
+        self.usageObservations = usageObservations
+        self.evidence = evidence
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case schemaVersion, updated, activeCount, attentionCount, providers, sessions
+        case usageObservations, evidence
+    }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion)
+        updated = try values.decode(String.self, forKey: .updated)
+        activeCount = try values.decode(Int.self, forKey: .activeCount)
+        attentionCount = try values.decode(Int.self, forKey: .attentionCount)
+        providers = try values.decode([RelayProvider].self, forKey: .providers)
+        sessions = try values.decode([RelaySession].self, forKey: .sessions)
+        usageObservations = try values.decodeIfPresent([RelayUsageObservation].self, forKey: .usageObservations) ?? []
+        evidence = try values.decodeIfPresent([RelaySessionEvidence].self, forKey: .evidence) ?? []
+    }
+}
+
+struct RelayUsageObservation: Codable, Identifiable, Hashable {
+    let provider: String
+    let metric: String
+    let percentage: Int?
+    let resetsAt: String?
+    let capturedAt: String
+    let freshUntil: String
+    let provenance: String
+
+    var id: String { "\(provider)|\(metric)" }
+}
+
+struct RelaySessionEvidence: Codable, Identifiable, Hashable {
+    let provider: String
+    let sessionID: String
+    let conversationID: String?
+    let event: String
+    let state: String
+    let observedAt: String
+    let source: String
+
+    var id: String { "\(provider)|\(conversationID ?? sessionID)|\(observedAt)" }
 }
 
 struct RelayProvider: Codable, Identifiable {

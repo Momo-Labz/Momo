@@ -5,9 +5,11 @@ import UserNotifications
 final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
     @Published private(set) var authorizationLabel = "Off"
     @Published private(set) var completedSessions: [AgentSession] = []
+    let policyStore: NotificationPolicyStore
     private var notified = Set<String>()
     private var currentSessions: [String: AgentSession] = [:]
     private var knownStates: [String: AgentAttention] = [:]
+    private var hasSeededState = false
 
     private enum Category {
         static let ret = "MOMO_RETURN"
@@ -15,7 +17,8 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
         static let open = "MOMO_OPEN_REPLY"
     }
 
-    override init() {
+    init(policyStore: NotificationPolicyStore? = nil) {
+        self.policyStore = policyStore ?? NotificationPolicyStore()
         super.init()
         let center = UNUserNotificationCenter.current()
         center.delegate = self
@@ -47,37 +50,51 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
 
     func update(snapshots: [ProviderSnapshot], enabled: Bool, now: Date = .now) {
         let sessions = snapshots.flatMap(\.sessions)
+        let policy = policyStore.policy
         let newlyCompleted = sessions.filter { session in
-            session.attention == .completed && knownStates[session.id] != nil && knownStates[session.id] != .completed
+            let key = Self.sessionIdentity(session)
+            return session.attention == .completed && knownStates[key] != nil && knownStates[key] != .completed
         }
-        for session in sessions { knownStates[session.id] = session.attention }
+        for session in sessions { knownStates[Self.sessionIdentity(session)] = session.attention }
         completedSessions = (completedSessions + newlyCompleted).filter { now.timeIntervalSince($0.updatedAt) < 900 }
 
-        guard enabled else {
+        guard enabled, policy.isEnabled else {
             currentSessions.removeAll()
             notified.removeAll()
+            knownStates.removeAll()
+            hasSeededState = false
             authorizationLabel = "Off"
             return
         }
         authorizationLabel = "On"
 
-        let urgent = sessions.filter {
-            $0.attention.isUrgent && ($0.isRunning || now.timeIntervalSince($0.updatedAt) < 300)
+        let urgent = sessions.filter { session in
+            let eventEnabled = session.attention == .failed ? policy.notifyOnFailure : policy.notifyOnNeedsInput
+            return session.attention.isUrgent && eventEnabled
+                && (session.isRunning || now.timeIntervalSince(session.updatedAt) < 300)
         }
         // A recorded window that reset within the last half hour: the chat can move again.
         let reopened = sessions.filter { session in
-            guard !session.isRunning else { return false }
+            guard policy.notifyOnUsageReset, !session.isRunning else { return false }
             return Self.justReset(session, now: now) != nil
         }
 
         var live: [String: AgentSession] = [:]
-        for session in urgent { live["\(session.id)|\(session.attention.rawValue)"] = session }
+        for session in urgent { live["\(Self.sessionIdentity(session))|\(session.attention.rawValue)"] = session }
         for session in reopened {
             guard let reset = Self.justReset(session, now: now) else { continue }
-            live["\(session.id)|reset|\(Int(reset.timeIntervalSince1970))"] = session
+            live["\(Self.sessionIdentity(session))|reset|\(Int(reset.timeIntervalSince1970))"] = session
         }
         currentSessions = live
         notified.formIntersection(Set(live.keys))
+
+        let usageObservations = snapshots.flatMap(Self.usageObservations)
+        if !hasSeededState {
+            notified.formUnion(live.keys)
+            for observation in usageObservations { _ = policyStore.newMilestones(for: observation, now: now) }
+            hasSeededState = true
+            return
+        }
 
         for (identifier, session) in live {
             guard notified.insert(identifier).inserted else { continue }
@@ -100,13 +117,32 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
             UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
         }
 
-        for session in newlyCompleted {
-            let content = UNMutableNotificationContent()
-            content.title = "(session.provider.name) finished"
-            content.body = session.title
-            content.subtitle = session.project
-            content.sound = .default
-            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "completed|\(session.id)|\(Int(session.updatedAt.timeIntervalSince1970))", content: content, trigger: nil))
+        if policy.notifyOnCompletion {
+            for session in newlyCompleted {
+                let content = UNMutableNotificationContent()
+                content.title = "\(session.provider.name) finished"
+                content.body = session.title
+                content.subtitle = session.project
+                content.sound = .default
+                let identifier = "completed|\(Self.sessionIdentity(session))|\(Int(session.updatedAt.timeIntervalSince1970))"
+                currentSessions[identifier] = session
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+            }
+        }
+
+        for observation in usageObservations {
+            for threshold in policyStore.newMilestones(for: observation, now: now) {
+                let content = UNMutableNotificationContent()
+                content.title = threshold == 100
+                    ? "\(observation.provider.name) usage limit reached"
+                    : "\(observation.provider.name) usage reached \(threshold)%"
+                content.body = observation.resetsAt.map { "Resets \($0.formatted())" }
+                    ?? "No reset time was recorded."
+                content.sound = .default
+                let cycle = observation.resetsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "open"
+                let identifier = "usage|\(observation.provider.rawValue)|\(observation.metric.lowercased())|\(threshold)|\(cycle)"
+                UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+            }
         }
     }
 
@@ -115,5 +151,26 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
         session.recordedQuotaWindows.compactMap(\.resetsAt)
             .filter { $0 <= now && now.timeIntervalSince($0) < 1_800 }
             .max()
+    }
+
+    static func sessionIdentity(_ session: AgentSession) -> String {
+        "\(session.provider.rawValue)|\(session.conversationID ?? session.id)"
+    }
+
+    private static func usageObservations(_ snapshot: ProviderSnapshot) -> [ProviderUsageObservation] {
+        let windows = snapshot.recordedQuotas.isEmpty
+            ? snapshot.recordedQuota.map { [$0] } ?? []
+            : snapshot.recordedQuotas
+        return windows.map { window in
+            ProviderUsageObservation(
+                provider: snapshot.provider,
+                metric: window.durationLabel,
+                percentage: Int(window.percent.rounded()),
+                resetsAt: window.resetsAt,
+                capturedAt: window.observedAt,
+                freshness: TrackingCache.acceptedObservationFreshness,
+                provenance: .providerEvent
+            )
+        }
     }
 }
