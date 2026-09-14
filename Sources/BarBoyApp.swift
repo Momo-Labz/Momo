@@ -68,13 +68,6 @@ struct BarBoyApp: App {
     @StateObject private var runtime = MomoRuntime.shared
 
     var body: some Scene {
-        Settings {
-            SettingsView()
-                .environmentObject(runtime.monitor)
-                .environmentObject(runtime.preferences)
-                .environmentObject(runtime.deskDisplay)
-                .environmentObject(runtime.attentionNotifier)
-        }
         Window("MOMO", id: "dashboard") {
             DashboardView()
                 .environmentObject(runtime.monitor)
