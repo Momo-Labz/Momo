@@ -4,6 +4,16 @@ Updated: 2026-09-14
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
 
+## Overall project handoff
+
+MOMO began as a compact menu-bar monitor for Codex, Claude, and Cursor work. The project grew into a single local workspace that combines provider activity, recent project/chat navigation, a Quick Ask composer, voice input, an Obsidian-style knowledge graph, and optional Ollama assistance. The product is intended to reduce context switching: a person should be able to glance at the menu, see what finished or needs attention, expand the same surface when more context is needed, choose a relevant folder and named chat, and continue work without opening a separate dashboard for every provider.
+
+The project is deliberately local-first. Provider sessions are read from authorized local folders, Brain data comes from an explicitly connected Obsidian vault, and Ollama is contacted only through its loopback server when the person asks for an answer or suggestion. MOMO must distinguish recorded facts from unavailable provider data and from AI suggestions. It should never imply that an account quota, running state, chat destination, or continuation is known when the source did not record it.
+
+The current codebase is a native SwiftUI macOS menu-bar app generated from `project.yml`. `Sources/` contains the application and services, `Tests/` contains fixture and backend/visual tests, `Resources/` contains provider artwork, and `Docs/` contains supporting project documentation. `BarBoy.xcodeproj` is generated output; regenerate it with XcodeGen after adding or removing source files. The app is branded MOMO/MomoLabz even though some legacy filenames still use BAR BOY/BarBoy.
+
+The next chat should treat this document as the working contract: preserve the local-first boundary, inspect the current checkout before editing, continue from the latest commit rather than recreating the UI, and update this handoff whenever a major behavior or limitation changes.
+
 ## Product goal
 
 MOMO is a local-first macOS menu-bar workspace for seeing when AI work finishes, what is running, which provider needs attention, and which project or chat should be opened next. The compact menu should stay readable and low distraction. Expand should grow from the same menu surface rather than opening a second browser or detached workflow.
@@ -95,3 +105,11 @@ This is an unsigned development build. If macOS blocks the first launch, right-c
 - Keep provider credentials and usage data local.
 - Keep drafts and attachments scoped to the selected provider/chat/folder.
 - Use the project’s `project.yml` as the authoritative XcodeGen input and regenerate `BarBoy.xcodeproj` after source-file changes.
+
+## How the next chat should resume
+
+1. Read this file and `README.md`, then inspect `git status` and the latest commits.
+2. Start with the remaining usage-import, live drag/drop, voice, and real-vault verification items instead of reopening already settled compact-layout questions.
+3. Treat any new provider data as unverified until its source and account scope are recorded.
+4. Build with XcodeGen followed by `xcodebuild` before packaging. Capture the affected compact and expanded states after UI changes.
+5. Report whether changes are only local, committed locally, or pushed to the remote; these are separate states.
