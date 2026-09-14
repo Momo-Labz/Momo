@@ -83,7 +83,7 @@ final class OllamaService: ObservableObject {
         now: @escaping @Sendable () -> Date = { Date() },
         cacheLifetime: TimeInterval = 300,
         cacheLimit: Int = 12,
-        refreshInterval: TimeInterval = 30,
+        refreshInterval: TimeInterval = 120,
         defaults: UserDefaults = .standard,
         persistSelection: Bool = false
     ) {

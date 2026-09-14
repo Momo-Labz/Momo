@@ -6,7 +6,9 @@ import SQLite3
 
 @MainActor
 final class ActivityMonitor: ObservableObject {
-    static let refreshInterval: TimeInterval = 30
+    // Keep the menu responsive without polling provider folders every few
+    // seconds. File mtimes and the session cache make each refresh cheap.
+    static let refreshInterval: TimeInterval = 60
 
     @Published private(set) var snapshots: [ProviderSnapshot] = .placeholder
     @Published private(set) var capabilityInventory: CapabilityInventory
@@ -42,7 +44,7 @@ final class ActivityMonitor: ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    let interval: TimeInterval = self.menuIsVisible ? Self.refreshInterval : 120
+                    let interval: TimeInterval = self.menuIsVisible ? Self.refreshInterval : 300
                     if self.lastUpdated.map({ Date().timeIntervalSince($0) >= interval }) ?? true { self.refresh() }
                 }
             }

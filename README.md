@@ -17,7 +17,7 @@ These captures use synthetic sessions and notes, not live account usage.
 - A Network page with a local Obsidian-style Brain graph, note search, backlinks, bounded graph display, project-folder mappings, and explicit open-in-Obsidian actions.
 - An explicit Obsidian vault connection. MOMO reads Markdown metadata and links locally, skips hidden files and unsafe paths, indexes incrementally, and never writes without a Save confirmation.
 - Brain suggestions from local Ollama are opt-in. Suggestions use dashed edges, cite the selected note, require review before acceptance, and can be saved as a new collision-safe note under `MOMO/`.
-- Ollama model selection, offline/missing-model/loading/cancelled/timeout states, one active request at a time, bounded prompts and output, source-revision cache invalidation, and a five-minute answer cache.
+- Ollama model selection, offline/missing-model/loading/cancelled/timeout states, one active request at a time, bounded prompts and output, source-revision cache invalidation, and a five-minute answer cache. Local model checks are throttled to avoid recurring battery use.
 - User-supplied Claude, Codex, Cursor, and Grok identity marks on consistent paper tiles, with a recognizable Gemini fallback.
 - Restrained Momo entrance and tab motion that becomes instant when Reduce Motion is enabled.
 - Local detection of active Codex, Claude Code, Gemini CLI, Cursor, and Grok processes.

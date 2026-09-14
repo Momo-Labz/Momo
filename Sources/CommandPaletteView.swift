@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// In-memory drafts never cross chat boundaries or persist prompt text to disk.
 @MainActor
@@ -171,6 +172,9 @@ struct CommandPaletteView: View {
                         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                         .frame(height: context.session == nil ? 142 : 116)
                         .accessibilityLabel(context.session.map { "Reply to \($0.title)" } ?? "New prompt")
+                        .onDrop(of: [UTType.fileURL.identifier], isTargeted: nil) { providers in
+                            attachDroppedFiles(providers)
+                        }
                     VoiceInlineBar()
                 }
             }
@@ -361,6 +365,21 @@ struct CommandPaletteView: View {
             MomoFeedback.perform()
         }
     }
+
+    private func attachDroppedFiles(_ providers: [NSItemProvider]) -> Bool {
+        let fileType = UTType.fileURL.identifier
+        var accepted = false
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(fileType) {
+            accepted = true
+            provider.loadDataRepresentation(forTypeIdentifier: fileType) { data, _ in
+                guard let data,
+                      let url = NSURL(absoluteURLWithDataRepresentation: data, relativeTo: nil) as URL? else { return }
+                Task { @MainActor in context.attach([url]) }
+            }
+        }
+        if accepted { routingMessage = "Attachment added. MOMO stays open while you continue." }
+        return accepted
+    }
 }
 
 private struct PromptAssistPanel: View {
@@ -428,17 +447,22 @@ private struct FolderList: View {
 
 private struct VoiceInlineBar: View {
     @ObservedObject private var voice = VoiceInput.shared
+    @ObservedObject private var context = QuickAskContext.shared
+    @State private var baseDraft = ""
+    @State private var previewText = ""
 
     var body: some View {
         HStack(spacing: 6) {
             Button(voice.isActive ? "STOP" : "HANDS-FREE") {
                 if voice.isActive { voice.stop() }
                 else {
+                    baseDraft = context.draft
+                    previewText = ""
                     voice.prepare(.handsFree)
                     Task { await voice.start() }
                 }
             }.barBoyButton()
-            Button("USE VOICE") { voice.useDraft() }
+            Button("USE VOICE") { voice.stop() }
                 .barBoyButton()
                 .disabled(voice.text.isEmpty || voice.isActive)
             Text(voice.text.isEmpty ? voice.state.rawValue : voice.text)
@@ -449,6 +473,13 @@ private struct VoiceInlineBar: View {
             Spacer(minLength: 0)
         }
         .help(voice.message)
+        .onChange(of: voice.text) { _, value in
+            guard voice.isActive || !value.isEmpty else { return }
+            guard value != previewText else { return }
+            previewText = value
+            let separator = baseDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : "\n"
+            context.draft = baseDraft + separator + value
+        }
     }
 }
 

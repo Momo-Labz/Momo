@@ -31,6 +31,14 @@ struct MenuBarWindowPositioner: NSViewRepresentable {
 
         func positionIfNeeded() {
             guard let window, !scheduled else { return }
+            // MenuBarExtra uses an NSPanel. Keep it alive while Finder or an
+            // Open panel is the drag source; the menu icon/Contract action
+            // remains the explicit way to dismiss MOMO.
+            if let panel = window as? NSPanel {
+                panel.hidesOnDeactivate = false
+                panel.isFloatingPanel = true
+                panel.becomesKeyOnlyIfNeeded = false
+            }
             scheduled = true
             DispatchQueue.main.async { [weak self, weak window] in
                 guard let self else { return }
