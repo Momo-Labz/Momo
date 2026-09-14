@@ -12,15 +12,19 @@ struct CapabilityInventoryView: View {
     @EnvironmentObject private var monitor: ActivityMonitor
     @Environment(\.dismiss) private var dismiss
     @State private var scope: CapabilityInventoryScope
+    @State private var query = ""
+    var embedded = false
 
-    init(initialScope: CapabilityInventoryScope) {
+    init(initialScope: CapabilityInventoryScope, embedded: Bool = false) {
         _scope = State(initialValue: initialScope)
+        self.embedded = embedded
     }
 
     private var items: [InstalledCapability] {
         monitor.capabilityInventory.items
             .filter { capability in
-                scope == .skills ? capability.kind == .skill : capability.kind != .skill
+                (scope == .skills ? capability.kind == .skill : capability.kind != .skill)
+                    && (query.isEmpty || capability.name.localizedCaseInsensitiveContains(query))
             }
             .sorted {
                 if $0.isUsed != $1.isUsed { return $0.isUsed }
@@ -41,11 +45,14 @@ struct CapabilityInventoryView: View {
                         .font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("DONE") { dismiss() }.barBoyButton()
+                if !embedded { Button("DONE") { dismiss() }.barBoyButton() }
             }
             .padding(16)
 
             Rectangle().fill(BarBoyStyle.hairline).frame(height: 1)
+
+            TextField("Search installed tools", text: $query)
+                .textFieldStyle(.roundedBorder).padding(.horizontal, 12).padding(.top, 10)
 
             HStack(spacing: 4) {
                 ForEach([CapabilityInventoryScope.skills, .integrations]) { item in
@@ -103,7 +110,7 @@ struct CapabilityInventoryView: View {
             }
             .padding(.horizontal, 14).frame(height: 42)
         }
-        .frame(width: 600, height: 480)
+        .frame(width: embedded ? nil : 600, height: 480)
         .background(BarBoyStyle.panel)
     }
 }

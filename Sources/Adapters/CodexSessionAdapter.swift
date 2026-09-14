@@ -208,9 +208,7 @@ private extension CodexSessionAdapter {
             case "function_call_output", "custom_tool_call_output":
                 attention = .working
                 attentionReason = nil
-                if let callID = nonemptyString(payload["call_id"]), blockingCallIDs.remove(callID) != nil {
-                    blockingCallIDs.remove(callID)
-                }
+                if let callID = nonemptyString(payload["call_id"]) { blockingCallIDs.remove(callID) }
             case "message":
                 let text = contentText(payload["content"])
                 switch string(payload["role"]) {

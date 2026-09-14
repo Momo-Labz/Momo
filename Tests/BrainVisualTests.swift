@@ -67,10 +67,16 @@ final class BrainVisualTests: XCTestCase {
         let sessions = [AgentSession(id: "visual-chat", provider: .codex, role: .main, title: "Review MOMO navigation", detail: "Approval needed before updating the release", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: 24000, attention: .needsInput, attentionReason: "Review the attached menu screenshots", model: "Codex", mcpServers: [], skills: [], plugins: [])]
         var snapshot = ProviderSnapshot(provider: .codex, sessions: sessions, activeCount: 0, localTokensToday: 24000, updatedAt: now)
         snapshot.recordedQuota = RecordedQuotaWindow(percent: 40, minutes: 300, resetsAt: now.addingTimeInterval(3900), observedAt: now)
-        let monitor = ActivityMonitor(autoRefresh: false, snapshots: [snapshot])
+        let claude = AgentSession(id: "visual-claude", provider: .claude, role: .main, title: "Review project notes", detail: "Finished the review", project: "MOMO", updatedAt: now, isRunning: false, processID: nil, tokens: 12000, attention: .completed)
+        let cursor = AgentSession(id: "visual-cursor", provider: .cursor, role: .main, title: "Train the classifier", detail: "Local transcript available", project: "Research", updatedAt: now, isRunning: false, processID: nil, tokens: nil, attention: .unknown)
+        let monitor = ActivityMonitor(autoRefresh: false, snapshots: [snapshot,
+            ProviderSnapshot(provider: .claude, sessions: [claude], activeCount: 0, localTokensToday: 12000, updatedAt: now),
+            ProviderSnapshot(provider: .cursor, sessions: [cursor], activeCount: 0, localTokensToday: 0, updatedAt: now)])
         let defaults = UserDefaults(suiteName: "momo.visual." + UUID().uuidString)!
         let preferences = PreferencesStore(defaults: defaults)
         preferences.setEnabled(true, for: .codex)
+        preferences.setEnabled(true, for: .claude)
+        preferences.setEnabled(true, for: .cursor)
         let desk = DeskDisplayServer(defaults: defaults)
         let surface = MomoSurface.shared
         surface.selectedProvider = .codex; surface.page = .home; surface.attentionOnly = false; surface.expanded = false

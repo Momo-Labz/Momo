@@ -55,7 +55,17 @@ final class QuickAskContext: ObservableObject {
 
     func selectFolder(_ name: String) {
         let cleaned = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if session == nil { newFolders[provider] = cleaned.isEmpty ? nil : cleaned }
+        if session == nil {
+            let previousKey = draftKey
+            let wasUnassigned = newFolders[provider] == nil
+            newFolders[provider] = cleaned.isEmpty ? nil : cleaned
+            // Assigning the first folder must not discard an already typed prompt.
+            // Subsequent project switches restore each project's own draft.
+            if wasUnassigned, previousKey != draftKey {
+                if drafts[draftKey] == nil { drafts[draftKey] = drafts.removeValue(forKey: previousKey) }
+                if attachmentSets[draftKey] == nil { attachmentSets[draftKey] = attachmentSets.removeValue(forKey: previousKey) }
+            }
+        }
         else { folderSelections[draftKey] = cleaned.isEmpty ? nil : cleaned }
     }
 
@@ -92,7 +102,7 @@ struct CommandPaletteView: View {
 
     /// Closing a pane returns to the chat list; closing a window dismisses it.
     private func leave() {
-        if embedded { MomoSurface.shared.show(.sessions) } else { dismiss() }
+        if embedded { MomoSurface.shared.expanded = false } else { dismiss() }
     }
     @ObservedObject var context = QuickAskContext.shared
     @FocusState private var editorFocused: Bool
@@ -182,7 +192,7 @@ struct CommandPaletteView: View {
                     Button("OPEN ORIGINAL CHAT") { NSWorkspace.shared.open(url) }.barBoyButton()
                 }
                 Spacer()
-                Button("CLOSE") { leave() }.barBoyButton()
+                Button(embedded ? "CONTRACT" : "CLOSE") { leave() }.barBoyButton()
                 if context.session == nil {
                     Button("COPY + OPEN") { routePrompt() }
                         .barBoyButton()

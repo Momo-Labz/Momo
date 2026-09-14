@@ -3,8 +3,6 @@ import Foundation
 /// Parses Claude Code's JSONL transcript format without sampling away mid-session provenance.
 struct ClaudeSessionAdapter: ProviderSessionAdapter {
     let provider: AIProvider = .claude
-    /// How quiet an open tool call must go before it reads as a prompt on screen.
-    static let idleToolGrace: TimeInterval = 20
     func session(
         from file: ProviderSessionFile,
         context: ProviderSessionContext
@@ -15,12 +13,6 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
         var metadata = ClaudeSessionMetadata()
         forEachJSONLine(in: handle) { object in
             metadata.consume(object)
-        }
-        if (metadata.attention == .working || metadata.attention == .unknown),
-           !metadata.openToolCalls.isEmpty,
-           context.now.timeIntervalSince(file.modifiedAt) >= Self.idleToolGrace {
-            metadata.attention = .needsInput
-            metadata.attentionReason = "Claude may be waiting: \(metadata.openToolCalls.last?.name ?? "tool") has been open with no new activity."
         }
 
         let fallbackName = humanized(file.url.deletingPathExtension().lastPathComponent)
@@ -134,11 +126,13 @@ private struct ClaudeSessionMetadata {
             detail = text
         }
 
-        if containsLimitSignal(event) {
-            limitReached = true
-            attention = .failed
-            attentionReason = "Claude session limit reached"
-        }
+        let providerLimit = providerLimitSignal(
+            event: event,
+            type: eventType,
+            subtype: subtype,
+            status: status,
+            message: message
+        )
 
         // A tool_result closes the call it answers.
         for id in toolResultIDs(in: content) {
@@ -157,24 +151,67 @@ private struct ClaudeSessionMetadata {
             }
         }
 
-        if isFailure(event: event, message: message, content: content, type: eventType, subtype: subtype, status: status) {
+        if providerLimit {
+            limitReached = true
+            attention = .failed
+            attentionReason = "Claude session limit reached"
+        } else if isFailure(event: event, message: message, content: content, type: eventType, subtype: subtype, status: status) {
             attention = .failed
             attentionReason = "The latest Claude event failed"
         } else if toolUses.contains(where: isUserInputTool) || isBlocked(type: eventType, subtype: subtype, status: status) {
             attention = .needsInput
             attentionReason = "Claude is waiting for your response"
         } else if isCompleted(message: message, type: eventType, subtype: subtype, status: status) {
+            limitReached = false
             attention = .completed
             attentionReason = "Claude finished the latest task"
-        } else if !limitReached && (eventType == "user" || eventType == "assistant") {
+        } else if eventType == "user" || eventType == "assistant" {
+            limitReached = false
             attention = .working
             attentionReason = nil
         }
     }
 
-    private func containsLimitSignal(_ event: [String: Any]) -> Bool {
-        let text = String(describing: event).lowercased()
-        return text.contains("session limit") || text.contains("rate limit") || text.contains("usage limit") || text.contains("limit reached")
+    /// Only provider-owned error records establish a limit. User prompt text,
+    /// assistant prose, tool arguments, and arbitrary nested values are excluded.
+    private func providerLimitSignal(
+        event: [String: Any],
+        type: String,
+        subtype: String,
+        status: String,
+        message: [String: Any]?
+    ) -> Bool {
+        guard ["error", "result"].contains(type) else { return false }
+        let structuredCodes = [
+            subtype,
+            status,
+            normalized(event["code"] as? String),
+            normalized(event["error_code"] as? String),
+            normalized(message?["code"] as? String),
+            normalized(message?["error_code"] as? String)
+        ]
+        let limitCodes: Set<String> = [
+            "rate_limit", "rate_limited", "rate_limit_error", "usage_limit",
+            "usage_limit_exceeded", "session_limit", "session_limit_reached"
+        ]
+        if structuredCodes.contains(where: limitCodes.contains) { return true }
+
+        let providerText: String?
+        if let error = event["error"] as? String {
+            providerText = error
+        } else if let error = message?["error"] as? String {
+            providerText = error
+        } else if type == "error" {
+            providerText = cleanText(from: message?["content"], max: 500)
+                ?? nonemptyString(event["message"])
+        } else {
+            providerText = nil
+        }
+        guard let text = providerText?.lowercased() else { return false }
+        return text.contains("session limit")
+            || text.contains("rate limit")
+            || text.contains("usage limit")
+            || text.contains("limit reached")
     }
 
     private mutating func addUsage(_ usage: [String: Any]) {

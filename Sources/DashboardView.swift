@@ -17,6 +17,8 @@ struct DashboardView: View {
     @State private var inspectedSession: AgentSession?
     @State private var ollamaInsight: String?
     @State private var showOllamaSetup = false
+    @State private var chatSearch = ""
+    @State private var showOlderChats = false
 
     init(refreshOnAppear: Bool = true, initialTab: DashboardTab = .home, showsOverview: Bool = false) {
         self.refreshOnAppear = refreshOnAppear
@@ -36,17 +38,14 @@ struct DashboardView: View {
     }
 
     private var allSessions: [AgentSession] {
-        enabledSnapshots.flatMap(\.sessions).sorted {
-            if $0.attention.isUrgent != $1.attention.isUrgent { return $0.attention.isUrgent }
-            if $0.isRunning != $1.isRunning { return $0.isRunning }
-            return $0.updatedAt > $1.updatedAt
-        }
+        SessionPresentation.relevant(enabledSnapshots.flatMap(\.sessions), limit: 200)
     }
 
     private var visibleSessions: [AgentSession] {
         allSessions.filter {
             (providerFilter == nil || $0.provider == providerFilter)
                 && (!surface.attentionOnly || $0.attention.isUrgent)
+                && (chatSearch.isEmpty || SessionPresentation.title(for: $0).localizedCaseInsensitiveContains(chatSearch) || $0.project.localizedCaseInsensitiveContains(chatSearch))
         }
     }
 
@@ -69,13 +68,12 @@ struct DashboardView: View {
             }.frame(width: 860, height: 790).background(BarBoyStyle.panel)
                 .task { if refreshOnAppear { monitor.refresh() } }
         } else if surface.expanded {
-            compactExpansion.background(MenuBarWindowPositioner().frame(width: 0, height: 0))
+            compactExpansion
         }
         else {
             CompactDashboardView()
                 .environmentObject(monitor)
                 .environmentObject(preferences)
-                .background(MenuBarWindowPositioner().frame(width: 0, height: 0))
         }
     }
 
@@ -92,14 +90,14 @@ struct DashboardView: View {
             }
         }
         .frame(width: CompactDashboardView.canvasSize.width)
-        .frame(minHeight: 500, maxHeight: expandedHeight)
+        .frame(height: expandedHeight)
         .background(BarBoyStyle.panel)
         .animation(paneAnimation, value: surface.pane)
         .task { if refreshOnAppear { monitor.refresh() } }
     }
 
     private var expandedHeight: CGFloat {
-        max(500, (NSScreen.main?.visibleFrame.height ?? 760) - 72)
+        min(760, max(1, (NSScreen.main?.visibleFrame.height ?? 760) - 72))
     }
 
     /// Emil's frequency gate: a pane reached by keyboard shortcut must not animate.
@@ -115,7 +113,11 @@ struct DashboardView: View {
             if surface.attentionOnly { sessionsPane }
             else if surface.selectedProvider != nil { providerWorkspace } else { sessionsPane }
         case .agents: agentsPage
-        case .tools: toolsPage
+        case .tools:
+            VStack(spacing: 12) {
+                CapabilityInventoryView(initialScope: .integrations, embedded: true)
+                toolsPage
+            }
         case .network: networkPage
         }
     }
@@ -484,9 +486,23 @@ struct DashboardView: View {
     }
 
     private var agentsPage: some View {
-        HStack(alignment: .top, spacing: 16) {
-            usageTable.frame(width: 390)
-            Rectangle().fill(BarBoyStyle.hairline).frame(width: 1)
+        VStack(alignment: .leading, spacing: 16) {
+            usageTable
+            HStack(spacing: 10) {
+                ForEach(enabledSnapshots.filter { $0.recordedQuotas.isEmpty && $0.recordedQuota == nil }) { snapshot in
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(snapshot.provider.name).font(BarBoyStyle.rowTitle)
+                        if case let .unavailable(reason) = ProviderUsageAvailability.current(for: snapshot.provider).accountQuota {
+                            Text(reason).font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                        } else {
+                            Text("No quota observation in the available history.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                        }
+                        if let url = snapshot.provider.usageURL {
+                            Link("OPEN USAGE PAGE", destination: url).font(BarBoyStyle.microLabel)
+                        }
+                    }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(BarBoyStyle.surface)
+                }
+            }
             activitySection.frame(maxWidth: .infinity)
         }
         .padding(18)
@@ -537,7 +553,7 @@ struct DashboardView: View {
                     Text("PROVIDER").frame(maxWidth: .infinity, alignment: .leading)
                     Text("SHORT").frame(width: 70, alignment: .trailing)
                     Text("LONG").frame(width: 70, alignment: .trailing)
-                    Text("SESS").frame(width: 34, alignment: .trailing)
+                    Text("CHATS").frame(width: 34, alignment: .trailing)
                 }
                 .font(BarBoyStyle.tableHeader).foregroundStyle(.secondary)
                 .padding(.horizontal, 9).padding(.vertical, 7)
@@ -559,6 +575,7 @@ struct DashboardView: View {
     private var activitySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "AGENTS", note: providerFilter?.name.uppercased() ?? "\(liveCount) LIVE")
+            TextField("Search available chats or projects", text: $chatSearch).textFieldStyle(.roundedBorder)
             ScrollView {
                 VStack(spacing: 0) {
                     if visibleSessions.isEmpty {
@@ -572,7 +589,7 @@ struct DashboardView: View {
                         }
                         .padding(13)
                     } else {
-                        ForEach(Array(visibleSessions.prefix(6).enumerated()), id: \.element.id) { index, session in
+                        ForEach(Array(visibleSessions.prefix(showOlderChats || !chatSearch.isEmpty ? 50 : 5).enumerated()), id: \.element.id) { index, session in
                             Button { openReply(session) } label: { SessionRow(session: session) }
                                 .buttonStyle(.plain)
                             if index < min(visibleSessions.count, 6) - 1 {
@@ -583,8 +600,14 @@ struct DashboardView: View {
                     }
                 }
             }
+            .frame(minHeight: 240)
             .background(BarBoyStyle.surface)
             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            if visibleSessions.count > 5 && !showOlderChats {
+                Button("SHOW OLDER CHATS") { showOlderChats = true }.barBoyButton()
+            }
+            Text("Available local history · running and recent chats first")
+                .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
         }
     }
 
@@ -659,6 +682,7 @@ struct CompactDashboardView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
     @ObservedObject private var surface = MomoSurface.shared
+    @ObservedObject private var vault = VaultStore.shared
 
     private var snapshots: [ProviderSnapshot] {
         monitor.snapshots.map { snapshot in
@@ -692,6 +716,12 @@ struct CompactDashboardView: View {
     private var capabilityTiles: [CompactCapability] {
         var seen = Set<String>()
         var result: [CompactCapability] = []
+        for item in monitor.capabilityInventory.items {
+            if seen.insert(item.id).inserted {
+                let provider = item.providerOwners.sorted { $0.rawValue < $1.rawValue }.first.flatMap { AIProvider(rawValue: $0.rawValue) }
+                result.append(CompactCapability(kind: item.kind.label, name: item.name, provider: provider))
+            }
+        }
         for session in snapshots.flatMap(\.sessions) {
             let entries: [(String, String)] = session.skills.map { ("SKILL", $0) }
                 + session.mcpServers.map { ("MCP", $0) }
@@ -722,7 +752,7 @@ struct CompactDashboardView: View {
                             surface.expanded = true
                             surface.show(.sessions)
                         } label: {
-                            Text("\(urgentCount) NEED")
+                            Text("\(urgentCount) NEED ATTENTION")
                                 .font(.system(size: 8, weight: .black, design: .monospaced))
                                 .foregroundStyle(surface.attentionOnly ? BarBoyStyle.inverseInk : attentionColor)
                                 .padding(.horizontal, 7).frame(height: 28)
@@ -733,7 +763,10 @@ struct CompactDashboardView: View {
                     }
                     Spacer(minLength: 4)
                     VStack(alignment: .trailing, spacing: 1) {
-                        Text("LIVE \(liveCount) · RESET \(resetLabel)")
+                        Text("LIVE \(liveCount)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Text("RESET \(resetLabel)")
                             .font(.system(size: 8, weight: .bold, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }.frame(width: 86, alignment: .trailing)
@@ -791,7 +824,7 @@ struct CompactDashboardView: View {
                 Button("AUTHORIZE LOCAL PROVIDERS") { openSettings() }
                     .barBoyButton().frame(maxWidth: .infinity, minHeight: 70)
             } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 168), spacing: 8)], spacing: 8) {
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: min(3, snapshots.count)), spacing: 8) {
                     ForEach(snapshots) { snapshot in
                         Button { surface.selectProvider(snapshot.provider); openProvider(snapshot) } label: {
                             CompactProviderCell(snapshot: snapshot, isSelected: surface.selectedProvider == snapshot.provider, showDetails: false, showUsageBar: preferences.showProviderUsageBars)
@@ -805,7 +838,7 @@ struct CompactDashboardView: View {
                 ForEach(sessions.prefix(3)) { session in
                     Button { openSession(session) } label: {
                         HStack(spacing: 8) {
-                            Rectangle().fill(session.attention.isUrgent ? BarBoyStyle.coral : Color.primary).frame(width: 4, height: 30)
+                            Rectangle().fill(session.limitReached ? BarBoyStyle.coral : session.attention.isUrgent ? BarBoyStyle.amber : Color.primary).frame(width: 4, height: 30)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(SessionPresentation.title(for: session)).font(BarBoyStyle.rowTitle).lineLimit(1)
                                 Text("\(session.provider.name.uppercased()) · \(session.attention.label)").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
@@ -822,11 +855,11 @@ struct CompactDashboardView: View {
                 if capabilityTiles.isEmpty { EmptyCapabilityRow(text: "Capabilities appear when sessions record them.") }
                 else {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 112), spacing: 8)], spacing: 8) {
-                        ForEach(capabilityTiles) { tile in
+                        ForEach(capabilityTiles.prefix(6)) { tile in
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(tile.kind).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                                 Text(tile.name.uppercased()).font(BarBoyStyle.rowTitle).lineLimit(1)
-                                Text(tile.provider.name.uppercased()).font(BarBoyStyle.microLabel).foregroundStyle(.tertiary)
+                                Text(tile.provider?.name.uppercased() ?? "SHARED / LOCAL").font(BarBoyStyle.microLabel).foregroundStyle(.tertiary)
                             }.padding(8).frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
                                 .background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                         }
@@ -834,17 +867,9 @@ struct CompactDashboardView: View {
                 }
             }
         case .network:
-            VStack(alignment: .leading, spacing: 8) {
-                SectionHeader(title: "MOMO BRAIN", note: "LOCAL VAULT")
-                HStack(spacing: 10) {
-                    Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 22))
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("VAULT PREVIEW").font(BarBoyStyle.rowTitle)
-                        Text("Connect a local vault to explore notes and links.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button("CONNECT") { surface.expanded = true; surface.show(.sessions) }.barBoyButton()
-                }.padding(10).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            CompactVaultPreview(vault: vault) {
+                surface.expanded = true
+                surface.show(.sessions)
             }
         }
     }
@@ -852,6 +877,7 @@ struct CompactDashboardView: View {
     private func openSession(_ session: AgentSession) {
         QuickAskContext.shared.select(session)
         surface.selectProvider(session.provider)
+        surface.page = .home
         surface.expanded = true
         surface.show(.sessions)
         NotificationCenter.default.post(name: .showCommandPalette, object: session)
@@ -997,7 +1023,7 @@ private struct CompactProviderCell: View {
     }
 
     private var sessionLine: String {
-        "\(snapshot.activeCount) RUNNING / \(snapshot.sessions.count) SESSIONS"
+        "\(snapshot.activeCount) RUNNING / \(snapshot.sessions.count) RECENT CHATS"
     }
 
     var body: some View {
@@ -1093,8 +1119,53 @@ private enum CapabilityKind: String {
 private struct CompactCapability: Identifiable {
     let kind: String
     let name: String
-    let provider: AIProvider
-    var id: String { "\(kind):\(provider.rawValue):\(name.lowercased())" }
+    let provider: AIProvider?
+    var id: String { "\(kind):\(provider?.rawValue ?? "shared"):\(name.lowercased())" }
+}
+
+private struct CompactVaultPreview: View {
+    @ObservedObject var vault: VaultStore
+    let expand: () -> Void
+
+    private var notes: [VaultNote] { Array(vault.notes.prefix(12)) }
+    private var vaultName: String { vault.vaultURL?.lastPathComponent ?? "LOCAL VAULT" }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "MOMO BRAIN", note: vault.vaultURL == nil ? "LOCAL VAULT" : "\(notes.count) NOTES")
+            HStack(spacing: 10) {
+                if notes.isEmpty {
+                    Image(systemName: "point.3.connected.trianglepath.dotted").font(.system(size: 22))
+                } else {
+                    Canvas { context, size in
+                        let points = Dictionary(uniqueKeysWithValues: notes.enumerated().map { index, note in
+                            (note.id, CGPoint(x: 12 + CGFloat(index % 6) * 28, y: 16 + CGFloat(index / 6) * 30))
+                        })
+                        for note in notes {
+                            for link in note.links {
+                                guard let start = points[note.id], let end = points[link] else { continue }
+                                var path = Path(); path.move(to: start); path.addLine(to: end)
+                                context.stroke(path, with: .color(BarBoyStyle.hairline), lineWidth: 1)
+                            }
+                        }
+                        for point in points.values {
+                            context.fill(Path(ellipseIn: CGRect(x: point.x - 3, y: point.y - 3, width: 6, height: 6)), with: .color(Color.primary))
+                        }
+                    }.frame(width: 180, height: 76).background(BarBoyStyle.raised)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(vault.vaultURL == nil ? "VAULT PREVIEW" : vaultName.uppercased()).font(BarBoyStyle.rowTitle).lineLimit(1)
+                    Text(vault.vaultURL == nil ? "Connect a local vault to explore notes and links." : "\(vault.notes.count) NOTES · CACHED INDEX")
+                        .font(BarBoyStyle.bodySmall).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Button(vault.vaultURL == nil ? "CONNECT VAULT" : "EXPAND BRAIN", action: expand).barBoyButton()
+            }
+            .padding(10)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        }
+    }
 }
 
 private struct CapabilityTile: Identifiable {
@@ -1524,7 +1595,7 @@ private struct ProviderUsageRow: View {
                 ZStack(alignment: .topTrailing) {
                     Text("\(snapshot.sessions.count)").frame(width: 34, alignment: .trailing)
                     if snapshot.needsAttentionCount > 0 {
-                        Rectangle().fill(BarBoyStyle.coral).frame(width: 5, height: 11).offset(x: 4, y: -5)
+                        Rectangle().fill(snapshot.hasRecordedLimit() ? BarBoyStyle.coral : BarBoyStyle.amber).frame(width: 5, height: 11).offset(x: 4, y: -5)
                     }
                 }
             }
@@ -1545,6 +1616,7 @@ private struct SessionRow: View {
     let session: AgentSession
     /// Off when the surrounding list already groups rows under a folder header.
     var showsFolder = true
+    private var statusColor: Color { session.limitReached ? BarBoyStyle.coral : session.attention.isUrgent ? BarBoyStyle.amber : .secondary }
     var body: some View {
         HStack(spacing: 9) {
             ProviderMark(provider: session.provider, size: 28, active: session.isRunning)
@@ -1576,10 +1648,10 @@ private struct SessionRow: View {
             Spacer(minLength: 6)
             Text(session.stoppedAfterUsageGrowth ? "STOPPED AFTER USAGE" : (session.attention == .working && !session.isRunning ? "LAST: WORKING" : session.attention.label))
                 .font(BarBoyStyle.microLabel)
-                .foregroundStyle(session.attention.isUrgent ? BarBoyStyle.coral : Color.secondary)
+                .foregroundStyle(statusColor)
                 .padding(.horizontal, 6).padding(.vertical, 4)
-                .background(session.attention.isUrgent ? BarBoyStyle.coral.opacity(0.10) : BarBoyStyle.raised)
-                .overlay(Rectangle().stroke(session.attention.isUrgent ? BarBoyStyle.coral : BarBoyStyle.hairline, lineWidth: 1))
+                .background(session.attention.isUrgent ? statusColor.opacity(0.10) : BarBoyStyle.raised)
+                .overlay(Rectangle().stroke(session.attention.isUrgent ? statusColor : BarBoyStyle.hairline, lineWidth: 1))
         }
         .padding(.horizontal, 10).padding(.vertical, 8)
         .contentShape(Rectangle())

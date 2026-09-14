@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import Foundation
 import CryptoKit
+import SQLite3
 
 @MainActor
 final class ActivityMonitor: ObservableObject {
@@ -13,10 +14,12 @@ final class ActivityMonitor: ObservableObject {
     @Published private(set) var lastUpdated: Date?
 
     private var timer: Timer?
+    private var menuIsVisible = false
     private let scanner: LocalActivityScanner
     private let inventoryScanner: CapabilityInventoryScanner
     private var authorizedProviders: Set<AIProvider>?
     private var authorizationRevision = 0
+    private var refreshRequested = false
     private var progress = SessionProgressTracker()
     private let enabledProviders: @MainActor () -> Set<AIProvider>
 
@@ -37,11 +40,17 @@ final class ActivityMonitor: ObservableObject {
         if autoRefresh {
             refresh()
             timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.refresh() }
+                Task { @MainActor in
+                    guard let self else { return }
+                    let interval: TimeInterval = self.menuIsVisible ? Self.refreshInterval : 120
+                    if self.lastUpdated.map({ Date().timeIntervalSince($0) >= interval }) ?? true { self.refresh() }
+                }
             }
             timer?.tolerance = 5
         }
     }
+
+    func setMenuVisible(_ visible: Bool) { menuIsVisible = visible }
 
     func setAuthorizedProviders(_ providers: Set<AIProvider>) {
         guard providers != authorizedProviders else { return }
@@ -62,19 +71,25 @@ final class ActivityMonitor: ObservableObject {
     }
 
     func refresh() {
+        refreshRequested = true
         guard !isRefreshing else { return }
         isRefreshing = true
-        let enabledProviders = authorizedProviders ?? enabledProviders()
-        let revision = authorizationRevision
         Task {
-            guard revision == authorizationRevision else { isRefreshing = false; refresh(); return }
-            async let scanResult = scanner.scan(enabledProviders: enabledProviders)
-            async let inventoryResult = inventoryScanner.read(enabledProviders: enabledProviders)
-            let (latest, installed) = await (scanResult, inventoryResult)
-            guard revision == authorizationRevision else { isRefreshing = false; refresh(); return }
-            snapshots = progress.update(latest)
-            capabilityInventory = installed.markingUsed(by: latest.flatMap(\.sessions))
-            lastUpdated = .now
+            while refreshRequested {
+                refreshRequested = false
+                let providers = authorizedProviders ?? enabledProviders()
+                let revision = authorizationRevision
+                async let scanResult = scanner.scan(enabledProviders: providers)
+                async let inventoryResult = inventoryScanner.read(enabledProviders: providers)
+                let (latest, installed) = await (scanResult, inventoryResult)
+                guard revision == authorizationRevision else {
+                    refreshRequested = true
+                    continue
+                }
+                snapshots = progress.update(latest)
+                capabilityInventory = installed.markingUsed(by: latest.flatMap(\.sessions))
+                lastUpdated = .now
+            }
             isRefreshing = false
         }
     }
@@ -117,6 +132,7 @@ private actor CapabilityInventoryScanner {
 
 actor LocalActivityScanner {
     static let recentFileLimit = 20
+    static let directoryEntryLimit = 10_000
     private let fileManager = FileManager.default
     private let home: URL
     private let detectProcesses: Bool
@@ -128,6 +144,7 @@ actor LocalActivityScanner {
         let session: AgentSession?
     }
     private var sessionCache: [String: CachedSession] = [:]
+    private var codexNameCache = CodexNameCache()
 
     init(adapters: [any ProviderSessionAdapter] = [ClaudeSessionAdapter(), CodexSessionAdapter(), CursorSessionAdapter(), GrokSessionAdapter()], home: URL = FileManager.default.homeDirectoryForCurrentUser, detectProcesses: Bool = true, authorizedRoots: [AIProvider: [URL]] = [:]) {
         self.home = home
@@ -136,7 +153,11 @@ actor LocalActivityScanner {
         self.authorizedRoots = authorizedRoots
     }
 
-    func setAuthorizedRoots(_ roots: [AIProvider: [URL]]) { authorizedRoots = roots }
+    func setAuthorizedRoots(_ roots: [AIProvider: [URL]]) {
+        authorizedRoots = roots
+        sessionCache.removeAll()
+        codexNameCache = CodexNameCache()
+    }
 
     func scan(providers: Set<AIProvider>) async -> [ProviderSnapshot] { await scan(enabledProviders: providers) }
 
@@ -145,7 +166,8 @@ actor LocalActivityScanner {
         guard !providers.isEmpty else { return [] }
 
         let now = Date()
-        let codexNames = enabledProviders.contains(.codex) ? CodexChatNames.read(home: home) : [:]
+        let enabledPrefixes = Set(providers.map { "\($0.rawValue)|" })
+        sessionCache = sessionCache.filter { key, _ in enabledPrefixes.contains(where: { key.hasPrefix($0) }) }
         let processes = detectProcesses ? runningAIProcesses(for: enabledProviders) : []
         var snapshots: [ProviderSnapshot] = []
         for provider in providers {
@@ -158,32 +180,15 @@ actor LocalActivityScanner {
                 now: now
             )
             if provider == .codex {
+                let ids = Set(diskSessions.map { SessionPresentation.fullIdentity(for: $0) })
+                let codexNames = codexNameCache.names(for: ids, home: home, fileManager: fileManager)
                 for index in diskSessions.indices {
-                    diskSessions[index].title = codexNames[diskSessions[index].id] ?? (UUID(uuidString: diskSessions[index].id) == nil ? "Unnamed Codex task" : "Codex task · \(diskSessions[index].id.prefix(8))")
+                    if let name = codexNames[SessionPresentation.fullIdentity(for: diskSessions[index])] {
+                        diskSessions[index].title = name
+                    }
                 }
             }
-            let processSessions = providerProcesses.enumerated().map { index, process in
-                AgentSession(
-                    id: "process-\(process.pid)",
-                    provider: provider,
-                    role: .main,
-                    title: "\(provider.name) process · PID \(process.pid)",
-                    detail: "Local process · PID \(process.pid)",
-                    project: inferredProject(from: process.command),
-                    updatedAt: now,
-                    isRunning: true,
-                    processID: process.pid,
-                    tokens: nil,
-                    attention: .unknown,
-                    attentionReason: "Process detected; chat state is not recorded",
-                    model: nil,
-                    mcpServers: [],
-                    skills: [],
-                    plugins: []
-                )
-            }
-
-            let merged = Self.deduplicatedSessions(processSessions + diskSessions)
+            let merged = Self.deduplicatedSessions(diskSessions)
                 .sorted { lhs, rhs in
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
@@ -191,7 +196,7 @@ actor LocalActivityScanner {
             var snapshot = ProviderSnapshot(
                 provider: provider,
                 sessions: merged,
-                activeCount: providerProcesses.count,
+                activeCount: merged.filter(\.isRunning).count,
                 localTokensToday: diskSessions
                     .filter { Calendar.current.isDateInToday($0.updatedAt) }
                     .compactMap(\.tokens)
@@ -213,12 +218,11 @@ actor LocalActivityScanner {
         return snapshots
     }
 
-    /// Preserve every detected live process while bounding only inactive history.
-    /// This keeps the product's "all running at once" promise without re-parsing
-    /// an unbounded archive on every refresh.
+    /// Preserve every session with recorded live evidence while bounding history.
     static func prioritizedSessions(_ sessions: [AgentSession], recentHistoryLimit: Int = 12) -> [AgentSession] {
-        let running = sessions.filter(\.isRunning)
-        let history = sessions.filter { !$0.isRunning }.prefix(recentHistoryLimit)
+        let unique = SessionPresentation.relevant(sessions, limit: sessions.count)
+        let running = unique.filter(\.isRunning)
+        let history = unique.filter { !$0.isRunning }.prefix(max(0, recentHistoryLimit))
         return running + history
     }
 
@@ -314,7 +318,11 @@ actor LocalActivityScanner {
                 includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
                 options: [.skipsHiddenFiles, .skipsPackageDescendants]
             ) else { continue }
+            var visitedEntries = 0
             for case let file as URL in enumerator {
+                if Task.isCancelled { return files }
+                visitedEntries += 1
+                if visitedEntries > Self.directoryEntryLimit { break }
                 guard file.pathExtension == "jsonl" || (provider == .gemini && file.pathExtension == "json") else { continue }
                 let values = try? file.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
                 guard values?.isRegularFile == true,
@@ -339,40 +347,7 @@ actor LocalActivityScanner {
     }
 
     static func deduplicatedSessions(_ sessions: [AgentSession]) -> [AgentSession] {
-        var seen = Set<String>()
-        return sessions.filter { session in
-            let key: String
-            if session.isRunning {
-                key = session.processID.map { "live|\(session.provider.rawValue)|pid|\($0)" }
-                    ?? "live|\(session.provider.rawValue)|session|\(session.id)"
-            } else {
-                key = "history|\(session.provider.rawValue)|\(session.id)"
-            }
-            return seen.insert(key).inserted
-        }
-    }
-
-    private func inferredTitle(from command: String, provider: AIProvider, fallback: String) -> String {
-        let components = command.split(separator: " ").map(String.init)
-        if let index = components.firstIndex(where: {
-            provider.processTerms.contains(URL(fileURLWithPath: $0).lastPathComponent.lowercased())
-        }), index + 1 < components.count {
-            let candidate = components[(index + 1)...].filter { !$0.hasPrefix("-") }.joined(separator: " ")
-            if !candidate.isEmpty { return clean(candidate, max: 62) }
-        }
-        return fallback
-    }
-
-    private func inferredProject(from command: String) -> String {
-        let paths = command.split(separator: " ").map(String.init).filter { $0.hasPrefix("/") }
-        return paths.last.map { URL(fileURLWithPath: $0).lastPathComponent } ?? "Local"
-    }
-
-    private func clean(_ value: String, max length: Int) -> String {
-        let oneLine = value.replacingOccurrences(of: "\n", with: " ")
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-        return oneLine.count > length ? String(oneLine.prefix(length - 1)) + "…" : oneLine
+        SessionPresentation.relevant(sessions, limit: sessions.count)
     }
 }
 
@@ -568,15 +543,80 @@ final class AutoResumeService: ObservableObject {
 }
 
 
-/// Codex's append-only session_index.jsonl records names separately from prompts.
+private struct CodexNameCache {
+    private struct Signature: Equatable {
+        let modifiedAt: Date?
+        let size: Int?
+    }
+
+    private var signatures: [String: Signature] = [:]
+    private var resolvedIDs = Set<String>()
+    private var values: [String: String] = [:]
+
+    mutating func names(for ids: Set<String>, home: URL, fileManager: FileManager) -> [String: String] {
+        let metadataURLs = CodexChatNames.metadataURLs(home: home)
+        let current = Dictionary(uniqueKeysWithValues: metadataURLs.map { url in
+            let attributes = try? fileManager.attributesOfItem(atPath: url.path)
+            return (url.path, Signature(
+                modifiedAt: attributes?[.modificationDate] as? Date,
+                size: attributes?[.size] as? Int
+            ))
+        })
+        if current != signatures {
+            signatures = current
+            resolvedIDs.removeAll()
+            values.removeAll()
+        }
+
+        let missing = ids.subtracting(resolvedIDs)
+        if !missing.isEmpty {
+            values.merge(CodexChatNames.read(home: home, sessionIDs: missing)) { _, latest in latest }
+            resolvedIDs.formUnion(missing)
+        }
+
+        // The scanner presents at most recentFileLimit Codex chats. Retain only
+        // those identities so names from old scans cannot grow without bound.
+        resolvedIDs.formIntersection(ids)
+        values = values.filter { ids.contains($0.key) }
+        return values
+    }
+}
+
+
+/// Reads Codex task names from its bounded rename index and current task metadata.
 enum CodexChatNames {
+    static func metadataURLs(home: URL) -> [URL] {
+        let root = home.appendingPathComponent(".codex", isDirectory: true)
+        return [
+            root.appendingPathComponent("session_index.jsonl"),
+            root.appendingPathComponent("state_5.sqlite"),
+            root.appendingPathComponent("state_5.sqlite-wal")
+        ]
+    }
+
     static func read(home: URL) -> [String: String] {
+        read(home: home, sessionIDs: nil)
+    }
+
+    static func read(home: URL, sessionIDs: Set<String>?) -> [String: String] {
+        let requested = sessionIDs
         let url = home.appendingPathComponent(".codex/session_index.jsonl")
-        guard let handle = try? FileHandle(forReadingFrom: url) else { return [:] }
-        defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        try? handle.seek(toOffset: size > 2_000_000 ? size - 2_000_000 : 0)
-        return parse((try? handle.read(upToCount: 2_000_000)) ?? Data())
+        var names: [String: String] = [:]
+        if let handle = try? FileHandle(forReadingFrom: url) {
+            defer { try? handle.close() }
+            let size = (try? handle.seekToEnd()) ?? 0
+            try? handle.seek(toOffset: size > 2_000_000 ? size - 2_000_000 : 0)
+            names = parse((try? handle.read(upToCount: 2_000_000)) ?? Data())
+            if let requested { names = names.filter { requested.contains($0.key) } }
+        }
+
+        // state_5.sqlite is the Codex app's current task metadata. Query only
+        // already-selected local session IDs; never sweep every task or preview.
+        let database = home.appendingPathComponent(".codex/state_5.sqlite")
+        names.merge(readDatabase(database, sessionIDs: requested ?? Set(names.keys))) { _, databaseTitle in
+            databaseTitle
+        }
+        return names
     }
     static func parse(_ data: Data) -> [String: String] {
         var names: [String: String] = [:]
@@ -589,5 +629,48 @@ enum CodexChatNames {
             names[id] = !title.isEmpty && title.count <= 200 && !title.hasPrefix("<") && !title.hasPrefix("#") ? title : nil
         }
         return names
+    }
+
+    private static func readDatabase(_ url: URL, sessionIDs: Set<String>) -> [String: String] {
+        guard !sessionIDs.isEmpty, FileManager.default.fileExists(atPath: url.path) else { return [:] }
+        var database: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READONLY | SQLITE_OPEN_NOMUTEX, nil) == SQLITE_OK,
+              let database else { return [:] }
+        defer { sqlite3_close(database) }
+
+        var statement: OpaquePointer?
+        let sql = "SELECT name, title FROM threads WHERE id = ?1 LIMIT 1"
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
+              let statement else { return [:] }
+        defer { sqlite3_finalize(statement) }
+
+        var result: [String: String] = [:]
+        for id in sessionIDs.prefix(LocalActivityScanner.recentFileLimit) {
+            sqlite3_reset(statement)
+            sqlite3_clear_bindings(statement)
+            id.withCString { pointer in
+                guard sqlite3_bind_text(statement, 1, pointer, -1, nil) == SQLITE_OK,
+                      sqlite3_step(statement) == SQLITE_ROW else { return }
+                let custom = sqliteString(statement, column: 0)
+                let generated = sqliteString(statement, column: 1)
+                if let title = validated(custom) ?? validated(generated) {
+                    result[id] = title
+                }
+            }
+        }
+        return result
+    }
+
+    private static func sqliteString(_ statement: OpaquePointer, column: Int32) -> String? {
+        guard sqlite3_column_type(statement, column) == SQLITE_TEXT,
+              let pointer = sqlite3_column_text(statement, column) else { return nil }
+        return String(cString: pointer)
+    }
+
+    private static func validated(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let title = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !title.isEmpty, title.count <= 200, !title.hasPrefix("<"), !title.hasPrefix("#") else { return nil }
+        return title
     }
 }

@@ -29,7 +29,11 @@ enum SessionPresentation {
     }
 
     static func fullIdentity(for session: AgentSession) -> String {
-        usefulText(session.conversationID) ?? session.id
+        if let conversationID = session.conversationID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !conversationID.isEmpty {
+            return conversationID
+        }
+        return session.id
     }
 
     private static func precedes(_ lhs: AgentSession, _ rhs: AgentSession) -> Bool {
@@ -66,8 +70,11 @@ enum SessionPresentation {
         let compactIdentity = identity.replacingOccurrences(of: "-", with: "")
         let compactTitle = normalized.replacingOccurrences(of: "-", with: "")
         if normalized == identity || compactTitle == compactIdentity { return true }
+        let identifierCharacters = compactTitle.replacingOccurrences(of: " ", with: "")
+        if identifierCharacters.count == 32,
+           identifierCharacters.allSatisfy({ $0.isHexDigit }) { return true }
         return ["codex task · ", "grok chat ", "gemini chat ", "claude chat "]
-            .contains { normalized.hasPrefix($0) && normalized.contains(String(identity.prefix(8))) }
+            .contains { normalized.hasPrefix($0) }
     }
 
     private static func isGenericDetail(_ detail: String) -> Bool {

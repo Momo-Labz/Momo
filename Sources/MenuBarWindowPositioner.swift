@@ -10,24 +10,37 @@ struct MenuBarWindowPositioner: NSViewRepresentable {
     }
 
     private final class PositioningView: NSView {
-        private var lastWindow: NSWindow?
+        private var observations: [NSObjectProtocol] = []
+        private var scheduled = false
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observations.forEach(NotificationCenter.default.removeObserver)
+            observations = []
+            if let window {
+                for name in [NSWindow.didResizeNotification, NSWindow.didBecomeKeyNotification, NSWindow.didChangeScreenNotification] {
+                    observations.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                        self?.positionIfNeeded()
+                    })
+                }
+            }
             positionIfNeeded()
         }
 
+        deinit { observations.forEach(NotificationCenter.default.removeObserver) }
+
         func positionIfNeeded() {
-            guard let window, window !== lastWindow else { return }
-            lastWindow = window
+            guard let window, !scheduled else { return }
+            scheduled = true
             DispatchQueue.main.async { [weak self, weak window] in
-                guard let self, let window, let screen = window.screen ?? NSScreen.main else { return }
+                guard let self else { return }
+                self.scheduled = false
+                guard let window, let screen = window.screen ?? NSScreen.main else { return }
                 var frame = window.frame
                 let visible = screen.visibleFrame
-                frame.origin.x = visible.maxX - frame.width - 14
-                frame.origin.y = visible.maxY - frame.height - 10
-                window.setFrameOrigin(frame.origin)
-                self.lastWindow = window
+                frame.origin.x = max(visible.minX, visible.maxX - frame.width - 14)
+                frame.origin.y = max(visible.minY, visible.maxY - frame.height - 10)
+                if window.frame.origin != frame.origin { window.setFrameOrigin(frame.origin) }
             }
         }
     }

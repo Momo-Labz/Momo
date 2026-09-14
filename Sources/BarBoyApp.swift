@@ -12,6 +12,9 @@ struct BarBoyApp: App {
     var body: some Scene {
         MenuBarExtra {
             DashboardView()
+                .background(MenuBarWindowPositioner().frame(width: 0, height: 0))
+                .onAppear { monitor.setMenuVisible(true) }
+                .onDisappear { monitor.setMenuVisible(false) }
                 .environmentObject(monitor)
                 .environmentObject(preferences)
                 .environmentObject(deskDisplay)

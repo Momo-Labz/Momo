@@ -198,7 +198,7 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(failed.needsAttentionCount, 1)
     }
 
-    func testClaudeAdapterHedgesAnIdleOpenToolCall() throws {
+    func testClaudeAdapterDoesNotInventApprovalFromAnIdleToolCall() throws {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("momo-open-tool-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -217,10 +217,10 @@ final class BarBoyTests: XCTestCase {
             return ClaudeSessionAdapter().session(from: file, context: context)
         }
 
-        // An open call that has gone quiet reads as a prompt that may be on screen.
+        // Transcript silence does not distinguish a long-running tool from a prompt.
         let idle = try XCTUnwrap(session(answered: false, quietFor: 120))
-        XCTAssertEqual(idle.attention, .needsInput)
-        XCTAssertTrue(try XCTUnwrap(idle.attentionReason).contains("may be waiting"), idle.attentionReason ?? "")
+        XCTAssertNotEqual(idle.attention, .needsInput)
+        XCTAssertNil(idle.attentionReason)
 
         // Still within the grace period: the tool is probably just running.
         let fresh = try XCTUnwrap(session(answered: false, quietFor: 2))
@@ -246,6 +246,36 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(session.attentionReason, "Claude session limit reached")
         let snapshot = ProviderSnapshot(provider: .claude, sessions: [session], activeCount: 0, localTokensToday: 0, updatedAt: .now)
         XCTAssertTrue(snapshot.hasRecordedLimit())
+    }
+
+    func testClaudeLimitRequiresProviderErrorAndClearsAfterRecovery() throws {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("momo-claude-limit-provenance-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        func parse(_ lines: [String], name: String) throws -> AgentSession {
+            let url = directory.appendingPathComponent(name)
+            try lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+            return try XCTUnwrap(ClaudeSessionAdapter().session(
+                from: ProviderSessionFile(url: url, modifiedAt: .now, index: 0),
+                context: ProviderSessionContext(now: .now, isProviderRunning: false)
+            ))
+        }
+
+        let quoted = try parse([
+            #"{"type":"user","message":{"content":[{"type":"text","text":"Add a test for the phrase usage limit reached"}]}}"#
+        ], name: "quoted.jsonl")
+        XCTAssertFalse(quoted.limitReached)
+        XCTAssertNotEqual(quoted.attention, .failed)
+
+        let recovered = try parse([
+            #"{"type":"error","error_code":"usage_limit_exceeded"}"#,
+            #"{"type":"user","message":{"content":[{"type":"text","text":"Continue after reset"}]}}"#,
+            #"{"type":"assistant","message":{"content":[{"type":"text","text":"Continuing now"}]}}"#
+        ], name: "recovered.jsonl")
+        XCTAssertFalse(recovered.limitReached)
+        XCTAssertEqual(recovered.attention, .working)
+        XCTAssertNil(recovered.attentionReason)
     }
 
     func testNotifierDetectsARecentlyReopenedWindowOnce() {

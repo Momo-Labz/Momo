@@ -521,13 +521,14 @@ struct SessionProgressTracker {
         let updated = snapshots.map { snapshot in
             var result = snapshot
             result.sessions = snapshot.sessions.map { session in
-                let old = previous[session.id]
+                let key = "\(session.provider.rawValue)|\(session.conversationID ?? session.id)"
+                let old = previous[key]
                 let grew = old?.tokens.flatMap { before in session.tokens.map { $0 > before } } ?? false
                 let newRun = session.attention == .working && old?.state != .working
                 let growth = !newRun && ((old?.grewWhileWorking ?? false) || (old?.state == .working && grew))
                 let stopped = session.attention == .failed || session.attention == .idle
                 let observedStop = stopped && ((old?.state == .working && growth) || (old?.stoppedAfterGrowth ?? false))
-                next[session.id] = Observation(tokens: session.tokens, state: session.attention, grewWhileWorking: growth, stoppedAfterGrowth: observedStop)
+                next[key] = Observation(tokens: session.tokens, state: session.attention, grewWhileWorking: growth, stoppedAfterGrowth: observedStop)
                 var result = session
                 result.stoppedAfterUsageGrowth = observedStop
                 return result

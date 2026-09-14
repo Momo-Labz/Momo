@@ -10,7 +10,7 @@ These captures use synthetic sessions and notes, not live account usage.
 
 ## What works in 0.5
 
-- A compact models-only `MenuBarExtra` that expands downward in the same menu surface; Expand and Contract preserve the selected provider, page, and in-memory drafts.
+- A compact `MenuBarExtra` with distinct Home, Agents, Tools, and Network content. Expand grows the selected page inside the same surface; Contract preserves selection and in-memory drafts. Only Overview opens a separate window.
 - A bordered attention action that separates approval/error states from recorded usage limits and opens the affected chats with the next recorded action.
 - A compact activity summary showing live sessions and the nearest recorded reset, with a dash when no reset is available.
 - Three focused tabs: Home for returns and shortcuts, Agents for model/session activity, and Tools for MCP, plugin, and skill provenance.
@@ -21,14 +21,17 @@ These captures use synthetic sessions and notes, not live account usage.
 - User-supplied Claude, Codex, Cursor, and Grok identity marks on consistent paper tiles, with a recognizable Gemini fallback.
 - Restrained Momo entrance and tab motion that becomes instant when Reduce Motion is enabled.
 - Local detection of active Codex, Claude Code, Gemini CLI, Cursor, and Grok processes.
-- Every detected live process remains visible; the 12-session bound applies only to inactive history retained per provider.
+- Relevant local history is bounded to 20 recent files per provider, with three project groups and five named chats per group initially visible. Search and Show more reveal additional retained history. This is not a full account-history import.
+- Known project folders and chat titles appear in a sidebar. Original Codex titles use local task metadata when available; ChatGPT account history is explicitly unconnected. Open original chat appears only for a recorded supported destination.
+- Open provider processes are not counted as running chats. Per-chat live status depends on provider evidence; zero confirmed live chats does not establish that every provider is idle.
+- Unchanged session files reuse cached summaries. Revoking a provider clears its cached session data; folder changes preserve independent drafts.
 - Recent main-agent and subagent session summaries from local JSONL files.
 - Provider-specific adapters, including synthetic public-schema Gemini and documented-schema Grok fixtures. Real-account Gemini/Grok validation remains pending.
 - A priority `YOUR TURN` queue that separates human-blocked work from agents still moving.
 - Per-session provenance for model names, MCP servers, skills, and plugins when the local event log exposes them.
 - An installed capability inventory sourced from enabled-provider configuration and shared skill folders, with separate `USED` marks derived from session receipts.
 - A click-through inspector that shows the exact recorded capability set and return reason.
-- Conservative `NEEDS YOU`, failed, completed, working, and idle states when local event data exposes them.
+- Conservative `NEEDS YOU`, failed, completed, and last-recorded working states when local event data exposes them. Claude limit detection requires provider-owned error records; mentioning a limit in a prompt cannot trigger it.
 - Optional macOS notifications for newly blocked or failed sessions.
 - A deliberately short menu-bar mark: one icon plus at most one attention/activity count.
 - Quick local token counts for session files that expose token metadata.
