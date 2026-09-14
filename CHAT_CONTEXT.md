@@ -27,7 +27,7 @@ MOMO is a local-first macOS menu-bar workspace for seeing when AI work finishes,
 - Activity, Usage, and Brain replace the former Home, Agents, Tools, and Network navigation.
 - The provider strip stays above the active page and displays all five providers without horizontal scrolling.
 - The panel is pinned to the right edge of the active display. Expand grows the same surface leftward and downward; Contract restores compact mode while preserving selection.
-- Settings replaces the content inside the same menu-bar panel. Back restores the state that was active before Settings opened.
+- Settings opens as a separate macOS popup window from the gear button. The attached MOMO panel remains the tracking surface.
 - Relevant sessions load in bounded pages and display readable names instead of opaque IDs.
 - Provide “Open original chat” only when MOMO has a verified destination.
 - The attention inspector must remain inside MOMO. Done/Contract must not close the entire app.
@@ -50,12 +50,12 @@ The safe future path for Claude/Cursor account usage is an explicit “Analyze u
 
 ## Implemented architecture
 
-- `MomoSurface` stores the tracker page, selected provider/session, expansion state, and in-panel Settings route together.
+- `MomoSurface` stores the tracker page, selected provider/session, and expansion state together.
 - `ActivityMonitor` performs bounded provider scans, coalesces refresh requests, slows polling while the menu is closed, and caches unchanged session files by modification time and size.
 - Session history is bounded and deduplicated by provider plus conversation identity. Process presence alone is not treated as proof that every chat is running.
 - `ClaudeSessionAdapter`, `CodexSessionAdapter`, and `CursorSessionAdapter` preserve provider-specific provenance and leave unsupported fields unavailable.
 - `SessionPresentation` supplies relevant recent chats and readable names.
-- `TrackingDashboardView` keeps the provider strip above Activity, Usage, and Brain, paginates recent evidence, and embeds Settings in the same panel.
+- `TrackingDashboardView` keeps the provider strip above Activity, Usage, and Brain and paginates recent evidence. Settings is provided by the separate macOS popup scene.
 - Refresh is limited to once per minute while the menu is open and every five minutes while it is closed. Ollama availability checks are throttled to two minutes.
 - `MenuBarWindowPositioner` keeps the compact menu aligned to the right side of the active display.
 

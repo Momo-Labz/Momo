@@ -16,6 +16,7 @@ struct TrackingDashboardView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.openSettings) private var openSettings
     @ObservedObject private var surface = MomoSurface.shared
     @State private var search = ""
     @State private var debouncedSearch = ""
@@ -41,36 +42,24 @@ struct TrackingDashboardView: View {
     }
 
     var body: some View {
-        Group {
-            if surface.screen == .settings && !showsOverview {
-                embeddedSettings
-            } else {
-                VStack(spacing: 0) {
-                    header
-                    providerRail
-                    Divider().opacity(0.55)
-                    tabBar
-                    Divider().opacity(0.55)
-                    Group {
-                        if loading { LoadingSkeleton() }
-                        else {
-                            switch surface.trackerTab {
-                            case .activity: activity
-                            case .usage: usage
-                            case .brain: brain
-                            }
-                        }
+        VStack(spacing: 0) {
+            header
+            providerRail
+            Divider().opacity(0.55)
+            tabBar
+            Divider().opacity(0.55)
+            Group {
+                if loading { LoadingSkeleton() }
+                else {
+                    switch surface.trackerTab {
+                    case .activity: activity
+                    case .usage: usage
+                    case .brain: brain
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .id(surface.screen)
-        .transition(.asymmetric(
-            insertion: .opacity.combined(with: .offset(y: reduceMotion || surface.lastChangeWasKeyboard ? 0 : 4)),
-            removal: .opacity
-        ))
-        .animation(reduceMotion || surface.lastChangeWasKeyboard ? nil : BarBoyStyle.pageAnimation, value: surface.screen)
         .frame(
             width: showsOverview ? MomoSurface.expandedWidth : (surface.expanded ? MomoSurface.expandedWidth : MomoSurface.compactWidth),
             height: showsOverview ? 790 : (surface.expanded ? MomoSurface.expandedHeight : MomoSurface.compactHeight)
@@ -96,27 +85,6 @@ struct TrackingDashboardView: View {
         }
     }
 
-    private var embeddedSettings: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Button { surface.leaveSettings() } label: {
-                    Label("BACK", systemImage: "chevron.left")
-                        .font(BarBoyStyle.navLabel)
-                }
-                .barBoyButton()
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("MOMO LABZ").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                    Text("SETTINGS").font(BarBoyStyle.display).tracking(0.8)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 55)
-            Divider().opacity(0.55)
-            SettingsView(embedded: true)
-        }
-    }
-
     private var header: some View {
         HStack(spacing: 10) {
             AnimatedMomoMark(size: 27, animated: false)
@@ -128,7 +96,7 @@ struct TrackingDashboardView: View {
             Text(statusText).font(BarBoyStyle.microLabel).foregroundStyle(statusColor)
             Button { surface.expanded.toggle() } label: { Image(systemName: surface.expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
                 .barBoyIconButton().help(surface.expanded ? "Contract" : "Expand")
-            Button { surface.showSettings() } label: { Image(systemName: "gearshape.fill") }.barBoyIconButton().help("Settings")
+            Button { openSettings() } label: { Image(systemName: "gearshape.fill") }.barBoyIconButton().help("Settings")
             Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }.barBoyIconButton().help("Quit MOMO")
             Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
                 .barBoyIconButton().help("Refresh observed activity")
