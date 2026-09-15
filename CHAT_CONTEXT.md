@@ -27,7 +27,7 @@ MOMO is a local-first macOS menu-bar workspace for seeing when AI work finishes,
 - Activity, Usage, and Brain replace the former Home, Agents, Tools, and Network navigation.
 - The provider strip stays above the active page and displays all five providers without horizontal scrolling.
 - The panel is pinned to the right edge of the active display. Expand grows the same surface leftward and downward; Contract restores compact mode while preserving selection.
-- Settings opens as a separate macOS popup window from the gear button. The attached MOMO panel remains the tracking surface.
+- Settings, session details, and usage capture are routes inside the attached menu-bar panel. They use one Back control and do not create competing top-level app windows.
 - Relevant sessions load in bounded pages and display readable names instead of opaque IDs.
 - Provide “Open original chat” only when MOMO has a verified destination.
 - The attention inspector must remain inside MOMO. Done/Contract must not close the entire app.
@@ -55,7 +55,7 @@ The safe future path for Claude/Cursor account usage is an explicit “Analyze u
 - Session history is bounded and deduplicated by provider plus conversation identity. Process presence alone is not treated as proof that every chat is running.
 - `ClaudeSessionAdapter`, `CodexSessionAdapter`, and `CursorSessionAdapter` preserve provider-specific provenance and leave unsupported fields unavailable.
 - `SessionPresentation` supplies relevant recent chats and readable names.
-- `TrackingDashboardView` keeps the provider strip above Activity, Usage, and Brain and paginates recent evidence. Settings is provided by the separate macOS popup scene.
+- `TrackingDashboardView` keeps the provider strip above Activity, Usage, and Brain, paginates recent evidence, and owns the in-panel Settings/session/usage routes. The full Activity, Usage, and Brain rectangles are interactive.
 - Refresh is limited to once per minute while the menu is open and every five minutes while it is closed. Ollama availability checks are throttled to two minutes.
 - `MenuBarWindowPositioner` keeps the compact menu aligned to the right side of the active display.
 

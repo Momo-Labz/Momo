@@ -550,6 +550,7 @@ final class BarBoyTests: XCTestCase {
         let view = DashboardView(refreshOnAppear: false, initialTab: .network, showsOverview: true)
             .environmentObject(ActivityMonitor(autoRefresh: false, snapshots: snapshots))
             .environmentObject(PreferencesStore(defaults: defaults))
+            .environmentObject(DeskDisplayServer(defaults: defaults))
             .preferredColorScheme(.dark)
         let hostingView = NSHostingView(rootView: view)
         hostingView.frame = NSRect(x: 0, y: 0, width: 860, height: 790)
@@ -800,7 +801,7 @@ final class BarBoyTests: XCTestCase {
         let sessions = root.appendingPathComponent(".codex/sessions")
         try FileManager.default.createDirectory(at: sessions, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let record: [String: Any] = ["type": "event_msg", "timestamp": "2026-09-12T00:00:00Z", "payload": ["type": "token_count", "rate_limits": ["primary": ["used_percent": 76, "window_minutes": 300, "resets_at": 2_000_000_000]]]]
+        let record: [String: Any] = ["type": "event_msg", "timestamp": ISO8601DateFormatter().string(from: .now), "payload": ["type": "token_count", "rate_limits": ["primary": ["used_percent": 76, "window_minutes": 300, "resets_at": 2_000_000_000]]]]
         try JSONSerialization.data(withJSONObject: record).write(to: sessions.appendingPathComponent("quota-fixture.jsonl"))
         let scanner = LocalActivityScanner(home: root, detectProcesses: false)
         let snapshots = await scanner.scan(providers: [.codex])
@@ -871,10 +872,10 @@ final class BarBoyTests: XCTestCase {
         XCTAssertEqual(session.skills, ["fixture-review"])
     }
 
-    func testMenuBarStatusIconIsVisibleTemplateArtwork() {
+    func testMenuBarStatusIconIsVisibleWhiteArtwork() {
         let icon = MenuBarLabelView.statusIcon
 
-        XCTAssertTrue(icon.isTemplate)
+        XCTAssertFalse(icon.isTemplate)
         XCTAssertEqual(icon.size, NSSize(width: 18, height: 18))
         XCTAssertFalse(icon.tiffRepresentation?.isEmpty ?? true)
     }
@@ -1201,7 +1202,7 @@ final class BarBoyTests: XCTestCase {
         let initial = try rawHTTPResponse(port: server.port, request: request)
         XCTAssertTrue(initial.hasPrefix("HTTP/1.1 200 OK"))
         XCTAssertTrue(initial.contains("Cache-Control: no-cache"))
-        XCTAssertTrue(initial.contains("X-Relay-Schema: 1"))
+        XCTAssertTrue(initial.contains("X-Relay-Schema: 2"))
         let etag = try XCTUnwrap(initial.components(separatedBy: "\r\n").first { $0.hasPrefix("ETag: ") }.map { String($0.dropFirst(6)) })
 
         let conditional = "GET /api/status HTTP/1.1\r\nHost: 127.0.0.1:\(server.port)\r\nAuthorization: Bearer \(server.token)\r\nIf-None-Match: \(etag)\r\nConnection: close\r\n\r\n"

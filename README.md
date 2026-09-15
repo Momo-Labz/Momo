@@ -13,7 +13,8 @@ These captures use synthetic sessions and notes, not live account usage.
 - A reusable status-item panel anchored to the right edge of the active screen. Clicking elsewhere leaves it open; the menu icon explicitly opens and closes it.
 - A 700-point compact surface and 920-point expanded surface, wide enough to keep all five provider cards visible without horizontal scrolling.
 - Expand grows the same top-right panel for Activity, Usage, or Brain. The 200 ms no-bounce transition is removed when Reduce Motion is enabled or navigation comes from the keyboard.
-- Settings opens as a separate macOS popup window from the gear button, leaving the attached MOMO panel available underneath.
+- Settings, session details, and usage capture replace the content inside the same right-anchored menu-bar panel. A consistent Back control returns to tracking without opening or blocking another app window.
+- Activity, Usage, and Brain use full-width hit targets, so the complete tab rectangle is clickable and keyboard accessible.
 - A permanent provider strip showing recorded status, recent-session counts, verified usage provenance, and resets. Missing quota values remain unavailable rather than becoming invented percentages.
 - Activity lists relevant recent sessions in groups of ten, supports debounced search, and opens read-only evidence. Open Original appears only for a verified destination.
 - Usage separates local recorded tokens from account quota and supports isolated, explicit provider-page capture for Claude and Cursor.

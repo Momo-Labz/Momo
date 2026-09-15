@@ -7,16 +7,14 @@ private extension TrackerTab {
     }
 }
 
-/// Tracking-first surface for the menu bar, dashboard window, and overview window.
+/// Tracking-first surface for the single attached menu-bar panel.
 /// It intentionally exposes only observed state and read-only session inspection.
 struct TrackingDashboardView: View {
     let refreshOnAppear: Bool
     let showsOverview: Bool
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
-    @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.openSettings) private var openSettings
     @ObservedObject private var surface = MomoSurface.shared
     @State private var search = ""
     @State private var debouncedSearch = ""
@@ -46,30 +44,32 @@ struct TrackingDashboardView: View {
             header
             providerRail
             Divider().opacity(0.55)
-            tabBar
-            Divider().opacity(0.55)
-            Group {
-                if loading { LoadingSkeleton() }
-                else {
-                    switch surface.trackerTab {
-                    case .activity: activity
-                    case .usage: usage
-                    case .brain: brain
+            if surface.route == .dashboard {
+                tabBar
+                Divider().opacity(0.55)
+                Group {
+                    if loading { LoadingSkeleton() }
+                    else {
+                        switch surface.trackerTab {
+                        case .activity: activity
+                        case .usage: usage
+                        case .brain: brain
+                        }
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                routeHeader
+                Divider().opacity(0.55)
+                routedContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .frame(
-            width: showsOverview ? MomoSurface.expandedWidth : (surface.expanded ? MomoSurface.expandedWidth : MomoSurface.compactWidth),
-            height: showsOverview ? 790 : (surface.expanded ? MomoSurface.expandedHeight : MomoSurface.compactHeight)
+            width: showsOverview ? MomoSurface.expandedWidth : (surface.usesExpandedSize ? MomoSurface.expandedWidth : MomoSurface.compactWidth),
+            height: showsOverview ? 790 : (surface.usesExpandedSize ? MomoSurface.expandedHeight : MomoSurface.compactHeight)
         )
         .background(BarBoyStyle.panel)
-        .sheet(item: Binding(get: {
-            sessions.first(where: { $0.id == surface.selectedSessionID })
-        }, set: { session in
-            surface.selectSession(session)
-        })) { session in SessionDetailView(session: session) }
         .task {
             if refreshOnAppear { monitor.refresh() }
             try? await Task.sleep(for: .milliseconds(150))
@@ -94,9 +94,12 @@ struct TrackingDashboardView: View {
             }
             Spacer()
             Text(statusText).font(BarBoyStyle.microLabel).foregroundStyle(statusColor)
-            Button { surface.expanded.toggle() } label: { Image(systemName: surface.expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
-                .barBoyIconButton().help(surface.expanded ? "Contract" : "Expand")
-            Button { openSettings() } label: { Image(systemName: "gearshape.fill") }.barBoyIconButton().help("Settings")
+            if surface.route == .dashboard {
+                Button { surface.expanded.toggle() } label: { Image(systemName: surface.expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
+                    .barBoyIconButton().help(surface.expanded ? "Contract" : "Expand")
+            }
+            Button { surface.openSettings() } label: { Image(systemName: "gearshape.fill") }
+                .barBoyIconButton().help("Settings")
             Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }.barBoyIconButton().help("Quit MOMO")
             Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
                 .barBoyIconButton().help("Refresh observed activity")
@@ -114,15 +117,15 @@ struct TrackingDashboardView: View {
     private var providerRail: some View {
         HStack(spacing: 7) {
             ForEach(snapshots) { snapshot in
-                ProviderCard(snapshot: snapshot, expanded: surface.expanded || showsOverview, selected: surface.selectedProvider == snapshot.provider) {
+                ProviderCard(snapshot: snapshot, expanded: surface.usesExpandedSize || showsOverview, selected: surface.selectedProvider == snapshot.provider) {
                     surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
-                    surface.trackerTab = .activity
+                    if surface.route == .dashboard { surface.trackerTab = .activity }
                 }
             }
         }
         .padding(.horizontal, 12).padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: surface.expanded || showsOverview ? 91 : 68)
+        .frame(height: surface.usesExpandedSize || showsOverview ? 91 : 68)
     }
 
     private var tabBar: some View {
@@ -132,12 +135,64 @@ struct TrackingDashboardView: View {
                     withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) { surface.trackerTab = item }
                 } label: {
                     Label(item.title.uppercased(), systemImage: item.symbol)
-                        .font(BarBoyStyle.navLabel).frame(maxWidth: .infinity).padding(.vertical, 8)
+                        .font(BarBoyStyle.navLabel)
+                        .frame(maxWidth: .infinity, minHeight: 38)
+                        .contentShape(Rectangle())
                         .foregroundStyle(surface.trackerTab == item ? BarBoyStyle.inverseInk : Color.primary)
                         .background(surface.trackerTab == item ? Color.primary : .clear)
-                }.buttonStyle(.plain)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
             }
         }.padding(4)
+    }
+
+    private var routeHeader: some View {
+        HStack(spacing: 9) {
+            Button { surface.goBack() } label: {
+                Label("BACK", systemImage: "chevron.left")
+                    .font(BarBoyStyle.navLabel)
+                    .frame(minWidth: 90, minHeight: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            Text(routeTitle).font(BarBoyStyle.sectionLabel)
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .frame(height: 48)
+    }
+
+    private var routeTitle: String {
+        switch surface.route {
+        case .dashboard: "TRACKING"
+        case .settings: "SETTINGS"
+        case .session: "SESSION DETAILS"
+        case let .usage(provider): "\(provider.name.uppercased()) USAGE"
+        }
+    }
+
+    @ViewBuilder private var routedContent: some View {
+        switch surface.route {
+        case .dashboard:
+            EmptyView()
+        case .settings:
+            SettingsView(embedded: true)
+        case let .session(id):
+            if let session = sessions.first(where: { $0.id == id }) {
+                SessionDetailView(session: session)
+            } else {
+                Text("This session is no longer available.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .padding(18)
+            }
+        case let .usage(provider):
+            UsageCaptureView(provider: provider) { surface.goBack() }
+        }
     }
 
     private var activity: some View {
@@ -154,12 +209,12 @@ struct TrackingDashboardView: View {
                 if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
             }.padding(9).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
             LazyVStack(spacing: 6) {
-                ForEach(Array(sessions.filter { surface.selectedProvider == nil || $0.provider == surface.selectedProvider }.prefix(surface.expanded || showsOverview ? pageSize : 3))) { session in
-                    Button { surface.selectSession(session) } label: { TrackingSessionRow(session: session) }
+                ForEach(Array(sessions.filter { surface.selectedProvider == nil || $0.provider == surface.selectedProvider }.prefix(surface.usesExpandedSize || showsOverview ? pageSize : 3))) { session in
+                    Button { surface.openSession(session) } label: { TrackingSessionRow(session: session) }
                         .buttonStyle(.plain)
                 }
                 if sessions.isEmpty { Text("No recorded activity yet.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary).padding(.vertical, 20) }
-                if (surface.expanded || showsOverview) && sessions.count > pageSize {
+                if (surface.usesExpandedSize || showsOverview) && sessions.count > pageSize {
                     Button("LOAD 10 MORE") { pageSize += 10 }.barBoyButton()
                 }
             }
@@ -172,7 +227,9 @@ struct TrackingDashboardView: View {
             VStack(alignment: .leading, spacing: 10) {
                 Text("USAGE").font(BarBoyStyle.sectionLabel)
                 Text("Only provider-recorded windows are shown. A dash means MOMO has no verified value.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
-                ForEach(snapshots) { snapshot in UsageCard(snapshot: snapshot) }
+                ForEach(snapshots) { snapshot in
+                    UsageCard(snapshot: snapshot) { surface.openUsage(snapshot.provider) }
+                }
             }.padding(12)
         }
     }
@@ -223,16 +280,15 @@ private struct TrackingSessionRow: View {
 
 private struct UsageCard: View {
     let snapshot: ProviderSnapshot
-    @State private var capturePresented = false
+    let onConnect: () -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack { Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle); Spacer(); Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel) }
             HStack { Text(snapshot.quotaLabels.joined(separator: "  ·  ")).font(BarBoyStyle.microLabel).foregroundStyle(.secondary); Spacer(); Text(snapshot.resetLabel(now: .now)).font(BarBoyStyle.microLabel).foregroundStyle(.secondary) }
             if snapshot.provider == .claude || snapshot.provider == .cursor {
-                Button("CONNECT USAGE") { capturePresented = true }.barBoyButton()
+                Button("CONNECT USAGE", action: onConnect).barBoyButton()
             }
         }.padding(11).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-            .sheet(isPresented: $capturePresented) { UsageCaptureView(provider: snapshot.provider) }
     }
 }
 
@@ -258,7 +314,7 @@ private struct SessionDetailView: View {
             } else {
                 Text("Original destination unavailable").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
             }
-        }.padding(18).frame(minWidth: 360, minHeight: 250).background(BarBoyStyle.panel)
+        }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(BarBoyStyle.panel)
     }
 
     private var verifiedOriginalURL: URL? {

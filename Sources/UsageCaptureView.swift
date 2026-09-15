@@ -5,7 +5,7 @@ import SwiftUI
 /// deliberately does not claim a value or write a usage observation yet.
 struct UsageCaptureView: View {
     let provider: AIProvider
-    @Environment(\.dismiss) private var dismiss
+    let onBack: () -> Void
     @State private var interval = "Manual"
     @State private var preview = false
 
@@ -24,10 +24,10 @@ struct UsageCaptureView: View {
                 Text("No usage value has been recorded.").font(BarBoyStyle.microLabel).foregroundStyle(BarBoyStyle.amber)
             }
             HStack {
-                Button("CANCEL", role: .cancel) { dismiss() }.barBoyButton()
+                Button("BACK", role: .cancel, action: onBack).barBoyButton()
                 Spacer()
                 Button(preview ? "CONFIRM PREVIEW" : "PREVIEW") { preview = true }.barBoyButton()
             }
-        }.padding(18).frame(width: 420).background(BarBoyStyle.panel)
+        }.padding(18).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).background(BarBoyStyle.panel)
     }
 }

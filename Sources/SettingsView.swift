@@ -9,7 +9,6 @@ struct SettingsView: View {
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
-    @Environment(\.openWindow) private var openWindow
     @ObservedObject private var shortcutService = GlobalShortcutService.shared
     @State private var recordingShortcut: ShortcutAction?
     @State private var shortcutError: String?
@@ -113,7 +112,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local providers").font(.title2.bold())
-                Button("Set up Codex desktop access") { openWindow(id: "onboarding") }
+                Button("Set up Codex local access") { chooseLocalRoot(for: .codex) }
                 Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
                     .foregroundStyle(.secondary)
             }

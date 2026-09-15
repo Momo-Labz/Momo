@@ -28,6 +28,13 @@ enum MomoPane: String, CaseIterable, Identifiable {
     }
 }
 
+enum MomoRoute: Equatable {
+    case dashboard
+    case settings
+    case session(String)
+    case usage(AIProvider)
+}
+
 @MainActor
 final class MomoSurface: ObservableObject {
     static let shared = MomoSurface()
@@ -48,6 +55,11 @@ final class MomoSurface: ObservableObject {
     @Published var attentionOnly = false
     /// True when the pane changed from a keyboard shortcut, which must not animate.
     @Published var lastChangeWasKeyboard = false
+    @Published private(set) var route: MomoRoute = .dashboard
+    private var expandedBeforeRoute = false
+
+    var presentsFullPage: Bool { route != .dashboard }
+    var usesExpandedSize: Bool { expanded || presentsFullPage }
 
     func show(_ pane: MomoPane, fromKeyboard: Bool = false) {
         lastChangeWasKeyboard = fromKeyboard
@@ -61,6 +73,33 @@ final class MomoSurface: ObservableObject {
     func selectSession(_ session: AgentSession?) {
         selectedSessionID = session?.id
         if let session { selectProvider(session.provider) }
+    }
+
+    func openSettings(fromKeyboard: Bool = false) {
+        open(.settings, fromKeyboard: fromKeyboard)
+    }
+
+    func openSession(_ session: AgentSession, fromKeyboard: Bool = false) {
+        selectSession(session)
+        open(.session(session.id), fromKeyboard: fromKeyboard)
+    }
+
+    func openUsage(_ provider: AIProvider, fromKeyboard: Bool = false) {
+        selectProvider(provider)
+        open(.usage(provider), fromKeyboard: fromKeyboard)
+    }
+
+    func goBack(fromKeyboard: Bool = false) {
+        lastChangeWasKeyboard = fromKeyboard
+        route = .dashboard
+        expanded = expandedBeforeRoute
+    }
+
+    private func open(_ destination: MomoRoute, fromKeyboard: Bool) {
+        lastChangeWasKeyboard = fromKeyboard
+        if route == .dashboard { expandedBeforeRoute = expanded }
+        route = destination
+        expanded = true
     }
 
 }

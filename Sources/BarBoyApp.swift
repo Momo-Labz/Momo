@@ -56,52 +56,23 @@ final class MomoRuntime: ObservableObject {
     }
 }
 
-final class MomoAppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in MomoRuntime.shared.start() }
-    }
-}
-
 @main
-struct BarBoyApp: App {
-    @NSApplicationDelegateAdaptor(MomoAppDelegate.self) private var appDelegate
-    @StateObject private var runtime = MomoRuntime.shared
+@MainActor
+final class BarBoyApp: NSObject, NSApplicationDelegate {
+    private var runtime: MomoRuntime?
 
-    var body: some Scene {
-        Settings {
-            SettingsView()
-                .environmentObject(runtime.monitor)
-                .environmentObject(runtime.preferences)
-                .environmentObject(runtime.deskDisplay)
-                .environmentObject(runtime.attentionNotifier)
-        }
-        Window("MOMO", id: "dashboard") {
-            DashboardView()
-                .environmentObject(runtime.monitor)
-                .environmentObject(runtime.preferences)
-                .environmentObject(runtime.deskDisplay)
-                .environmentObject(runtime.attentionNotifier)
-        }
-        .defaultPosition(.center)
-        .defaultSize(width: 430, height: 620)
-        .windowResizability(.contentSize)
-        Window("Connect Codex", id: "onboarding") {
-            CodexOnboardingView()
-                .environmentObject(runtime.preferences)
-                .environmentObject(runtime.monitor)
-                .environmentObject(runtime.attentionNotifier)
-        }
-        .defaultPosition(.center)
-        .windowResizability(.contentSize)
-        Window("MOMO Overview", id: "overview") {
-            DashboardView(showsOverview: true)
-                .environmentObject(runtime.monitor)
-                .environmentObject(runtime.preferences)
-                .environmentObject(runtime.deskDisplay)
-                .environmentObject(runtime.attentionNotifier)
-        }
-        .defaultPosition(.center)
-        .windowResizability(.contentSize)
+    static func main() {
+        let application = NSApplication.shared
+        let delegate = BarBoyApp()
+        application.delegate = delegate
+        application.setActivationPolicy(.accessory)
+        application.run()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let runtime = MomoRuntime.shared
+        self.runtime = runtime
+        runtime.start()
     }
 }
 
@@ -209,8 +180,8 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         let screenHeight = item?.button?.window?.screen?.visibleFrame.height ?? NSScreen.main?.visibleFrame.height ?? 700
         let surface = MomoSurface.shared
         return NSSize(
-            width: surface.expanded ? MomoSurface.expandedWidth : MomoSurface.compactWidth,
-            height: surface.expanded ? min(MomoSurface.expandedHeight, screenHeight - 20) : MomoSurface.compactHeight
+            width: surface.usesExpandedSize ? MomoSurface.expandedWidth : MomoSurface.compactWidth,
+            height: surface.usesExpandedSize ? min(MomoSurface.expandedHeight, screenHeight - 20) : MomoSurface.compactHeight
         )
     }
 
