@@ -5,6 +5,7 @@ enum TrackingOnboardingStep: Int, CaseIterable {
     case welcome
     case intents
     case connectProviders
+    case preferences
     case talkTrial
 }
 
@@ -19,6 +20,12 @@ struct TrackingOnboardingView: View {
     @State private var permissionProvider: AIProvider?
     @State private var allowUsage = true
     @State private var allowRecentPrompts = true
+    @State private var selectedRefreshInterval = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
+    @State private var recordingTalkShortcut = false
+    @AppStorage("notifyFailure") private var notifyFailure = true
+    @AppStorage("notifyNeedsInput") private var notifyNeedsInput = true
+    @AppStorage("notifyThreshold90") private var notifyThreshold90 = true
+    @AppStorage("momoAlertSoundEnabled.v1") private var alertSoundEnabled = true
 
     var initialStep: TrackingOnboardingStep
     var onFinish: (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void
@@ -80,6 +87,7 @@ struct TrackingOnboardingView: View {
                 case .welcome: welcomeStep
                 case .intents: intentsStep
                 case .connectProviders: connectStep
+                case .preferences: preferencesStep
                 case .talkTrial: talkTrialStep
                 }
             }
@@ -184,7 +192,7 @@ struct TrackingOnboardingView: View {
 
                 primaryButton("Continue") {
                     if onDismiss == nil {
-                        step = .talkTrial
+                        step = .preferences
                     } else {
                         onFinish(intents, allowed)
                     }
@@ -194,6 +202,69 @@ struct TrackingOnboardingView: View {
         .padding(.horizontal, 18)
         .padding(.top, 4)
         .padding(.bottom, 20)
+    }
+
+    private var preferencesStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Choose your defaults")
+                .font(BarBoyStyle.display)
+                .frame(maxWidth: .infinity, alignment: .center)
+            Text("You can change these in Settings any time.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Refresh interval").font(BarBoyStyle.sectionLabel)
+                Picker("Refresh interval", selection: $selectedRefreshInterval) {
+                    Text("1 min").tag(60)
+                    Text("5 min").tag(300)
+                    Text("10 min").tag(600)
+                    Text("30 min").tag(1_800)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Talk shortcut").font(BarBoyStyle.sectionLabel)
+                Button("Set Talk shortcut (\(GlobalShortcutService.shared.bindings[.talk]?.label ?? "⌃⌥ T"))") {
+                    recordingTalkShortcut = true
+                }
+                .barBoyButton()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Notifications").font(BarBoyStyle.sectionLabel)
+                Toggle("Session stopped / error", isOn: $notifyFailure).toggleStyle(.checkbox)
+                Toggle("Needs you", isOn: $notifyNeedsInput).toggleStyle(.checkbox)
+                Toggle("Usage running low", isOn: $notifyThreshold90).toggleStyle(.checkbox)
+                Toggle("Play notification sound", isOn: $alertSoundEnabled).toggleStyle(.checkbox)
+            }
+
+            primaryButton("Continue") {
+                UserDefaults.standard.set(selectedRefreshInterval, forKey: "refreshIntervalSeconds.v1")
+                step = .talkTrial
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 20)
+        .sheet(isPresented: $recordingTalkShortcut) {
+            VStack(spacing: 16) {
+                Text("Press a shortcut for Talk").font(.headline)
+                Text("Include Control, Option or Command. Escape cancels.").font(.caption)
+                ShortcutRecorder { binding in
+                    if let binding {
+                        _ = GlobalShortcutService.shared.update(binding, for: .talk)
+                        _ = GlobalShortcutService.shared.setEnabled(true, for: .talk)
+                    }
+                    recordingTalkShortcut = false
+                }
+                .frame(width: 350, height: 35)
+                Button("Cancel") { recordingTalkShortcut = false }
+            }
+            .padding(24)
+        }
     }
 
     private var talkTrialStep: some View {

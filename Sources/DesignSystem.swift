@@ -14,6 +14,7 @@ enum BarBoyStyle {
     static let coral = Color(red: 226 / 255, green: 92 / 255, blue: 72 / 255)
     /// DESIGN.md `warning`. A question is waiting; nothing has gone wrong.
     static let amber = Color(red: 211 / 255, green: 154 / 255, blue: 83 / 255)
+    static let errorOrange = Color(red: 232 / 255, green: 132 / 255, blue: 60 / 255)
     static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
     static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
     static let inverseInk = Color(nsColor: NSColor(name: nil) { appearance in

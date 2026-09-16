@@ -124,4 +124,18 @@ final class OnboardingAndTalkTests: XCTestCase {
         XCTAssertTrue(facts.contains("backend for Nibblr"))
         XCTAssertFalse(facts.contains("38%"))
     }
+
+    func testRefreshIntervalNormalizationAndPersistence() {
+        let suite = UserDefaults(suiteName: "MomoRefresh.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertEqual(preferences.refreshIntervalSeconds, 60)
+        preferences.refreshIntervalSeconds = 600
+        XCTAssertEqual(preferences.refreshIntervalSeconds, 600)
+        XCTAssertEqual(PreferencesStore.normalizedRefreshInterval(123), 60)
+
+        let reloaded = PreferencesStore(defaults: suite)
+        XCTAssertEqual(reloaded.refreshIntervalSeconds, 600)
+    }
 }

@@ -52,7 +52,7 @@ struct SettingsView: View {
     @State private var pendingProvider: AIProvider?
     @State private var pendingRoot: String?
     private var refreshIntervalLabel: String {
-        let seconds = Int(ActivityMonitor.refreshInterval)
+        let seconds = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
         return "\(seconds) second\(seconds == 1 ? "" : "s")"
     }
 

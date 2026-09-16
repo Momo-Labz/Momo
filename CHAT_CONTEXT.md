@@ -1,6 +1,6 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-16 (force Welcome onboarding + MOMO alerts + Talk Free/Plus)
+Updated: 2026-09-16 (mic-loop fix + forced onboarding prefs + TRACKR header lock)
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
 
@@ -32,6 +32,14 @@ xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS
 ```
 
 Manual: fresh defaults → Welcome auto-opens → intent → browser allow → Talk trial; strip proportional; Replay onboarding; MOMO flashes on alert; Talk free quota → upsell.
+
+## September 16 — PR #2 blocker fixes (same branch/PR)
+
+- **Mic permission loop:** `VoiceInput.start()` now checks `AVCaptureDevice.authorizationStatus(for: .audio)` and `SFSpeechRecognizer.authorizationStatus()` first, and only requests when status is `.notDetermined` (no repeated request prompt loop on every Talk invocation).
+- **Forced onboarding sequence lock:** Welcome → intents → provider browser allow + local permission → onboarding preferences (Talk shortcut, notification toggles incl. sound, refresh interval 1/5/10/30) → Talk trial.
+- **Refresh interval wiring:** persisted to `refreshIntervalSeconds.v1`; monitor auto-refresh uses configured interval while menu is visible (closed state still bounded to at least 5 minutes).
+- **Header chrome lock:** `TRACKING` renamed to `TRACKR`; removed center duplicate MOMO mark; added Talk shortcut affordance between title block and legend; legend `FAILED` renamed to `ERROR` with distinct orange.
+- **Shortcut feedback lock:** Talk shortcut now toggles listening start/stop and status-item enters visible pulsing mic state while listening/permission is active.
 
 ## September 16 — PR #1 onboarding redesign + UX fixes
 

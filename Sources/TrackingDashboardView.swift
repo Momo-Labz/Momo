@@ -17,6 +17,7 @@ struct TrackingDashboardView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var surface = MomoSurface.shared
     @ObservedObject private var momoAlerts = MomoAlertPresenter.shared
+    @ObservedObject private var voiceInput = VoiceInput.shared
     @State private var search = ""
     @State private var debouncedSearch = ""
     @State private var pageSize = 10
@@ -169,7 +170,13 @@ struct TrackingDashboardView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .momoShortcut)) { note in
             guard let action = note.object as? ShortcutAction, action == .talk else { return }
-            surface.openTalk()
+            if voiceInput.isActive {
+                voiceInput.stop()
+            } else {
+                surface.openTalk()
+                voiceInput.prepare(.talk)
+                Task { await voiceInput.start() }
+            }
         }
     }
 
@@ -218,21 +225,14 @@ struct TrackingDashboardView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            AnimatedMomoMark(size: 27, animated: false)
+            AnimatedMomoMark(size: 27, animated: momoAlerts.isFlashing, motion: .alert, flashAlert: momoAlerts.isFlashing)
             VStack(alignment: .leading, spacing: 1) {
                 Text("MOMO LABZ").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                Text("TRACKING").font(BarBoyStyle.display).tracking(0.8)
+                Text("TRACKR").font(BarBoyStyle.display).tracking(0.8)
             }
             Spacer(minLength: 8)
+            talkShortcutAffordance
             Text(statusText).font(BarBoyStyle.microLabel).foregroundStyle(statusColor)
-            // Layout: status → animated MOMO → alert legend → chrome icons
-            AnimatedMomoMark(
-                size: 28,
-                animated: !reduceMotion,
-                motion: momoAlerts.isFlashing ? .alert : .loop,
-                flashAlert: momoAlerts.isFlashing
-            )
-            .help(momoAlerts.lastKind.map { "Alert: \($0.legendTitle)" } ?? "MOMO")
             alertLegend
             if surface.route == .dashboard {
                 Button {
@@ -270,12 +270,33 @@ struct TrackingDashboardView: View {
 
     private var alertLegend: some View {
         HStack(spacing: 6) {
-            legendChip(color: BarBoyStyle.coral, title: "FAILED")
+            legendChip(color: BarBoyStyle.errorOrange, title: "ERROR")
             legendChip(color: BarBoyStyle.amber, title: "NEEDS YOU")
             legendChip(color: BarBoyStyle.coral.opacity(0.85), title: "USAGE")
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Alert legend: failed, needs you, usage low")
+        .accessibilityLabel("Alert legend: error, needs you, usage low")
+    }
+
+    private var talkShortcutAffordance: some View {
+        Button {
+            if voiceInput.isActive {
+                voiceInput.stop()
+            } else {
+                surface.openTalk()
+                voiceInput.prepare(.talk)
+                Task { await voiceInput.start() }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: voiceInput.isActive ? "mic.fill" : "waveform")
+                Text("TALK \(GlobalShortcutService.shared.bindings[.talk]?.label ?? "⌃⌥ T")")
+            }
+            .font(BarBoyStyle.microLabel)
+            .foregroundStyle(voiceInput.isActive ? BarBoyStyle.coral : .secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Talk shortcut")
     }
 
     private func legendChip(color: Color, title: String) -> some View {
@@ -380,7 +401,7 @@ struct TrackingDashboardView: View {
 
     private var routeTitle: String {
         switch surface.route {
-        case .dashboard: "TRACKING"
+        case .dashboard: "TRACKR"
         case .settings: "SETTINGS"
         case .session: "SESSION DETAILS"
         case let .usage(provider): "\(provider.name.uppercased()) USAGE"
@@ -517,6 +538,7 @@ private struct ProviderCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: width, alignment: .leading)
             .padding(8)
             .background(selected ? BarBoyStyle.surface.opacity(1.8) : BarBoyStyle.surface)
             .overlay(Rectangle().stroke(snapshot.hasErrorOrApproval ? BarBoyStyle.coral : selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))

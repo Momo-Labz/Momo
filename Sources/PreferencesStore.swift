@@ -18,6 +18,9 @@ final class PreferencesStore: ObservableObject {
     @Published var launchAtLogin: Bool {
         didSet { defaults.set(launchAtLogin, forKey: Keys.launchAtLogin) }
     }
+    @Published var refreshIntervalSeconds: Int {
+        didSet { defaults.set(Self.normalizedRefreshInterval(refreshIntervalSeconds), forKey: Keys.refreshIntervalSeconds) }
+    }
     @Published var deskDisplayEnabled: Bool {
         didSet { defaults.set(deskDisplayEnabled, forKey: Keys.deskDisplayEnabled) }
     }
@@ -57,6 +60,7 @@ final class PreferencesStore: ObservableObject {
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
         static let attentionAlertsEnabled = "attentionAlertsEnabled"
+        static let refreshIntervalSeconds = "refreshIntervalSeconds.v1"
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -73,6 +77,7 @@ final class PreferencesStore: ObservableObject {
         showProviderCardDetails = defaults.object(forKey: Keys.showProviderCardDetails) as? Bool ?? true
         showProviderUsageBars = defaults.object(forKey: Keys.showProviderUsageBars) as? Bool ?? true
         launchAtLogin = defaults.object(forKey: Keys.launchAtLogin) as? Bool ?? false
+        refreshIntervalSeconds = Self.normalizedRefreshInterval(defaults.integer(forKey: Keys.refreshIntervalSeconds))
         deskDisplayEnabled = defaults.object(forKey: Keys.deskDisplayEnabled) as? Bool ?? false
         showDeskDisplayTitles = defaults.object(forKey: Keys.showDeskDisplayTitles) as? Bool ?? true
         attentionAlertsEnabled = defaults.object(forKey: Keys.attentionAlertsEnabled) as? Bool ?? false
@@ -179,6 +184,12 @@ final class PreferencesStore: ObservableObject {
     func setEnabled(_ enabled: Bool, for provider: AIProvider) {
         if enabled { enabledProviders.insert(provider) } else { enabledProviders.remove(provider) }
         defaults.set(enabledProviders.map(\.rawValue).sorted(), forKey: Keys.enabledProviders)
+    }
+
+    static let refreshIntervalOptions = [60, 300, 600, 1_800]
+
+    static func normalizedRefreshInterval(_ seconds: Int) -> Int {
+        refreshIntervalOptions.contains(seconds) ? seconds : 60
     }
 }
 
