@@ -94,25 +94,32 @@ final class PreferencesStore: ObservableObject {
         let saved = defaults.stringArray(forKey: Keys.enabledProviders)
         enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         let savedAllowed = defaults.stringArray(forKey: Keys.allowedTrackingProviders)
-        allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
+        let parsedAllowed = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         let savedSchema = defaults.integer(forKey: Keys.trackingOnboardingSchemaVersion)
         let legacySeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
         let completeCurrent = defaults.bool(forKey: Keys.trackingOnboardingComplete)
+        let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
 
+        let resolvedAllowed: Set<AIProvider>
+        let resolvedSeen: Bool
         if savedSchema < Self.currentOnboardingSchemaVersion {
             // Force full Welcome → intents → empty providers → verified desktop connect.
             Self.clearOnboardingFlags(in: defaults)
-            trackingOnboardingSeen = false
-            allowedTrackingProviders = []
             defaults.set([], forKey: Keys.allowedTrackingProviders)
-        } else if allowedTrackingProviders.isEmpty {
+            resolvedAllowed = []
+            resolvedSeen = false
+        } else if parsedAllowed.isEmpty {
             // Schema current but no verified providers — never treat as finished.
-            trackingOnboardingSeen = false
             Self.clearOnboardingFlags(in: defaults)
+            resolvedAllowed = []
+            resolvedSeen = false
         } else {
-            trackingOnboardingSeen = completeCurrent || legacySeen
+            resolvedAllowed = parsedAllowed
+            resolvedSeen = completeCurrent || legacySeen
         }
-        let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
+
+        allowedTrackingProviders = resolvedAllowed
+        trackingOnboardingSeen = resolvedSeen
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
     }
 
