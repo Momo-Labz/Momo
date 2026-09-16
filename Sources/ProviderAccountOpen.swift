@@ -3,18 +3,29 @@ import Foundation
 
 /// Opens desktop AI apps via Launch Services without writing into their bundles.
 /// Prefer activating an already-running instance; never modify another .app.
+///
+/// **Never block the MainActor.** `NSWorkspace.openApplication` completions often hop
+/// back to the main thread — waiting on a semaphore from MainActor deadlocks the UI
+/// (same class of hang as VoicePermission’s continuation deadlock).
 enum DesktopAppConnect {
     /// Test seam — production uses Launch Services openApplication.
     static var openApplicationAtURL: (URL) -> Bool = { url in
         openViaLaunchServices(url)
     }
 
+    /// Synchronous fire-and-forget open. Safe from MainActor: never waits on a semaphore.
     @discardableResult
     static func openDesktopApp(for provider: AIProvider) -> Bool {
-        // Prefer activating a running instance — no App Management write path.
         if activateRunning(provider) { return true }
         guard let url = DesktopAppCatalog.locate(provider) else { return false }
         return openApplicationAtURL(url)
+    }
+
+    /// Async open that reports whether Launch Services accepted the request.
+    static func openDesktopAppAsync(for provider: AIProvider) async -> Bool {
+        if activateRunning(provider) { return true }
+        guard let url = DesktopAppCatalog.locate(provider) else { return false }
+        return await openViaLaunchServicesAsync(url)
     }
 
     static func isInstalled(_ provider: AIProvider) -> Bool {
@@ -34,29 +45,44 @@ enum DesktopAppConnect {
     }
 
     /// Launch Services open — does not write into the target .app bundle.
+    /// Returns immediately after requesting open; does **not** wait for the completion handler.
     private static func openViaLaunchServices(_ url: URL) -> Bool {
-        // Guard: only open .app bundles (or symlinks to them), never nested Mach-O paths.
         guard url.pathExtension.lowercased() == "app" || url.hasDirectoryPath else { return false }
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.activates = true
         configuration.promptsUserIfNeeded = true
-        var opened = false
-        let lock = NSLock()
-        let semaphore = DispatchSemaphore(value: 0)
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
-            lock.lock()
-            opened = (error == nil)
-            lock.unlock()
-            semaphore.signal()
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
+            // Intentionally ignored — readiness is confirmed by DesktopConnectionVerifier off-main.
         }
-        // Bound wait so onboarding never hangs the MainActor caller when used from a Task.
-        _ = semaphore.wait(timeout: .now() + 2.5)
-        lock.lock()
-        let result = opened
-        lock.unlock()
-        if result { return true }
-        // Last resort: open the .app URL through Launch Services without touching Contents/.
-        return NSWorkspace.shared.open(url)
+        return true
+    }
+
+    private static func openViaLaunchServicesAsync(_ url: URL) async -> Bool {
+        guard url.pathExtension.lowercased() == "app" || url.hasDirectoryPath else { return false }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        configuration.promptsUserIfNeeded = true
+        return await withCheckedContinuation { continuation in
+            var resumed = false
+            let lock = NSLock()
+            func finish(_ value: Bool) {
+                lock.lock()
+                defer { lock.unlock() }
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume(returning: value)
+            }
+            NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, error in
+                // Resume off the callback thread; do not assume MainActor.
+                DispatchQueue.global(qos: .userInitiated).async {
+                    finish(error == nil)
+                }
+            }
+            // Bound wait so a stuck Launch Services callback cannot hang connect forever.
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 2.5) {
+                finish(true) // Request was issued; verifier decides connected vs not.
+            }
+        }
     }
 }
 

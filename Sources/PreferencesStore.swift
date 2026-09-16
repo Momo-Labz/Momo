@@ -49,8 +49,8 @@ final class PreferencesStore: ObservableObject {
         !trackingOnboardingSeen || allowedTrackingProviders.isEmpty
     }
 
-    /// Bump when onboarding source changes (v5 = force re-run; empty allow-list never completes).
-    static let currentOnboardingSchemaVersion = 5
+    /// Bump when onboarding source changes (v6 = upgrade forces Welcome→connect; empty allow-list never completes).
+    static let currentOnboardingSchemaVersion = 6
     static let freeProviderLimit = DesktopAppCatalog.freeProviderLimit
 
     private let defaults: UserDefaults
@@ -64,8 +64,10 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
-        static let trackingOnboardingComplete = "trackingOnboardingComplete.v5"
+        static let trackingOnboardingComplete = "trackingOnboardingComplete.v6"
         static let trackingOnboardingSchemaVersion = "trackingOnboardingSchemaVersion.v1"
+        /// One-time flag set on first launch of the v6 build (upgrade path without Terminal wipe).
+        static let onboardingMigrationV6 = "onboardingMigration.v6"
         static let onboardingIntents = "onboardingIntents.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
@@ -100,12 +102,16 @@ final class PreferencesStore: ObservableObject {
         let completeCurrent = defaults.bool(forKey: Keys.trackingOnboardingComplete)
         let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
 
+        let migrationApplied = defaults.bool(forKey: Keys.onboardingMigrationV6)
         let resolvedAllowed: Set<AIProvider>
         let resolvedSeen: Bool
-        if savedSchema < Self.currentOnboardingSchemaVersion {
-            // Force full Welcome → intents → empty providers → verified desktop connect.
+        if savedSchema < Self.currentOnboardingSchemaVersion || !migrationApplied {
+            // Upgrade / first run of this build: force Welcome → connect without Terminal wipe.
+            // Missing/legacy schema keys and incomplete allow-lists are treated as incomplete.
             Self.clearOnboardingFlags(in: defaults)
             defaults.set([], forKey: Keys.allowedTrackingProviders)
+            defaults.set(true, forKey: Keys.onboardingMigrationV6)
+            defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
             resolvedAllowed = []
             resolvedSeen = false
         } else if parsedAllowed.isEmpty {
@@ -123,10 +129,11 @@ final class PreferencesStore: ObservableObject {
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
     }
 
-    /// Clears every known onboarding completion key (v2…v5) plus the seen flag.
+    /// Clears every known onboarding completion key (v2…v6) plus the seen flag.
     static func clearOnboardingFlags(in defaults: UserDefaults) {
         defaults.set(false, forKey: Keys.trackingOnboardingSeen)
         defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+        defaults.set(false, forKey: "trackingOnboardingComplete.v6")
         defaults.set(false, forKey: "trackingOnboardingComplete.v5")
         defaults.set(false, forKey: "trackingOnboardingComplete.v4")
         defaults.set(false, forKey: "trackingOnboardingComplete.v3")
@@ -217,6 +224,7 @@ final class PreferencesStore: ObservableObject {
         defaults.set(true, forKey: Keys.trackingOnboardingSeen)
         defaults.set(true, forKey: Keys.trackingOnboardingComplete)
         defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
+        defaults.set(true, forKey: Keys.onboardingMigrationV6)
     }
 
     func syncRefreshIntervalFromDefaults() {
@@ -224,11 +232,15 @@ final class PreferencesStore: ObservableObject {
     }
 
     /// Tester/Settings path: clear the first-run gate so Welcome shows again.
+    /// Preferred retest path — do not document Terminal `defaults delete` for shipping QA.
     func reopenTrackingOnboarding() {
         trackingOnboardingSeen = false
         allowedTrackingProviders = []
         Self.clearOnboardingFlags(in: defaults)
         defaults.set([], forKey: Keys.allowedTrackingProviders)
+        // Keep migration flag so Replay does not fight the one-time upgrade wipe.
+        defaults.set(true, forKey: Keys.onboardingMigrationV6)
+        defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
         NotificationCenter.default.post(
             name: .momoShowProviderChooser,
             object: nil,

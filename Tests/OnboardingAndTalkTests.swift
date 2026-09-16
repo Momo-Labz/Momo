@@ -22,23 +22,24 @@ final class OnboardingAndTalkTests: XCTestCase {
         preferences.setAllowedTrackingProviders([.codex], markOnboardingSeen: true)
         XCTAssertFalse(preferences.needsTrackingOnboarding)
         XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
-        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v5"))
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v6"))
     }
 
-    func testSchemaV5ClearsV4CompleteAndEmptyAllowListNeverFinishes() {
-        let suite = UserDefaults(suiteName: "MomoSchemaV5.\(UUID().uuidString)")!
+    func testSchemaV6ClearsV5CompleteAndEmptyAllowListNeverFinishes() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV6.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
 
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v4")
+        suite.set(5, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v5")
         suite.set([], forKey: "allowedTrackingProviders.v1")
 
         let preferences = PreferencesStore(defaults: suite)
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 5)
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 6)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertFalse(preferences.trackingOnboardingSeen)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
 
         // Marking complete without providers must not stick.
         preferences.markTrackingOnboardingSeen()
@@ -46,18 +47,33 @@ final class OnboardingAndTalkTests: XCTestCase {
         XCTAssertFalse(preferences.trackingOnboardingSeen)
     }
 
-    func testCompletedV4WithProvidersStillForcedBySchemaV5() {
-        let suite = UserDefaults(suiteName: "MomoSchemaV5Providers.\(UUID().uuidString)")!
+    func testCompletedV5WithProvidersStillForcedBySchemaV6() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV6Providers.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
 
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v4")
+        suite.set(5, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v5")
         suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
 
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+    }
+
+    func testMigrationFlagPreventsRepeatWipeAfterComplete() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV6Stable.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let first = PreferencesStore(defaults: suite)
+        XCTAssertTrue(first.needsTrackingOnboarding)
+        first.setAllowedTrackingProviders([.claude], markOnboardingSeen: true)
+        XCTAssertFalse(first.needsTrackingOnboarding)
+
+        let second = PreferencesStore(defaults: suite)
+        XCTAssertFalse(second.needsTrackingOnboarding)
+        XCTAssertEqual(second.allowedTrackingProviders, [.claude])
     }
 
     func testFreeProviderSoftLockAndDesktopConnect() {
