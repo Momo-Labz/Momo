@@ -209,7 +209,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Providers").font(.title2.bold())
-                Text("Allow-list controls the sticky strip and usage peek. Folder authorization below is separate. Connect opens the desktop app when installed — MOMO never imports cookies or scrapes usage pages.")
+                Text("Allow-list controls the sticky strip and usage peek. Folder authorization below is separate. Connect opens the desktop app when installed — MOMO never imports cookies or scrapes usage pages. Use Replay onboarding to retest Welcome→connect (no Terminal wipe needed).")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -19,8 +19,10 @@ struct TrackingOnboardingView: View {
     @State private var intents: Set<OnboardingIntent>
     @State private var allowed: Set<AIProvider>
     @State private var permissionProvider: AIProvider?
-    @State private var pendingStatus: DesktopConnectionVerifier.Status?
-    @State private var isVerifying = false
+    @State private var connectProgress: DesktopConnectProgress?
+    @State private var pendingResult: DesktopConnectionVerifier.ConnectResult?
+    @State private var connectTask: Task<Void, Never>?
+    @State private var connectGeneration = 0
     @State private var allowUsage = true
     @State private var allowRecentPrompts = true
     @State private var plusGateMessage: String?
@@ -65,6 +67,7 @@ struct TrackingOnboardingView: View {
                     Button {
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                             step = TrackingOnboardingStep(rawValue: max(0, step.rawValue - 1)) ?? .welcome
+                            cancelConnect()
                             permissionProvider = nil
                             plusGateMessage = nil
                         }
@@ -346,7 +349,6 @@ struct TrackingOnboardingView: View {
             }
             allowUsage = true
             allowRecentPrompts = true
-            pendingStatus = nil
             permissionProvider = provider
             beginVerification(for: provider, openApp: true)
         } label: {
@@ -375,6 +377,11 @@ struct TrackingOnboardingView: View {
         .accessibilityLabel(provider.connectButtonTitle)
     }
 
+    private var isConnecting: Bool {
+        guard let connectProgress else { return false }
+        return !connectProgress.isTerminal
+    }
+
     private func verificationPanel(for provider: AIProvider) -> some View {
         let match = DesktopAppCatalog.match(for: provider)
         return VStack(alignment: .leading, spacing: 12) {
@@ -389,34 +396,20 @@ struct TrackingOnboardingView: View {
                 Text("Track usage").font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
+            .disabled(isConnecting)
 
             Toggle(isOn: $allowRecentPrompts) {
                 Text("Track recent prompts").font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
+            .disabled(isConnecting)
 
-            if isVerifying {
-                Text("Checking connection…")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-            } else if let pendingStatus {
-                Text(pendingStatus.guidance)
-                    .font(BarBoyStyle.bodySmall)
-                    .foregroundStyle(pendingStatus.isVerified ? Color.primary : BarBoyStyle.coral)
-                    .fixedSize(horizontal: false, vertical: true)
-                if case .privacyBlocked = pendingStatus {
-                    Button("Open Privacy Settings") {
-                        LocalUsageArtifactReader.openPrivacySettings()
-                    }
-                    .barBoyButton()
-                }
-            }
+            connectStatusBlock(for: provider)
 
             HStack(spacing: 8) {
                 Button("Back") {
+                    cancelConnect()
                     permissionProvider = nil
-                    pendingStatus = nil
-                    isVerifying = false
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
@@ -434,7 +427,7 @@ struct TrackingOnboardingView: View {
                 .background(BarBoyStyle.surface)
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                 .buttonStyle(.plain)
-                .disabled(isVerifying)
+                .disabled(isConnecting)
 
                 Button("Allow") {
                     commitVerifiedConnection(provider)
@@ -453,35 +446,129 @@ struct TrackingOnboardingView: View {
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 
+    @ViewBuilder
+    private func connectStatusBlock(for provider: AIProvider) -> some View {
+        if let connectProgress {
+            HStack(alignment: .top, spacing: 10) {
+                if connectProgress.showsSpinner {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 16, height: 16)
+                } else {
+                    Image(systemName: connectProgress.isVerified ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(connectProgress.isVerified ? Color.primary : BarBoyStyle.coral)
+                        .frame(width: 16, height: 16)
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(connectProgress.title)
+                        .font(BarBoyStyle.rowTitle)
+                    Text(connectStatusDetail(connectProgress, provider: provider))
+                        .font(BarBoyStyle.bodySmall)
+                        .foregroundStyle(connectProgress.isVerified ? Color.primary : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if case .connected(let honesty) = connectProgress,
+                       case .usageFound(let session, let week) = honesty.outcome {
+                        HStack(spacing: 12) {
+                            Text(session.map { "Session \($0)%" } ?? "Session —")
+                                .font(BarBoyStyle.microLabel)
+                                .monospacedDigit()
+                            Text(week.map { "Week \($0)%" } ?? "Week —")
+                                .font(BarBoyStyle.microLabel)
+                                .monospacedDigit()
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    if case .needsPermission = connectProgress {
+                        Button("Open Privacy Settings") {
+                            LocalUsageArtifactReader.openPrivacySettings()
+                        }
+                        .barBoyButton()
+                        .padding(.top, 2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(BarBoyStyle.panel)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(connectProgress.title). \(connectStatusDetail(connectProgress, provider: provider))")
+        } else {
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Starting…")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func connectStatusDetail(_ progress: DesktopConnectProgress, provider: AIProvider) -> String {
+        switch progress {
+        case .openingApp:
+            return "Launching \(DesktopAppCatalog.displayName(for: provider))…"
+        case .waitingForSignIn:
+            return "Finish any sign-in prompts in the app. MOMO does not invent connection status."
+        case .readingLocalUsage:
+            return "Scanning local session files and usage caches off the UI thread…"
+        case .connected(let honesty):
+            return honesty.summary
+        case .needsPermission:
+            return LocalUsageArtifactReader.privacyGuidance(for: provider)
+        case .failed(let reason):
+            return reason
+        case .timedOut:
+            return "Check timed out. Tap Retry — the UI stays responsive while MOMO scans again."
+        }
+    }
+
     private func canCommit(_ provider: AIProvider) -> Bool {
         guard allowUsage || allowRecentPrompts else { return false }
-        guard pendingStatus?.isVerified == true, !isVerifying else { return false }
+        guard pendingResult?.isVerified == true, !isConnecting else { return false }
         let already = allowed.contains(provider)
         return talkQuota.momoPlusEntitled
             || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already)
     }
 
     private func beginVerification(for provider: AIProvider, openApp: Bool) {
-        isVerifying = true
-        pendingStatus = nil
-        if openApp {
-            _ = DesktopAppConnect.openDesktopApp(for: provider)
+        // Debounce repeat clicks while a connect attempt is in flight.
+        if isConnecting { return }
+        connectTask?.cancel()
+        connectTask = nil
+        connectGeneration += 1
+        let generation = connectGeneration
+        pendingResult = nil
+        connectProgress = .openingApp
+        connectTask = Task { @MainActor in
+            let result = await DesktopConnectionVerifier.runConnectAttempt(
+                for: provider,
+                openApp: openApp
+            ) { progress in
+                guard generation == connectGeneration else { return }
+                connectProgress = progress
+            }
+            guard generation == connectGeneration, !Task.isCancelled else { return }
+            pendingResult = result
+            connectProgress = result.progress
+            connectTask = nil
         }
-        Task { @MainActor in
-            // Give the app a moment to come to the foreground / finish launching.
-            try? await Task.sleep(for: .milliseconds(900))
-            let status = DesktopConnectionVerifier.verify(provider)
-            pendingStatus = status
-            isVerifying = false
-        }
+    }
+
+    private func cancelConnect() {
+        connectGeneration += 1
+        connectTask?.cancel()
+        connectTask = nil
+        pendingResult = nil
+        connectProgress = nil
     }
 
     private func commitVerifiedConnection(_ provider: AIProvider) {
         guard canCommit(provider) else { return }
         allowed.insert(provider)
+        cancelConnect()
         permissionProvider = nil
-        pendingStatus = nil
-        isVerifying = false
         onProviderConnected?(allowed)
     }
 

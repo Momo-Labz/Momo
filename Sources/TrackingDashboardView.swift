@@ -643,14 +643,15 @@ private struct ProviderCard: View {
 }
 
 /// Claude Code `/usage`-inspired layout for one connected provider. No activity chat list.
+/// Cache / FDA checks load off the main thread so the Usage tab cannot freeze the panel.
 private struct ClaudeStyleUsageBlock: View {
     let snapshot: ProviderSnapshot
     let observations: [ProviderUsageObservation]
     var now: Date = .now
 
-    private var artifact: LocalUsageDetail {
-        LocalUsageArtifactReader.detail(for: snapshot.provider, now: now)
-    }
+    @State private var artifact = LocalUsageDetail()
+    @State private var privacyBlocked = false
+    @State private var isLoadingArtifact = true
 
     private var mapped: (fiveHour: UsagePeekMetric, weekly: UsagePeekMetric) {
         let base = UsagePeekMapping.map(observations: observations, snapshot: snapshot, now: now)
@@ -669,19 +670,27 @@ private struct ClaudeStyleUsageBlock: View {
         return (five, weekly)
     }
 
-    private var privacyBlocked: Bool {
-        LocalUsageArtifactReader.isSessionRootPrivacyBlocked(snapshot.provider)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 ProviderMark(provider: snapshot.provider, size: 22, active: snapshot.activeCount > 0)
                 Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel)
                 Spacer(minLength: 0)
+                if isLoadingArtifact {
+                    ProgressView().controlSize(.mini)
+                }
                 Text(snapshot.activeCount > 0 ? "LIVE" : (snapshot.isInstalled ? "IDLE" : "—"))
                     .font(BarBoyStyle.microLabel)
                     .foregroundStyle(.secondary)
+            }
+
+            if isLoadingArtifact && artifact.isEmpty {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading local usage…")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             if artifact.hasSessionStats {
@@ -699,7 +708,10 @@ private struct ClaudeStyleUsageBlock: View {
                 metric: mapped.weekly
             )
 
-            if mapped.fiveHour.percentage == nil, mapped.weekly.percentage == nil, !artifact.hasSessionStats {
+            if !isLoadingArtifact,
+               mapped.fiveHour.percentage == nil,
+               mapped.weekly.percentage == nil,
+               !artifact.hasSessionStats {
                 if privacyBlocked {
                     Text(LocalUsageArtifactReader.privacyGuidance(for: snapshot.provider))
                         .font(BarBoyStyle.microLabel)
@@ -728,6 +740,24 @@ private struct ClaudeStyleUsageBlock: View {
         .padding(12)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .task(id: "\(snapshot.provider.rawValue)-\(snapshot.updatedAt.timeIntervalSince1970)") {
+            await reloadArtifact()
+        }
+    }
+
+    @MainActor
+    private func reloadArtifact() async {
+        isLoadingArtifact = true
+        let provider = snapshot.provider
+        let capturedNow = now
+        let loaded = await Task.detached(priority: .userInitiated) {
+            let detail = LocalUsageArtifactReader.detail(for: provider, now: capturedNow)
+            let blocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(provider)
+            return (detail, blocked)
+        }.value
+        artifact = loaded.0
+        privacyBlocked = loaded.1
+        isLoadingArtifact = false
     }
 
     private var emptyGuidance: String {

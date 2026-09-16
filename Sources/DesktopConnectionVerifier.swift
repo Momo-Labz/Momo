@@ -1,8 +1,88 @@
 import AppKit
 import Foundation
 
+/// Live connect/verification progress for onboarding — never leave a blank static panel.
+enum DesktopConnectProgress: Equatable {
+    case openingApp
+    case waitingForSignIn
+    case readingLocalUsage
+    case connected(ConnectUsageHonesty)
+    case needsPermission
+    case failed(String)
+    case timedOut
+
+    var title: String {
+        switch self {
+        case .openingApp: return "Opening app…"
+        case .waitingForSignIn: return "Waiting for sign-in…"
+        case .readingLocalUsage: return "Reading local usage…"
+        case .connected: return "Connected"
+        case .needsPermission: return "Needs permission"
+        case .failed: return "Failed"
+        case .timedOut: return "Timed out"
+        }
+    }
+
+    var showsSpinner: Bool {
+        switch self {
+        case .openingApp, .waitingForSignIn, .readingLocalUsage: return true
+        case .connected, .needsPermission, .failed, .timedOut: return false
+        }
+    }
+
+    var isTerminal: Bool {
+        switch self {
+        case .connected, .needsPermission, .failed, .timedOut: return true
+        case .openingApp, .waitingForSignIn, .readingLocalUsage: return false
+        }
+    }
+
+    var isVerified: Bool {
+        if case .connected = self { return true }
+        return false
+    }
+}
+
+/// Honest local-usage outcome after a successful desktop connect check.
+struct ConnectUsageHonesty: Equatable {
+    enum Outcome: Equatable {
+        /// Parsed session/week % from a real local cache — values are optional when only one window exists.
+        case usageFound(sessionPercent: Int?, weekPercent: Int?)
+        /// App/session readable but no usage-cache / statusline artifact yet.
+        case noReadableCache
+        /// Session root exists but listing/reading is blocked (FDA / App Management).
+        case privacyBlocked
+    }
+
+    let outcome: Outcome
+    /// Absolute path of the cache file when usage was found.
+    let sourcePath: String?
+
+    var summary: String {
+        switch outcome {
+        case .usageFound(let session, let week):
+            var parts: [String] = ["Connected — local usage found."]
+            if let session { parts.append("Session \(session)%.") }
+            if let week { parts.append("Week \(week)%.") }
+            if session == nil, week == nil {
+                parts.append("Usage meters recorded without percent fields.")
+            }
+            return parts.joined(separator: " ")
+        case .noReadableCache:
+            return "Connected — no readable usage cache yet. Session files may exist; % bars appear when Claude’s statusline / usage-cache is present (~/.claude or /tmp/claude)."
+        case .privacyBlocked:
+            return "macOS blocked reading local provider files. Open System Settings → Privacy & Security → Full Disk Access, allow MOMO, then Retry."
+        }
+    }
+}
+
 /// Honest desktop-app connection check — never treats “process running” alone as verified.
 enum DesktopConnectionVerifier {
+    /// Overall wall-clock budget for one connect attempt (open + scan).
+    static let connectTimeout: Duration = .seconds(20)
+    /// Soft pause after requesting app open so Launch Services can activate.
+    static let postOpenSettle: Duration = .milliseconds(600)
+
     enum Status: Equatable {
         case notInstalled
         case notRunning
@@ -36,6 +116,14 @@ enum DesktopConnectionVerifier {
         }
     }
 
+    struct ConnectResult: Equatable {
+        let status: Status
+        let honesty: ConnectUsageHonesty?
+        let progress: DesktopConnectProgress
+
+        var isVerified: Bool { status.isVerified }
+    }
+
     /// Session file suffixes adapters already parse.
     static let sessionSuffixes = ["jsonl", "json"]
 
@@ -54,6 +142,7 @@ enum DesktopConnectionVerifier {
         return .awaitingSignIn
     }
 
+    /// Synchronous verify — call only from a background queue / Task.detached, never MainActor.
     static func verify(_ provider: AIProvider, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Status {
         let installed = DesktopAppCatalog.locate(provider) != nil
         let running = isApplicationRunning(provider)
@@ -66,6 +155,112 @@ enum DesktopConnectionVerifier {
             hasReadableSessionSource: readable,
             privacyBlocked: blocked
         )
+    }
+
+    /// Background verify + honest usage report. Safe to await from MainActor UI.
+    static func verifyOffMain(
+        _ provider: AIProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) async -> ConnectResult {
+        await Task.detached(priority: .userInitiated) {
+            let status = verify(provider, home: home)
+            let honesty = usageHonesty(for: provider, status: status, home: home)
+            let progress = progress(from: status, honesty: honesty)
+            return ConnectResult(status: status, honesty: honesty, progress: progress)
+        }.value
+    }
+
+    /// Full connect attempt with live progress callbacks (MainActor) and a hard timeout.
+    static func runConnectAttempt(
+        for provider: AIProvider,
+        openApp: Bool,
+        onProgress: @MainActor @escaping (DesktopConnectProgress) -> Void
+    ) async -> ConnectResult {
+        await onProgress(.openingApp)
+        if openApp {
+            _ = await DesktopAppConnect.openDesktopAppAsync(for: provider)
+        }
+        await onProgress(.waitingForSignIn)
+        try? await Task.sleep(for: postOpenSettle)
+        guard !Task.isCancelled else {
+            return ConnectResult(status: .failed("Cancelled"), honesty: nil, progress: .failed("Cancelled"))
+        }
+        await onProgress(.readingLocalUsage)
+
+        let verifyTask = Task { await verifyOffMain(provider) }
+        let result: ConnectResult = await withTaskGroup(of: ConnectResult.self) { group in
+            group.addTask {
+                await verifyTask.value
+            }
+            group.addTask {
+                try? await Task.sleep(for: connectTimeout)
+                return ConnectResult(
+                    status: .failed("Timed out while checking local files."),
+                    honesty: nil,
+                    progress: .timedOut
+                )
+            }
+            // First finished child wins; cancel the rest so a late verify cannot overwrite UI.
+            let first = await group.next() ?? ConnectResult(
+                status: .failed("Cancelled"),
+                honesty: nil,
+                progress: .failed("Cancelled")
+            )
+            group.cancelAll()
+            verifyTask.cancel()
+            return first
+        }
+        await onProgress(result.progress)
+        return result
+    }
+
+    static func usageHonesty(
+        for provider: AIProvider,
+        status: Status,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        now: Date = .now,
+        fileManager: FileManager = .default
+    ) -> ConnectUsageHonesty? {
+        switch status {
+        case .privacyBlocked:
+            return ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
+        case .verified:
+            let detail = LocalUsageArtifactReader.detail(
+                for: provider,
+                home: home,
+                now: now,
+                fileManager: fileManager
+            )
+            if detail.hasQuotaMeters {
+                let session = detail.fiveHour.map { Int($0.percent.rounded()) }
+                let week = detail.weekly.map { Int($0.percent.rounded()) }
+                return ConnectUsageHonesty(
+                    outcome: .usageFound(sessionPercent: session, weekPercent: week),
+                    sourcePath: detail.sourceDescription
+                )
+            }
+            // Verified via sessions (or non-% artifacts) but no quota meters.
+            return ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil)
+        case .notInstalled, .notRunning, .awaitingSignIn, .failed:
+            return nil
+        }
+    }
+
+    static func progress(from status: Status, honesty: ConnectUsageHonesty?) -> DesktopConnectProgress {
+        switch status {
+        case .verified:
+            return .connected(honesty ?? ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil))
+        case .privacyBlocked:
+            return .needsPermission
+        case .notInstalled:
+            return .failed(Status.notInstalled.guidance)
+        case .notRunning:
+            return .failed(Status.notRunning.guidance)
+        case .awaitingSignIn:
+            return .failed(Status.awaitingSignIn.guidance)
+        case .failed(let reason):
+            return .failed(reason)
+        }
     }
 
     static func isApplicationRunning(_ provider: AIProvider) -> Bool {

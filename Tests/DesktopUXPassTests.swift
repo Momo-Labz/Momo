@@ -125,17 +125,88 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(mapped.weekly.percentage, 44)
     }
 
-    func testOnboardingSchemaIsV5ForForcedConnect() {
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 5)
-        let suite = UserDefaults(suiteName: "MomoSchemaV5UX.\(UUID().uuidString)")!
+    func testOnboardingSchemaIsV6ForForcedConnect() {
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 6)
+        let suite = UserDefaults(suiteName: "MomoSchemaV6UX.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v4")
+        suite.set(5, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v5")
         suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+    }
+
+    func testConnectUsageHonestyReportsFoundMissingAndBlocked() {
+        let found = ConnectUsageHonesty(
+            outcome: .usageFound(sessionPercent: 27, weekPercent: 100),
+            sourcePath: "/tmp/claude/statusline-usage-cache.json"
+        )
+        XCTAssertTrue(found.summary.contains("27%"))
+        XCTAssertTrue(found.summary.contains("100%"))
+        XCTAssertFalse(found.summary.contains("invent"))
+
+        let missing = ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil)
+        XCTAssertTrue(missing.summary.contains("no readable usage cache"))
+
+        let blocked = ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
+        XCTAssertTrue(blocked.summary.contains("Full Disk Access"))
+
+        XCTAssertEqual(
+            DesktopConnectionVerifier.progress(
+                from: .verified,
+                honesty: found
+            ),
+            .connected(found)
+        )
+        XCTAssertEqual(
+            DesktopConnectionVerifier.progress(from: .privacyBlocked, honesty: blocked),
+            .needsPermission
+        )
+        XCTAssertTrue(DesktopConnectProgress.openingApp.showsSpinner)
+        XCTAssertFalse(DesktopConnectProgress.timedOut.showsSpinner)
+    }
+
+    func testUsageHonestyFromVerifiedStatusWithoutInventing() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-honesty-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let withoutCache = DesktopConnectionVerifier.usageHonesty(
+            for: .claude,
+            status: .verified,
+            home: tmp
+        )
+        XCTAssertEqual(withoutCache?.outcome, .noReadableCache)
+
+        let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let payload: [String: Any] = [
+            "five_hour": ["utilization": 12.0],
+            "seven_day": ["utilization": 34.0]
+        ]
+        try JSONSerialization.data(withJSONObject: payload)
+            .write(to: cacheDir.appendingPathComponent("usage-cache.json"))
+
+        let withCache = DesktopConnectionVerifier.usageHonesty(
+            for: .claude,
+            status: .verified,
+            home: tmp
+        )
+        guard case .usageFound(let session, let week) = withCache?.outcome else {
+            return XCTFail("Expected usageFound")
+        }
+        XCTAssertEqual(session, 12)
+        XCTAssertEqual(week, 34)
+
+        let privacy = DesktopConnectionVerifier.usageHonesty(
+            for: .claude,
+            status: .privacyBlocked,
+            home: tmp
+        )
+        XCTAssertEqual(privacy?.outcome, .privacyBlocked)
     }
 
     func testTrackerTabsAreActivityUsageBrainUpgrade() {
