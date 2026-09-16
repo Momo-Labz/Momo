@@ -40,6 +40,14 @@ final class MomoRuntime: ObservableObject {
             )
             self.statusItem.update(snapshots: snapshots)
         }.store(in: &cancellables)
+
+        // First-run: open the panel so Welcome is visible without hunting the status item.
+        if preferences.needsTrackingOnboarding {
+            MomoSurface.shared.expanded = true
+            DispatchQueue.main.async { [weak self] in
+                self?.statusItem.presentPanelForOnboarding()
+            }
+        }
     }
 
     private func applyProviderAuthorization() {
@@ -167,6 +175,12 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         } else {
             show()
         }
+    }
+
+    /// Opens the tracking panel expanded for first-run Welcome (or Replay).
+    func presentPanelForOnboarding() {
+        MomoSurface.shared.expanded = true
+        show()
     }
 
     private func togglePeek() {

@@ -106,10 +106,12 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
                     ? "\(session.title) can continue. MOMO continues it automatically when auto-resume is on."
                     : "\(session.title) can continue. Open it to send the next turn."
                 content.categoryIdentifier = Category.reset
+                MomoAlertPresenter.shared.trigger(.sessionStopped)
             } else {
                 content.title = session.attention == .failed ? "\(session.provider.name) hit a problem" : "\(session.provider.name) needs you"
                 content.body = session.attentionReason ?? session.title
                 content.categoryIdentifier = Category.ret
+                MomoAlertPresenter.shared.trigger(session.attention == .failed ? .failure : .needsYou)
             }
             // Folder is the second half of a conversation's identity.
             content.subtitle = "\(session.title) · \(session.project)"
@@ -127,6 +129,7 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
                 let identifier = "completed|\(Self.sessionIdentity(session))|\(Int(session.updatedAt.timeIntervalSince1970))"
                 currentSessions[identifier] = session
                 UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+                MomoAlertPresenter.shared.trigger(.sessionStopped)
             }
         }
 
@@ -142,6 +145,7 @@ final class AttentionNotifier: NSObject, ObservableObject, UNUserNotificationCen
                 let cycle = observation.resetsAt.map { String(Int($0.timeIntervalSince1970)) } ?? "open"
                 let identifier = "usage|\(observation.provider.rawValue)|\(observation.metric.lowercased())|\(threshold)|\(cycle)"
                 UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+                MomoAlertPresenter.shared.trigger(.usageLow)
             }
         }
     }

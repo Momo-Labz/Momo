@@ -5,9 +5,10 @@ enum TrackingOnboardingStep: Int, CaseIterable {
     case welcome
     case intents
     case connectProviders
+    case talkTrial
 }
 
-/// Welcome → intent → browser + local-permission onboarding for MOMO Trackr.
+/// Welcome → intent → browser + local-permission → Talk trial onboarding for MOMO Trackr.
 /// First connect tap opens the default system browser; it does not start WebKit capture.
 struct TrackingOnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -22,13 +23,15 @@ struct TrackingOnboardingView: View {
     var initialStep: TrackingOnboardingStep
     var onFinish: (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void
     var onDismiss: (() -> Void)?
+    var onTalkTrial: (() -> Void)?
 
     init(
         initialStep: TrackingOnboardingStep = .welcome,
         initialIntents: Set<OnboardingIntent> = [],
         initialAllowed: Set<AIProvider> = [],
         onFinish: @escaping (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        onTalkTrial: (() -> Void)? = nil
     ) {
         self.initialStep = initialStep
         _step = State(initialValue: initialStep)
@@ -36,6 +39,7 @@ struct TrackingOnboardingView: View {
         _allowed = State(initialValue: initialAllowed)
         self.onFinish = onFinish
         self.onDismiss = onDismiss
+        self.onTalkTrial = onTalkTrial
     }
 
     var body: some View {
@@ -76,6 +80,7 @@ struct TrackingOnboardingView: View {
                 case .welcome: welcomeStep
                 case .intents: intentsStep
                 case .connectProviders: connectStep
+                case .talkTrial: talkTrialStep
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: step)
@@ -178,8 +183,48 @@ struct TrackingOnboardingView: View {
                 }
 
                 primaryButton("Continue") {
-                    onFinish(intents, allowed)
+                    if onDismiss == nil {
+                        step = .talkTrial
+                    } else {
+                        onFinish(intents, allowed)
+                    }
                 }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 20)
+    }
+
+    private var talkTrialStep: some View {
+        VStack(spacing: 12) {
+            Text("Hands-free Talk")
+                .font(BarBoyStyle.display)
+                .multilineTextAlignment(.center)
+            Text("Ask MOMO about usage and what’s running — answers stay on this Mac via local Ollama. Never invents %. Free includes this guided trial plus 3 later asks.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if onTalkTrial != nil {
+                primaryButton("Try Talk (1 free)") {
+                    onTalkTrial?()
+                }
+            }
+
+            Button("Skip for now") {
+                onFinish(intents, allowed)
+            }
+            .font(BarBoyStyle.navLabel)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .contentShape(Rectangle())
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .buttonStyle(.plain)
+
+            primaryButton("Finish setup") {
+                onFinish(intents, allowed)
             }
         }
         .padding(.horizontal, 18)

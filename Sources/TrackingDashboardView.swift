@@ -16,13 +16,16 @@ struct TrackingDashboardView: View {
     @EnvironmentObject private var preferences: PreferencesStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject private var surface = MomoSurface.shared
+    @ObservedObject private var momoAlerts = MomoAlertPresenter.shared
     @State private var search = ""
     @State private var debouncedSearch = ""
     @State private var pageSize = 10
     @State private var loading = true
     @State private var showOnboarding = false
     @State private var onboardingStartStep: TrackingOnboardingStep = .welcome
+    @State private var showTalkTrial = false
 
+    private var needsOnboarding: Bool { preferences.needsTrackingOnboarding || showOnboarding }
     private var snapshots: [ProviderSnapshot] {
         AIProvider.allCases.map { provider in
             var snapshot = monitor.snapshot(for: provider)
@@ -94,21 +97,34 @@ struct TrackingDashboardView: View {
                 }
             }
 
-            if showOnboarding || !preferences.trackingOnboardingSeen {
+            if needsOnboarding {
                 Color.black.opacity(0.55)
                     .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture { /* block chrome until Welcome finishes */ }
                 ScrollView {
                     TrackingOnboardingView(
-                        initialStep: preferences.trackingOnboardingSeen ? onboardingStartStep : .welcome,
+                        initialStep: preferences.needsTrackingOnboarding ? .welcome : onboardingStartStep,
                         initialIntents: preferences.onboardingIntents,
                         initialAllowed: preferences.allowedTrackingProviders,
                         onFinish: finishOnboarding,
-                        onDismiss: preferences.trackingOnboardingSeen ? { showOnboarding = false } : nil
+                        onDismiss: preferences.needsTrackingOnboarding ? nil : { showOnboarding = false },
+                        onTalkTrial: { showTalkTrial = true }
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
                 .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.98)))
+            }
+
+            if showTalkTrial {
+                Color.black.opacity(0.55).ignoresSafeArea()
+                TalkPanelView(
+                    isOnboardingTrial: true,
+                    onFinishedOnboardingTrial: { showTalkTrial = false },
+                    onDismiss: { showTalkTrial = false }
+                )
+                .padding(16)
             }
         }
         .frame(
@@ -120,7 +136,15 @@ struct TrackingDashboardView: View {
             if refreshOnAppear { monitor.refresh() }
             try? await Task.sleep(for: .milliseconds(150))
             loading = false
-            if !preferences.trackingOnboardingSeen {
+            if preferences.needsTrackingOnboarding {
+                surface.expanded = true
+                showOnboarding = true
+            }
+        }
+        .onChange(of: preferences.trackingOnboardingSeen) { _, seen in
+            if !seen {
+                showOnboarding = true
+                onboardingStartStep = .welcome
                 surface.expanded = true
             }
         }
@@ -134,6 +158,7 @@ struct TrackingDashboardView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .momoShowProviderChooser)) { note in
             surface.expanded = true
+            if surface.route != .dashboard { surface.goBack() }
             if let raw = note.userInfo?["step"] as? Int,
                let step = TrackingOnboardingStep(rawValue: raw) {
                 onboardingStartStep = step
@@ -142,12 +167,17 @@ struct TrackingDashboardView: View {
             }
             showOnboarding = true
         }
+        .onReceive(NotificationCenter.default.publisher(for: .momoShortcut)) { note in
+            guard let action = note.object as? ShortcutAction, action == .talk else { return }
+            surface.openTalk()
+        }
     }
 
     private func finishOnboarding(intents: Set<OnboardingIntent>, allowed: Set<AIProvider>) {
         preferences.setOnboardingIntents(intents)
         preferences.setAllowedTrackingProviders(allowed, markOnboardingSeen: true)
         showOnboarding = false
+        showTalkTrial = false
         onboardingStartStep = .welcome
         let connectable = AIProvider.allCases.filter { allowed.contains($0) && $0.supportsUsageCapture }
         // Soft return only — do not auto-open isolated WebKit after browser connect.
@@ -193,8 +223,17 @@ struct TrackingDashboardView: View {
                 Text("MOMO LABZ").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 Text("TRACKING").font(BarBoyStyle.display).tracking(0.8)
             }
-            Spacer()
+            Spacer(minLength: 8)
             Text(statusText).font(BarBoyStyle.microLabel).foregroundStyle(statusColor)
+            // Layout: status → animated MOMO → alert legend → chrome icons
+            AnimatedMomoMark(
+                size: 28,
+                animated: !reduceMotion,
+                motion: momoAlerts.isFlashing ? .alert : .loop,
+                flashAlert: momoAlerts.isFlashing
+            )
+            .help(momoAlerts.lastKind.map { "Alert: \($0.legendTitle)" } ?? "MOMO")
+            alertLegend
             if surface.route == .dashboard {
                 Button {
                     surface.expanded.toggle()
@@ -227,6 +266,23 @@ struct TrackingDashboardView: View {
             .help("Refresh observed activity")
         }
         .padding(.horizontal, 14).frame(height: 55)
+    }
+
+    private var alertLegend: some View {
+        HStack(spacing: 6) {
+            legendChip(color: BarBoyStyle.coral, title: "FAILED")
+            legendChip(color: BarBoyStyle.amber, title: "NEEDS YOU")
+            legendChip(color: BarBoyStyle.coral.opacity(0.85), title: "USAGE")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Alert legend: failed, needs you, usage low")
+    }
+
+    private func legendChip(color: Color, title: String) -> some View {
+        HStack(spacing: 3) {
+            Rectangle().fill(color).frame(width: 6, height: 6)
+            Text(title).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+        }
     }
 
     private var statusText: String {
@@ -271,6 +327,7 @@ struct TrackingDashboardView: View {
                                 surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
                                 if surface.route == .dashboard { surface.trackerTab = .activity }
                             }
+                            .frame(width: widths)
                         }
                     }
                     .padding(.horizontal, 12)
@@ -327,6 +384,7 @@ struct TrackingDashboardView: View {
         case .settings: "SETTINGS"
         case .session: "SESSION DETAILS"
         case let .usage(provider): "\(provider.name.uppercased()) USAGE"
+        case .talk: "TALK"
         }
     }
 
@@ -345,6 +403,12 @@ struct TrackingDashboardView: View {
             }
 		case let .usage(provider):
             UsageCaptureView(provider: provider)
+        case .talk:
+            ScrollView {
+                TalkPanelView(onDismiss: { surface.goBack() })
+                    .frame(maxWidth: .infinity)
+                    .padding(12)
+            }
         }
     }
 
@@ -453,7 +517,6 @@ private struct ProviderCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(width: width, alignment: .leading)
             .padding(8)
             .background(selected ? BarBoyStyle.surface.opacity(1.8) : BarBoyStyle.surface)
             .overlay(Rectangle().stroke(snapshot.hasErrorOrApproval ? BarBoyStyle.coral : selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))

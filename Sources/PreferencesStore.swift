@@ -39,6 +39,8 @@ final class PreferencesStore: ObservableObject {
     /// First-run intents that emphasize Usage vs Brain tips without inventing features.
     @Published private(set) var onboardingIntents: Set<OnboardingIntent>
     @Published private(set) var localProviderRoots: [AIProvider: [String]]
+    /// True after Welcome→intent→allow finishes (or Replay resets it).
+    var needsTrackingOnboarding: Bool { !trackingOnboardingSeen }
 
     private let defaults: UserDefaults
 
@@ -139,9 +141,15 @@ final class PreferencesStore: ObservableObject {
         defaults.set(true, forKey: Keys.trackingOnboardingSeen)
     }
 
+    /// Tester/Settings path: clear the first-run gate so Welcome shows again.
     func reopenTrackingOnboarding() {
         trackingOnboardingSeen = false
         defaults.set(false, forKey: Keys.trackingOnboardingSeen)
+        NotificationCenter.default.post(
+            name: .momoShowProviderChooser,
+            object: nil,
+            userInfo: ["step": TrackingOnboardingStep.welcome.rawValue, "force": true]
+        )
     }
 
     func roots(for provider: AIProvider) -> [String] { localProviderRoots[provider] ?? [] }
