@@ -1080,27 +1080,6 @@ private struct CompactProviderCell: View {
     }
 }
 
-private struct UsageMeter: View {
-    let percent: Double?
-    var alert = false
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Rectangle().fill(BarBoyStyle.hairline.opacity(0.5))
-                if let percent {
-                    Rectangle()
-                        .fill(alert || percent >= 100 ? BarBoyStyle.coral : BarBoyStyle.amber)
-                        .frame(width: proxy.size.width * CGFloat(min(max(percent, 0), 100) / 100))
-                }
-            }
-        }
-        .frame(height: 6)
-        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-        .help(percent.map { "Recorded usage \(String(format: "%.0f", $0))%" } ?? "No recorded usage percentage")
-    }
-}
-
 enum DashboardTab: String, CaseIterable, Identifiable {
     case home, agents, tools, network
     var id: String { rawValue }
