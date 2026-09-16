@@ -20,6 +20,7 @@ struct TrackingDashboardView: View {
     @State private var debouncedSearch = ""
     @State private var pageSize = 10
     @State private var loading = true
+    @State private var showProviderChooser = false
 
     private var snapshots: [ProviderSnapshot] {
         AIProvider.allCases.map { provider in
@@ -27,6 +28,17 @@ struct TrackingDashboardView: View {
             snapshot.sessions = snapshot.sessions.map(preferences.presented)
             return snapshot
         }
+    }
+
+    private var railSnapshots: [ProviderSnapshot] {
+        let allowed = Set(preferences.trackingStripProviders())
+        return snapshots.filter { allowed.contains($0.provider) }
+    }
+
+    private var usageSnapshots: [ProviderSnapshot] {
+        preferences.trackingOnboardingSeen
+            ? snapshots.filter { preferences.isTrackingAllowed($0.provider) }
+            : snapshots
     }
 
     private var sessions: [AgentSession] {
@@ -40,29 +52,51 @@ struct TrackingDashboardView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            providerRail
-            Divider().opacity(0.55)
-            if surface.route == .dashboard {
-                tabBar
+        ZStack {
+            // Sticky chrome: header + provider strip + tabs stay put; only the tab body scrolls.
+            VStack(spacing: 0) {
+                header
+                providerRail
                 Divider().opacity(0.55)
-                Group {
-                    if loading { LoadingSkeleton() }
-                    else {
-                        switch surface.trackerTab {
-                        case .activity: activity
-                        case .usage: usage
-                        case .brain: brain
+                if surface.route == .dashboard {
+                    tabBar
+                    Divider().opacity(0.55)
+                    Group {
+                        if loading { LoadingSkeleton() }
+                        else {
+                            switch surface.trackerTab {
+                            case .activity: activity
+                            case .usage: usage
+                            case .brain: brain
+                            }
                         }
                     }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            } else {
-                routeHeader
-                Divider().opacity(0.55)
-                routedContent
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .clipped()
+                } else {
+                    routeHeader
+                    Divider().opacity(0.55)
+                    routedContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .clipped()
+                }
+            }
+
+            if showProviderChooser || !preferences.trackingOnboardingSeen {
+                Color.black.opacity(0.55)
+                    .ignoresSafeArea()
+                ScrollView {
+                    ProviderAllowChooserView(
+                        initial: preferences.trackingOnboardingSeen
+                            ? preferences.allowedTrackingProviders
+                            : Set(AIProvider.allCases),
+                        onContinue: finishProviderChooser,
+                        onDismiss: preferences.trackingOnboardingSeen ? { showProviderChooser = false } : nil
+                    )
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 12)
+                }
+                .transition(reduceMotion ? .identity : .opacity.combined(with: .scale(scale: 0.98)))
             }
         }
         .frame(
@@ -74,6 +108,9 @@ struct TrackingDashboardView: View {
             if refreshOnAppear { monitor.refresh() }
             try? await Task.sleep(for: .milliseconds(150))
             loading = false
+            if !preferences.trackingOnboardingSeen {
+                surface.expanded = true
+            }
         }
         .onChange(of: search) { _, value in
             Task {
@@ -82,6 +119,19 @@ struct TrackingDashboardView: View {
                 debouncedSearch = value
                 pageSize = 10
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .momoShowProviderChooser)) { _ in
+            surface.expanded = true
+            showProviderChooser = true
+        }
+    }
+
+    private func finishProviderChooser(_ selected: Set<AIProvider>) {
+        preferences.setAllowedTrackingProviders(selected)
+        showProviderChooser = false
+        let connectable = AIProvider.allCases.filter { selected.contains($0) && $0.supportsUsageCapture }
+        if !connectable.isEmpty {
+            surface.queueUsageConnect(connectable)
         }
     }
 
@@ -115,15 +165,28 @@ struct TrackingDashboardView: View {
     private var statusColor: Color { snapshots.contains(where: { $0.hasErrorOrApproval }) ? BarBoyStyle.coral : .secondary }
 
     private var providerRail: some View {
-        HStack(spacing: 7) {
-            ForEach(snapshots) { snapshot in
-                ProviderCard(snapshot: snapshot, expanded: surface.usesExpandedSize || showsOverview, selected: surface.selectedProvider == snapshot.provider) {
-                    surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
-                    if surface.route == .dashboard { surface.trackerTab = .activity }
+        Group {
+            if railSnapshots.isEmpty {
+                Text(preferences.trackingOnboardingSeen
+                      ? "No providers allowed yet. Open Settings → Choose providers."
+                      : "Choose providers to populate this strip.")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+            } else {
+                HStack(spacing: 7) {
+                    ForEach(railSnapshots) { snapshot in
+                        ProviderCard(snapshot: snapshot, expanded: surface.usesExpandedSize || showsOverview, selected: surface.selectedProvider == snapshot.provider) {
+                            surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
+                            if surface.route == .dashboard { surface.trackerTab = .activity }
+                        }
+                    }
                 }
+                .padding(.horizontal, 12)
             }
         }
-        .padding(.horizontal, 12).padding(.vertical, 9)
+        .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: surface.usesExpandedSize || showsOverview ? 91 : 68)
     }
@@ -226,10 +289,16 @@ struct TrackingDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Text("USAGE").font(BarBoyStyle.sectionLabel)
-                Text("Connect any provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
+                Text("Connect any allowed provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(.secondary)
-                ForEach(snapshots) { snapshot in
+                if usageSnapshots.isEmpty {
+                    Text("No providers allowed yet. Choose providers in Settings.")
+                        .font(BarBoyStyle.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 12)
+                }
+                ForEach(usageSnapshots) { snapshot in
                     UsageCard(
                         snapshot: snapshot,
                         observations: monitor.usageObservations.filter { $0.provider == snapshot.provider }
@@ -242,7 +311,10 @@ struct TrackingDashboardView: View {
     }
 
     private var brain: some View {
-        BrainWorkspaceView(refreshOnAppear: false)
+        // Brain content can exceed the panel; keep chrome sticky by scrolling only this body.
+        ScrollView(.vertical) {
+            BrainWorkspaceView(refreshOnAppear: false)
+        }
     }
 }
 

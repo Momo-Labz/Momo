@@ -113,6 +113,13 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local providers").font(.title2.bold())
                 Button("Set up Codex local access") { chooseLocalRoot(for: .codex) }
+                Button("Choose providers to track") {
+                    NotificationCenter.default.post(name: .momoShowProviderChooser, object: nil)
+                }
+                .barBoyButton()
+                Text("Tracking allow-list controls the sticky strip, usage peek, and Connect Usage queue. Folder authorization below is separate.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
                     .foregroundStyle(.secondary)
             }

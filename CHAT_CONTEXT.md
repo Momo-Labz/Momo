@@ -1,8 +1,26 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-14 (tracking-first integration)
+Updated: 2026-09-16 (sticky strip + provider allow chooser + usage peek)
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
+
+## September 16 — PR #1 continuation (A/B/C + MainActor fix)
+
+Landed on `cursor/wire-usage-capture-4177` (same PR #1):
+
+- **A Sticky chrome:** `TrackingDashboardView` keeps header + provider strip + tab bar outside the scrolling tab body. Brain is wrapped in a `ScrollView` so the graph/notes scroll under the strip.
+- **B Provider allow chooser:** First-run overlay (`ProviderAllowChooserView`) lists Codex/Claude/Gemini/Cursor/Grok with toggles. Persist via `PreferencesStore.allowedTrackingProviders` (`allowedTrackingProviders.v1`), separate from folder auth. Continue queues existing Connect Usage (`MomoSurface.queueUsageConnect`). Revisit from Settings → Providers → “Choose providers to track”.
+- **C Usage peek:** Status item **double-click** opens compact `UsagePeekView` (icon + 5-hour + Weekly bars for allowed providers only). Single-click still toggles the full Tracking panel. Mapping is `UsagePeekMapping` from accepted observations / explicit snapshot windows; unknown stays `—`.
+- **Compile fix:** `UsageCaptureHostAllowlist` + `nonisolated` `isAllowedCapture` / `isAllowedNavigation` / `isSecure` so `AIProvider.supportsUsageCapture` compiles off MainActor.
+
+Mac verify (Linux cannot `xcodebuild`):
+
+```sh
+xcodegen generate   # or use committed BarBoy.xcodeproj
+xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' test CODE_SIGNING_ALLOWED=NO
+```
+
+Manual: Brain tab scroll keeps strip; first-run chooser → Connect Usage; Settings revisit; double-click status item peek.
 
 ## Overall project handoff
 
@@ -25,9 +43,11 @@ MOMO is a local-first macOS menu-bar workspace for seeing when AI work finishes,
 - Place the attention control beside the MOMO/live/reset header information. Use amber for errors or approvals and red only for a recorded provider limit.
 - Show running-session count and the nearest recorded reset in the header gap.
 - Activity, Usage, and Brain replace the former Home, Agents, Tools, and Network navigation.
-- The provider strip stays above the active page and displays all five providers without horizontal scrolling.
+- The provider strip stays above the active page. After onboarding it shows only allowed tracking providers; before onboarding it still lists all five.
+- Activity / Usage / Brain share that sticky chrome; only the tab body scrolls (Brain included).
 - The panel is pinned to the right edge of the active display. Expand grows the same surface leftward and downward; Contract restores compact mode while preserving selection.
 - Settings, session details, and usage capture are routes inside the attached menu-bar panel. They use one Back control and do not create competing top-level app windows.
+- Status item single-click opens the Tracking panel; double-click opens the compact usage peek for allowed providers.
 - Relevant sessions load in bounded pages and display readable names instead of opaque IDs.
 - Provide “Open original chat” only when MOMO has a verified destination.
 - The attention inspector must remain inside MOMO. Done/Contract must not close the entire app.

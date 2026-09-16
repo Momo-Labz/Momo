@@ -13,6 +13,27 @@ enum UsageCaptureState: String, Equatable {
     case failed
 }
 
+/// Host allowlists used from nonisolated contexts (for example `AIProvider.supportsUsageCapture`).
+/// Kept outside `@MainActor` `UsageCaptureService` so Release builds compile under Swift concurrency.
+fileprivate enum UsageCaptureHostAllowlist {
+    static let providerPageHosts: [AIProvider: Set<String>] = [
+        .codex: ["chatgpt.com"],
+        .claude: ["claude.ai"],
+        .gemini: ["aistudio.google.com"],
+        .cursor: ["cursor.com"],
+        .grok: ["grok.com"]
+    ]
+
+    static let authenticationHosts: [AIProvider: Set<String>] = [
+        .codex: ["auth.openai.com"],
+        .claude: [],
+        .gemini: ["accounts.google.com"],
+        .cursor: ["authenticator.cursor.sh"],
+        // xAI documents sign-in management at accounts.x.ai; X SSO still uses x.com.
+        .grok: ["x.com", "accounts.x.ai"]
+    ]
+}
+
 @MainActor
 final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegate {
     static let visibleTextByteLimit = 64 * 1024
@@ -198,18 +219,18 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
         }
     }
 
-    static func isAllowedCapture(_ url: URL, for provider: AIProvider) -> Bool {
-        isSecure(url) && providerPageHosts[provider, default: []].contains(url.host?.lowercased() ?? "")
+    nonisolated static func isAllowedCapture(_ url: URL, for provider: AIProvider) -> Bool {
+        isSecure(url) && UsageCaptureHostAllowlist.providerPageHosts[provider, default: []].contains(url.host?.lowercased() ?? "")
     }
 
-    static func isAllowedNavigation(_ url: URL, for provider: AIProvider) -> Bool {
+    nonisolated static func isAllowedNavigation(_ url: URL, for provider: AIProvider) -> Bool {
         guard isSecure(url) else { return false }
         let host = url.host?.lowercased() ?? ""
-        return providerPageHosts[provider, default: []].contains(host)
-            || authenticationHosts[provider, default: []].contains(host)
+        return UsageCaptureHostAllowlist.providerPageHosts[provider, default: []].contains(host)
+            || UsageCaptureHostAllowlist.authenticationHosts[provider, default: []].contains(host)
     }
 
-    private static func isSecure(_ url: URL) -> Bool {
+    nonisolated private static func isSecure(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https",
               url.user == nil, url.password == nil,
               url.port == nil || url.port == 443,
@@ -259,23 +280,6 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
             }
         }
     }
-
-    private static let providerPageHosts: [AIProvider: Set<String>] = [
-        .codex: ["chatgpt.com"],
-        .claude: ["claude.ai"],
-        .gemini: ["aistudio.google.com"],
-        .cursor: ["cursor.com"],
-        .grok: ["grok.com"]
-    ]
-
-    private static let authenticationHosts: [AIProvider: Set<String>] = [
-        .codex: ["auth.openai.com"],
-        .claude: [],
-        .gemini: ["accounts.google.com"],
-        .cursor: ["authenticator.cursor.sh"],
-        // xAI documents sign-in management at accounts.x.ai; X SSO still uses x.com.
-        .grok: ["x.com", "accounts.x.ai"]
-    ]
 
     private static func interpretationPrompt(provider: AIProvider, visibleText: String) -> String {
         """

@@ -32,6 +32,10 @@ final class PreferencesStore: ObservableObject {
     }
     @Published private(set) var conversationLabels: [String: ConversationLabel]
     @Published private(set) var enabledProviders: Set<AIProvider>
+    /// Providers the person explicitly allowed for the tracking strip, usage peek, and Connect Usage queue.
+    /// Separate from `enabledProviders` (local session-folder authorization).
+    @Published private(set) var allowedTrackingProviders: Set<AIProvider>
+    @Published private(set) var trackingOnboardingSeen: Bool
     @Published private(set) var localProviderRoots: [AIProvider: [String]]
 
     private let defaults: UserDefaults
@@ -43,6 +47,8 @@ final class PreferencesStore: ObservableObject {
         static let showProviderUsageBars = "showProviderUsageBars"
         static let launchAtLogin = "launchAtLogin"
         static let enabledProviders = "authorizedLocalProviders.v1"
+        static let allowedTrackingProviders = "allowedTrackingProviders.v1"
+        static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
         static let attentionAlertsEnabled = "attentionAlertsEnabled"
@@ -67,6 +73,9 @@ final class PreferencesStore: ObservableObject {
         attentionAlertsEnabled = defaults.object(forKey: Keys.attentionAlertsEnabled) as? Bool ?? false
         let saved = defaults.stringArray(forKey: Keys.enabledProviders)
         enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
+        let savedAllowed = defaults.stringArray(forKey: Keys.allowedTrackingProviders)
+        allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
+        trackingOnboardingSeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
     }
 
     func setLabel(name: String, folder: String, for session: AgentSession) {
@@ -85,6 +94,33 @@ final class PreferencesStore: ObservableObject {
     }
 
     func isEnabled(_ provider: AIProvider) -> Bool { enabledProviders.contains(provider) }
+
+    func isTrackingAllowed(_ provider: AIProvider) -> Bool { allowedTrackingProviders.contains(provider) }
+
+    /// Providers shown in the sticky strip and menu-bar usage peek after onboarding.
+    func trackingStripProviders() -> [AIProvider] {
+        guard trackingOnboardingSeen else { return AIProvider.allCases }
+        return AIProvider.allCases.filter(allowedTrackingProviders.contains)
+    }
+
+    func setTrackingAllowed(_ allowed: Bool, for provider: AIProvider) {
+        if allowed { allowedTrackingProviders.insert(provider) } else { allowedTrackingProviders.remove(provider) }
+        defaults.set(allowedTrackingProviders.map(\.rawValue).sorted(), forKey: Keys.allowedTrackingProviders)
+    }
+
+    func setAllowedTrackingProviders(_ providers: Set<AIProvider>, markOnboardingSeen: Bool = true) {
+        allowedTrackingProviders = providers
+        defaults.set(providers.map(\.rawValue).sorted(), forKey: Keys.allowedTrackingProviders)
+        if markOnboardingSeen {
+            trackingOnboardingSeen = true
+            defaults.set(true, forKey: Keys.trackingOnboardingSeen)
+        }
+    }
+
+    func reopenTrackingOnboarding() {
+        trackingOnboardingSeen = false
+        defaults.set(false, forKey: Keys.trackingOnboardingSeen)
+    }
 
     func roots(for provider: AIProvider) -> [String] { localProviderRoots[provider] ?? [] }
 
