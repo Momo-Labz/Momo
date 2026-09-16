@@ -9,13 +9,15 @@ This file records the product direction, implementation decisions, verification,
 Landed on `cursor/wire-usage-capture-4177` (same PR #1; do not open a second PR):
 
 ### Onboarding (replaces plugins-style toggles)
-- **Welcome → What were you looking for? → Connect providers**
-- Brand in onboarding copy: **MOMO Trackr** (app display name stays MOMO)
-- Intents (multi-select): Usage tracking / Organizing prompts / **Project folders** — persisted as `onboardingIntents.v1`
-- Connect: stacked provider buttons open official login via `NSWorkspace` (`ProviderAccountOpen`); local permission panel for usage + recent prompts; browser open does **not** grant cookies
-- Soft return banner: “Return to MOMO → Confirm usage when ready” uses existing Manual Preview→Confirm WebKit path (not auto-opened on first connect tap)
-- Timed 15/30/60 stays NEXT / unscheduled
+- CMO verbatim copy in Welcome / intents / provider chooser / return CTA (do not paraphrase)
+- **Welcome to MOMO Trackr** — “Local tracking for the AI tools you already use. On-device only — we don’t scrape browser cookies or invent usage %.”
+- **What do you want help with?** — Track usage across models / Organize prompts / Keep project folders tidy (`onboardingIntents.v1`)
+- **Allow the providers you use** — “Tap to sign in on their official site in your browser…”; confirm snapshot before verified numbers
+- Primary **Continue**; after return **Confirm usage snapshot** + “Verified % unlock after you preview and accept. Timed refresh is MOMO+.”
+- Soft return uses existing Manual Preview→Confirm `UsageCaptureService` (not auto-opened on first connect tap)
+- Timed 15/30/60 stay NEXT / unscheduled (MOMO+)
 - Settings revisit: onboarding, intents, connect providers + existing Connect Usage
+- Banned: “live sync,” “connected to your account quota,” fake gauges before Manual confirm
 
 ### Proportional strip
 - Only allowed providers after onboarding; empty strip shows CONNECT PROVIDERS CTA

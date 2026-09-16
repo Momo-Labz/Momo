@@ -37,7 +37,9 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         preferences.setOnboardingIntents([.usageTracking, .projectFolders])
         XCTAssertTrue(preferences.prefersUsageTips())
         XCTAssertTrue(preferences.prefersBrainTips())
-        XCTAssertEqual(OnboardingIntent.projectFolders.title, "Project folders")
+        XCTAssertEqual(OnboardingIntent.usageTracking.title, "Track usage across models")
+        XCTAssertEqual(OnboardingIntent.organizingPrompts.title, "Organize prompts")
+        XCTAssertEqual(OnboardingIntent.projectFolders.title, "Keep project folders tidy")
 
         let reloaded = PreferencesStore(defaults: suite)
         XCTAssertEqual(reloaded.onboardingIntents, [.usageTracking, .projectFolders])

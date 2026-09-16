@@ -160,23 +160,23 @@ struct TrackingDashboardView: View {
     }
 
     private var usageReturnBanner: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("RETURN TO MOMO").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                Text("Confirm usage when ready — Manual preview on the official page. Browser login did not share cookies with MOMO.")
-                    .font(BarBoyStyle.bodySmall)
-                    .foregroundStyle(Color.primary)
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Button("Confirm usage snapshot") { surface.beginPendingUsageReturn() }
+                    .barBoyButton()
+                Text("Verified % unlock after you preview and accept. Timed refresh is MOMO+.")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            Button("CONFIRM USAGE") { surface.beginPendingUsageReturn() }
-                .barBoyButton()
             Button {
                 surface.dismissUsageReturn()
             } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: 10, weight: .bold))
                     .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Dismiss")

@@ -27,17 +27,9 @@ enum OnboardingIntent: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .usageTracking: return "Usage tracking"
-        case .organizingPrompts: return "Organizing prompts"
-        case .projectFolders: return "Project folders"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .usageTracking: return "Connect providers and confirm usage from their official pages."
-        case .organizingPrompts: return "Use Brain and local notes to keep prompts findable."
-        case .projectFolders: return "Link vault notes and project folders you already keep on this Mac."
+        case .usageTracking: return "Track usage across models"
+        case .organizingPrompts: return "Organize prompts"
+        case .projectFolders: return "Keep project folders tidy"
         }
     }
 }

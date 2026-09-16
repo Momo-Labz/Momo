@@ -51,6 +51,7 @@ struct TrackingOnboardingView: View {
                         Label("BACK", systemImage: "chevron.left")
                             .font(BarBoyStyle.navLabel)
                             .frame(minWidth: 72, minHeight: 28)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -90,7 +91,7 @@ struct TrackingOnboardingView: View {
             Text("Welcome to MOMO Trackr")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("A local menu-bar companion that tracks AI return and usage, and helps organize prompts — all stored on this Mac. MOMO never invents quotas.")
+            Text("Local tracking for the AI tools you already use. On-device only — we don’t scrape browser cookies or invent usage %.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -107,12 +108,8 @@ struct TrackingOnboardingView: View {
 
     private var intentsStep: some View {
         VStack(spacing: 12) {
-            Text("What were you looking for?")
+            Text("What do you want help with?")
                 .font(BarBoyStyle.display)
-                .multilineTextAlignment(.center)
-            Text("Pick one or more. You can change this later in Settings.")
-                .font(BarBoyStyle.bodySmall)
-                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
             VStack(spacing: 0) {
@@ -126,7 +123,7 @@ struct TrackingOnboardingView: View {
             .background(BarBoyStyle.surface)
             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
 
-            primaryButton(intents.isEmpty ? "Continue without selecting" : "Continue") {
+            primaryButton("Continue") {
                 step = .connectProviders
             }
         }
@@ -140,21 +137,15 @@ struct TrackingOnboardingView: View {
         return Button {
             if selected { intents.remove(intent) } else { intents.insert(intent) }
         } label: {
-            HStack(alignment: .top, spacing: 12) {
+            HStack(spacing: 12) {
                 Image(systemName: selected ? "checkmark.square.fill" : "square")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(selected ? Color.primary : .secondary)
                     .frame(width: 22, height: 22)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(intent.title)
-                        .font(BarBoyStyle.rowTitle)
-                        .foregroundStyle(Color.primary)
-                    Text(intent.detail)
-                        .font(BarBoyStyle.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                Text(intent.title)
+                    .font(BarBoyStyle.rowTitle)
+                    .foregroundStyle(Color.primary)
+                    .multilineTextAlignment(.leading)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 14)
@@ -168,10 +159,10 @@ struct TrackingOnboardingView: View {
 
     private var connectStep: some View {
         VStack(spacing: 12) {
-            Text("Connect providers")
+            Text("Allow the providers you use")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("Opens the official login in your default browser. That does not give MOMO cookies. You still opt in locally to track usage and recent prompts on this Mac.")
+            Text("Tap to sign in on their official site in your browser. When you’re back, MOMO can use on-device usage and recent prompts — you still confirm a snapshot before any verified numbers show.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -186,14 +177,7 @@ struct TrackingOnboardingView: View {
                     }
                 }
 
-                Text(allowed.isEmpty
-                     ? "You can finish without connecting providers and add them later in Settings."
-                     : "\(allowed.count) provider\(allowed.count == 1 ? "" : "s") allowed locally.")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                primaryButton(allowed.isEmpty ? "Finish without providers" : "Finish") {
+                primaryButton("Continue") {
                     onFinish(intents, allowed)
                 }
             }
@@ -233,26 +217,16 @@ struct TrackingOnboardingView: View {
 
     private func permissionPanel(for provider: AIProvider) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Allow MOMO for \(provider.name)?")
+            Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
-            Text("Browser sign-in stays in your browser. MOMO only stores what you allow below — locally on this Mac.")
-                .font(BarBoyStyle.bodySmall)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             Toggle(isOn: $allowUsage) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Track usage").font(BarBoyStyle.rowTitle)
-                    Text("Observed limits from official pages after you Confirm.").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                }
+                Text("Track usage").font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
 
             Toggle(isOn: $allowRecentPrompts) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Track recent prompts").font(BarBoyStyle.rowTitle)
-                    Text("Local session titles and activity you already authorize.").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                }
+                Text("Track recent prompts").font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
 
@@ -262,17 +236,19 @@ struct TrackingOnboardingView: View {
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
+                .contentShape(Rectangle())
                 .background(BarBoyStyle.surface)
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                 .buttonStyle(.plain)
 
-                Button("Allow locally") {
+                Button("Continue") {
                     guard allowUsage || allowRecentPrompts else { return }
                     allowed.insert(provider)
                     permissionProvider = nil
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
+                .contentShape(Rectangle())
                 .foregroundStyle(BarBoyStyle.inverseInk)
                 .background((allowUsage || allowRecentPrompts) ? Color.primary : Color.primary.opacity(0.35))
                 .buttonStyle(.plain)
@@ -289,6 +265,7 @@ struct TrackingOnboardingView: View {
             Text(title)
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 40)
+                .contentShape(Rectangle())
                 .foregroundStyle(BarBoyStyle.inverseInk)
                 .background(Color.primary)
         }
