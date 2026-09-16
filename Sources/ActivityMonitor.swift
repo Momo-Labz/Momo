@@ -257,18 +257,30 @@ actor LocalActivityScanner {
                 updatedAt: now,
                 isInstalled: processLive || hasSessionRoot(for: provider) || DesktopAppCatalog.isPresentOnDisk(provider)
             )
-            let freshWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
+            let sessionWindows = diskSessions.flatMap(\.recordedQuotaWindows)
+            let artifactWindows = LocalUsageArtifactReader.quotaWindows(
+                for: provider,
+                home: home,
+                now: now,
+                fileManager: fileManager
+            )
+            let freshWindows = (sessionWindows + artifactWindows).filter {
                 now >= $0.observedAt
                     && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
             }
-            snapshot.recordedQuota = freshWindows.sorted {
+            // Prefer newest observation; when timestamps tie, keep both 5HR and W by minutes.
+            let ranked = freshWindows.sorted {
                 if $0.observedAt != $1.observedAt { return $0.observedAt > $1.observedAt }
                 return $0.minutes < $1.minutes
-            }.first
+            }
+            snapshot.recordedQuota = ranked.first
             if let latest = snapshot.recordedQuota?.observedAt {
                 var durations = Set<Int>()
-                snapshot.recordedQuotas = freshWindows
-                    .filter { $0.observedAt == latest && durations.insert($0.minutes).inserted }
+                // Accept same-batch windows within 2s of the newest observation (session + artifact).
+                snapshot.recordedQuotas = ranked.filter {
+                    abs($0.observedAt.timeIntervalSince(latest)) <= 2
+                        && durations.insert($0.minutes).inserted
+                }
             }
             snapshots.append(snapshot)
         }

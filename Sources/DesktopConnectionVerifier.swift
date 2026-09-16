@@ -8,6 +8,8 @@ enum DesktopConnectionVerifier {
         case notRunning
         /// App is open but MOMO cannot yet read local session/usage data (often mid sign-in).
         case awaitingSignIn
+        /// Session root exists but listing/reading is blocked by macOS TCC / Full Disk Access.
+        case privacyBlocked
         case verified
         case failed(String)
 
@@ -23,9 +25,11 @@ enum DesktopConnectionVerifier {
             case .notRunning:
                 return "Open the app, finish any login prompts, then Retry."
             case .awaitingSignIn:
-                return "Finish signing in in the app, then Retry. MOMO only marks connected when local session data is readable."
+                return "Finish signing in in the app, then Retry. MOMO only marks connected when local session or usage data is readable."
+            case .privacyBlocked:
+                return "macOS blocked reading this app’s local files. Open System Settings → Privacy & Security → Full Disk Access, allow MOMO, then Retry. MOMO never writes into other apps."
             case .verified:
-                return "Connected — local session data is readable."
+                return "Connected — local session or usage data is readable."
             case .failed(let reason):
                 return reason
             }
@@ -40,23 +44,27 @@ enum DesktopConnectionVerifier {
         provider: AIProvider,
         isInstalled: Bool,
         isRunning: Bool,
-        hasReadableSessionSource: Bool
+        hasReadableSessionSource: Bool,
+        privacyBlocked: Bool = false
     ) -> Status {
         guard isInstalled else { return .notInstalled }
         guard isRunning else { return .notRunning }
-        guard hasReadableSessionSource else { return .awaitingSignIn }
-        return .verified
+        if hasReadableSessionSource { return .verified }
+        if privacyBlocked { return .privacyBlocked }
+        return .awaitingSignIn
     }
 
     static func verify(_ provider: AIProvider, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Status {
         let installed = DesktopAppCatalog.locate(provider) != nil
         let running = isApplicationRunning(provider)
-        let readable = hasReadableSessionSource(provider, home: home)
+        let readable = hasReadableLocalData(provider, home: home)
+        let blocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(provider, home: home)
         return evaluate(
             provider: provider,
             isInstalled: installed,
             isRunning: running,
-            hasReadableSessionSource: readable
+            hasReadableSessionSource: readable,
+            privacyBlocked: blocked
         )
     }
 
@@ -93,6 +101,24 @@ enum DesktopConnectionVerifier {
             guard parts.count == 2 else { return false }
             return provider.matchesProcessCommand(String(parts[1]))
         }
+    }
+
+    /// Readable session file **or** honest local usage artifact (Claude statusline cache, etc.).
+    static func hasReadableLocalData(
+        _ provider: AIProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default,
+        now: Date = .now
+    ) -> Bool {
+        if hasReadableSessionSource(provider, home: home, fileManager: fileManager) {
+            return true
+        }
+        return !LocalUsageArtifactReader.quotaWindows(
+            for: provider,
+            home: home,
+            now: now,
+            fileManager: fileManager
+        ).isEmpty
     }
 
     /// True when a default session root exists and at least one session file can be opened for reading.

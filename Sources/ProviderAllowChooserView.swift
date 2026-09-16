@@ -377,7 +377,7 @@ struct TrackingOnboardingView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
-            Text("MOMO opens \(match.displayName) and checks for a readable local session source. Running alone is not enough.")
+            Text("MOMO opens \(match.displayName) via Launch Services (never writes into the other app). Connected only after a readable local session or usage artifact is found.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -401,6 +401,12 @@ struct TrackingOnboardingView: View {
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(pendingStatus.isVerified ? Color.primary : BarBoyStyle.coral)
                     .fixedSize(horizontal: false, vertical: true)
+                if case .privacyBlocked = pendingStatus {
+                    Button("Open Privacy Settings") {
+                        LocalUsageArtifactReader.openPrivacySettings()
+                    }
+                    .barBoyButton()
+                }
             }
 
             HStack(spacing: 8) {

@@ -5,6 +5,7 @@ private extension TrackerTab {
     var symbol: String {
         switch self {
         case .activity: "waveform.path.ecg"
+        case .usage: "chart.bar.fill"
         case .brain: "circle.hexagongrid.fill"
         case .upgrade: "sparkles"
         }
@@ -55,10 +56,6 @@ struct TrackingDashboardView: View {
         }
     }
 
-    private var switcherProviders: [AIProvider] {
-        preferences.trackingStripProviders()
-    }
-
     var body: some View {
         ZStack {
             // Sticky chrome: header + provider strip + tabs stay put; only the tab body scrolls.
@@ -67,10 +64,6 @@ struct TrackingDashboardView: View {
                     .zIndex(2)
                 providerRail
                     .zIndex(2)
-                if !switcherProviders.isEmpty, switcherProviders.count <= DesktopAppCatalog.freeProviderLimit || !TalkService.shared.quota.momoPlusEntitled {
-                    freeProviderSwitcher
-                        .zIndex(2)
-                }
                 Divider().opacity(0.55)
                 if surface.route == .dashboard {
                     tabBar
@@ -80,6 +73,7 @@ struct TrackingDashboardView: View {
                         else {
                             switch surface.trackerTab {
                             case .activity: activity
+                            case .usage: usage
                             case .brain: brain
                             case .upgrade: upgrade
                             }
@@ -368,56 +362,6 @@ struct TrackingDashboardView: View {
         .frame(height: surface.usesExpandedSize || showsOverview ? 118 : 96)
     }
 
-    /// One-click switch between Free (≤2) connected providers — icons + names.
-    private var freeProviderSwitcher: some View {
-        HStack(spacing: 6) {
-            ForEach(switcherProviders, id: \.self) { provider in
-                let selected = surface.selectedProvider == provider
-                Button {
-                    surface.selectProvider(provider)
-                    if surface.route == .dashboard { surface.trackerTab = .activity }
-                } label: {
-                    HStack(spacing: 6) {
-                        ProviderMark(provider: provider, size: 16, active: selected || (monitor.snapshot(for: provider).activeCount > 0))
-                        Text(provider.name.uppercased())
-                            .font(BarBoyStyle.microLabel)
-                            .lineLimit(1)
-                    }
-                    .padding(.horizontal, 10)
-                    .frame(maxWidth: .infinity, minHeight: 30)
-                    .contentShape(Rectangle())
-                    .foregroundStyle(selected ? BarBoyStyle.inverseInk : Color.primary)
-                    .background(selected ? Color.primary : BarBoyStyle.surface)
-                    .overlay(Rectangle().stroke(selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))
-                }
-                .buttonStyle(.plain)
-                .help("Show \(provider.name) activity")
-            }
-            if switcherProviders.count == 1 {
-                Text("Free · \(DesktopAppCatalog.freeProviderLimit - 1) slot left")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-                    .padding(.leading, 4)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .onAppear {
-            if surface.selectedProvider == nil, let first = switcherProviders.first {
-                surface.selectProvider(first)
-            } else if let selected = surface.selectedProvider, !switcherProviders.contains(selected) {
-                surface.selectProvider(switcherProviders.first)
-            }
-        }
-        .onChange(of: preferences.allowedTrackingProviders) { _, _ in
-            if let selected = surface.selectedProvider, !switcherProviders.contains(selected) {
-                surface.selectProvider(switcherProviders.first)
-            } else if surface.selectedProvider == nil {
-                surface.selectProvider(switcherProviders.first)
-            }
-        }
-    }
-
     private var tabBar: some View {
         HStack(spacing: 4) {
             ForEach(TrackerTab.allCases) { item in
@@ -523,6 +467,94 @@ struct TrackingDashboardView: View {
             }
         }.padding(12)
         }
+    }
+
+    /// Local-only usage tab: per-provider 5HR/W meters + top-3 chats. No WebKit scrape.
+    private var usage: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("USAGE").font(BarBoyStyle.sectionLabel)
+                    Spacer()
+                    Text("LOCAL ONLY").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                }
+                Text("5HR and W meters come from desktop-local quota files when present. Empty bars mean no readable local usage — never invented.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if railSnapshots.isEmpty {
+                    Text("Connect a desktop app to see local usage meters.")
+                        .font(BarBoyStyle.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 12)
+                } else {
+                    ForEach(railSnapshots) { snapshot in
+                        usageProviderBlock(snapshot)
+                    }
+                }
+            }
+            .padding(12)
+        }
+    }
+
+    private func usageProviderBlock(_ snapshot: ProviderSnapshot) -> some View {
+        let windows = UsagePeekMapping.map(
+            observations: monitor.usageObservations.filter { $0.provider == snapshot.provider },
+            snapshot: snapshot
+        )
+        let chats = SessionPresentation.topChatsPerProvider(
+            snapshot.sessions,
+            limit: SessionPresentation.maxChatsPerProvider
+        )
+        let privacyBlocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(snapshot.provider)
+        let hasMeters = windows.fiveHour.percentage != nil || windows.weekly.percentage != nil
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                ProviderMark(provider: snapshot.provider, size: 22, active: snapshot.activeCount > 0)
+                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel)
+                Spacer(minLength: 0)
+                Text(snapshot.activeCount > 0 ? "LIVE" : (snapshot.isInstalled ? "IDLE" : "—"))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+            DualUsageMeters(fiveHour: windows.fiveHour, weekly: windows.weekly, compact: false)
+            if !hasMeters {
+                if privacyBlocked {
+                    Text(LocalUsageArtifactReader.privacyGuidance(for: snapshot.provider))
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(BarBoyStyle.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Privacy Settings") {
+                        LocalUsageArtifactReader.openPrivacySettings()
+                    }
+                    .barBoyButton()
+                } else if snapshot.provider == .claude || snapshot.provider == .cursor {
+                    Text(snapshot.provider == .claude
+                          ? "No local Claude usage cache yet (statusline/OAuth cache under ~/.claude or /tmp/claude). Bars appear when that file exists — MOMO does not invent %."
+                          : "Cursor does not expose account % in transcripts. Bars appear only if a local usage-cache.json is present.")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if !chats.isEmpty {
+                Text("TOP CHATS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                ForEach(chats) { session in
+                    Button { surface.openSession(session) } label: {
+                        TrackingSessionRow(session: session)
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                Text("No recent chats for \(snapshot.provider.name).")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 
     private var upgrade: some View {

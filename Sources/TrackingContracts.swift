@@ -3,6 +3,7 @@ import Foundation
 
 enum TrackerTab: String, CaseIterable, Codable, Identifiable {
     case activity
+    case usage
     case brain
     case upgrade
 
@@ -11,6 +12,7 @@ enum TrackerTab: String, CaseIterable, Codable, Identifiable {
     var title: String {
         switch self {
         case .activity: return "Activity"
+        case .usage: return "Usage"
         case .brain: return "Brain"
         case .upgrade: return "Upgrade"
         }

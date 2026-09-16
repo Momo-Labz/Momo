@@ -84,6 +84,19 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertTrue(
             DesktopConnectionVerifier.Status.awaitingSignIn.guidance.contains("Finish signing in")
         )
+        XCTAssertEqual(
+            DesktopConnectionVerifier.evaluate(
+                provider: .claude,
+                isInstalled: true,
+                isRunning: true,
+                hasReadableSessionSource: false,
+                privacyBlocked: true
+            ),
+            .privacyBlocked
+        )
+        XCTAssertTrue(
+            DesktopConnectionVerifier.Status.privacyBlocked.guidance.contains("Full Disk Access")
+        )
     }
 
     func testUsagePeekAlwaysMapsBothWindowsWithoutInventing() {
@@ -123,5 +136,49 @@ final class DesktopUXPassTests: XCTestCase {
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+    }
+
+    func testTrackerTabsAreActivityUsageBrainUpgrade() {
+        XCTAssertEqual(TrackerTab.allCases.map(\.title), ["Activity", "Usage", "Brain", "Upgrade"])
+    }
+
+    func testClaudeFlexibleUsageCacheParsesFiveHourAndWeek() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-claude-usage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let payload: [String: Any] = [
+            "five_hour": ["utilization": 27.0, "resets_at": "2026-09-16T20:00:00Z"],
+            "seven_day": ["utilization": 61.0, "resets_at": "2026-09-20T12:00:00Z"]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        try data.write(to: cacheDir.appendingPathComponent("usage-cache.json"))
+
+        let windows = LocalUsageArtifactReader.quotaWindows(for: .claude, home: tmp, now: .now)
+        XCTAssertEqual(windows.count, 2)
+        XCTAssertEqual(Int(windows.first { $0.minutes == 300 }?.percent ?? -1), 27)
+        XCTAssertEqual(Int(windows.first { $0.minutes == 10_080 }?.percent ?? -1), 61)
+
+        let statusline: [String: Any] = [
+            "rate_limits": [
+                "five_hour": ["used_percentage": 18.5, "resets_at": 1_800_000_000],
+                "seven_day": ["used_percentage": 42.0, "resets_at": 1_800_086_400]
+            ]
+        ]
+        let parsed = RecordedQuotaWindow.parseFlexible(statusline, observedAt: .now)
+        XCTAssertEqual(parsed?.count, 2)
+        XCTAssertEqual(parsed?.first { $0.minutes == 300 }?.percent, 18.5)
+    }
+
+    func testFlexibleParseNeverInventsFromUnrelatedJSON() {
+        XCTAssertNil(RecordedQuotaWindow.parseFlexible(["hello": "world"], observedAt: .now))
+        let invalid = RecordedQuotaWindow.parseFlexible(
+            ["five_hour": ["used_percentage": 250], "seven_day": ["used_percentage": -1]],
+            observedAt: .now
+        )
+        XCTAssertNotNil(invalid)
+        XCTAssertTrue(invalid?.isEmpty == true)
     }
 }

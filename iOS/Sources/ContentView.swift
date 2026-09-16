@@ -37,6 +37,7 @@ struct ContentView: View {
                 Group {
                     switch tab {
                     case .activity: activity
+                    case .usage: usage
                     case .brain: brain
                     case .upgrade: upgrade
                     }
@@ -65,6 +66,14 @@ struct ContentView: View {
             }
             if status.sessions.isEmpty { Text("No recorded activity yet.").foregroundStyle(.secondary) }
         }
+    }
+
+    private var usage: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("USAGE").font(.system(size: 11, weight: .black, design: .monospaced))
+            Text("Usage meters live on the Mac app from desktop-local data only. Empty means unknown — never invented.")
+                .font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var upgrade: some View {
