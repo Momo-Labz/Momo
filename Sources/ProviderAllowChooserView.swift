@@ -5,9 +5,11 @@ enum TrackingOnboardingStep: Int, CaseIterable {
     case welcome
     case intents
     case connectProviders
+    case preferences
+    case talkTrial
 }
 
-/// Welcome → intent → browser + local-permission onboarding for MOMO Trackr.
+/// Welcome → intent → browser + local-permission → Talk trial onboarding for MOMO Trackr.
 /// First connect tap opens the default system browser; it does not start WebKit capture.
 struct TrackingOnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,17 +20,25 @@ struct TrackingOnboardingView: View {
     @State private var permissionProvider: AIProvider?
     @State private var allowUsage = true
     @State private var allowRecentPrompts = true
+    @State private var selectedRefreshInterval = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
+    @State private var recordingTalkShortcut = false
+    @AppStorage("notifyFailure") private var notifyFailure = true
+    @AppStorage("notifyNeedsInput") private var notifyNeedsInput = true
+    @AppStorage("notifyThreshold90") private var notifyThreshold90 = true
+    @AppStorage("momoAlertSoundEnabled.v1") private var alertSoundEnabled = true
 
     var initialStep: TrackingOnboardingStep
     var onFinish: (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void
     var onDismiss: (() -> Void)?
+    var onTalkTrial: (() -> Void)?
 
     init(
         initialStep: TrackingOnboardingStep = .welcome,
         initialIntents: Set<OnboardingIntent> = [],
         initialAllowed: Set<AIProvider> = [],
         onFinish: @escaping (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void,
-        onDismiss: (() -> Void)? = nil
+        onDismiss: (() -> Void)? = nil,
+        onTalkTrial: (() -> Void)? = nil
     ) {
         self.initialStep = initialStep
         _step = State(initialValue: initialStep)
@@ -36,6 +46,7 @@ struct TrackingOnboardingView: View {
         _allowed = State(initialValue: initialAllowed)
         self.onFinish = onFinish
         self.onDismiss = onDismiss
+        self.onTalkTrial = onTalkTrial
     }
 
     var body: some View {
@@ -76,6 +87,8 @@ struct TrackingOnboardingView: View {
                 case .welcome: welcomeStep
                 case .intents: intentsStep
                 case .connectProviders: connectStep
+                case .preferences: preferencesStep
+                case .talkTrial: talkTrialStep
                 }
             }
             .animation(reduceMotion ? nil : .easeOut(duration: 0.18), value: step)
@@ -178,8 +191,111 @@ struct TrackingOnboardingView: View {
                 }
 
                 primaryButton("Continue") {
-                    onFinish(intents, allowed)
+                    if onDismiss == nil {
+                        step = .preferences
+                    } else {
+                        onFinish(intents, allowed)
+                    }
                 }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 20)
+    }
+
+    private var preferencesStep: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Choose your defaults")
+                .font(BarBoyStyle.display)
+                .frame(maxWidth: .infinity, alignment: .center)
+            Text("You can change these in Settings any time.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Refresh interval").font(BarBoyStyle.sectionLabel)
+                Picker("Refresh interval", selection: $selectedRefreshInterval) {
+                    Text("1 min").tag(60)
+                    Text("5 min").tag(300)
+                    Text("10 min").tag(600)
+                    Text("30 min").tag(1_800)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Talk shortcut").font(BarBoyStyle.sectionLabel)
+                Button("Set Talk shortcut (\(GlobalShortcutService.shared.bindings[.talk]?.label ?? "⌃⌥ T"))") {
+                    recordingTalkShortcut = true
+                }
+                .barBoyButton()
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Notifications").font(BarBoyStyle.sectionLabel)
+                Toggle("Session stopped / error", isOn: $notifyFailure).toggleStyle(.checkbox)
+                Toggle("Needs you", isOn: $notifyNeedsInput).toggleStyle(.checkbox)
+                Toggle("Usage running low", isOn: $notifyThreshold90).toggleStyle(.checkbox)
+                Toggle("Play notification sound", isOn: $alertSoundEnabled).toggleStyle(.checkbox)
+            }
+
+            primaryButton("Continue") {
+                UserDefaults.standard.set(selectedRefreshInterval, forKey: "refreshIntervalSeconds.v1")
+                step = .talkTrial
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 20)
+        .sheet(isPresented: $recordingTalkShortcut) {
+            VStack(spacing: 16) {
+                Text("Press a shortcut for Talk").font(.headline)
+                Text("Include Control, Option or Command. Escape cancels.").font(.caption)
+                ShortcutRecorder { binding in
+                    if let binding {
+                        _ = GlobalShortcutService.shared.update(binding, for: .talk)
+                        _ = GlobalShortcutService.shared.setEnabled(true, for: .talk)
+                    }
+                    recordingTalkShortcut = false
+                }
+                .frame(width: 350, height: 35)
+                Button("Cancel") { recordingTalkShortcut = false }
+            }
+            .padding(24)
+        }
+    }
+
+    private var talkTrialStep: some View {
+        VStack(spacing: 12) {
+            Text("Hands-free Talk")
+                .font(BarBoyStyle.display)
+                .multilineTextAlignment(.center)
+            Text("Ask MOMO about usage and what’s running — answers stay on this Mac via local Ollama. Never invents %. Free includes this guided trial plus 3 later asks.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if onTalkTrial != nil {
+                primaryButton("Try Talk (1 free)") {
+                    onTalkTrial?()
+                }
+            }
+
+            Button("Skip for now") {
+                onFinish(intents, allowed)
+            }
+            .font(BarBoyStyle.navLabel)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .contentShape(Rectangle())
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .buttonStyle(.plain)
+
+            primaryButton("Finish setup") {
+                onFinish(intents, allowed)
             }
         }
         .padding(.horizontal, 18)

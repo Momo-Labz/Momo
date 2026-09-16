@@ -55,6 +55,11 @@
 		A7B8C9D0E1F20314253647 /* ProviderAccountOpen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F2031425364758 /* ProviderAccountOpen.swift */; };
 		C3D4E5F60718293A4B5C6D7E /* UsagePeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* UsagePeekView.swift */; };
 		E5F60718293A4B5C6D7E8F90 /* TrackingAllowlistAndPeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */; };
+		F1A2B3C4D5E6F7081920A1B2 /* TalkQuotaStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2B3C4D5E6F7081920A1B2C3 /* TalkQuotaStore.swift */; };
+		F2A3B4C5D6E7F8092031B2C3 /* TalkService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C4D5E6F7081920A1B2C3D4 /* TalkService.swift */; };
+		F3A4B5C6D7E8F90A3142C3D4 /* TalkPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4D5E6F7081920A1B2C3D4E5 /* TalkPanelView.swift */; };
+		F4A5B6C7D8E9F01B4253D4E5 /* MomoAlertPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5E6F7081920A1B2C3D4E5F6 /* MomoAlertPresenter.swift */; };
+		F5A6B7C8D9E0F12C5364E5F6 /* OnboardingAndTalkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6F7081920A1B2C3D4E5F607 /* OnboardingAndTalkTests.swift */; };
 		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
 		C2A73E0109B10AA59A4608BB /* GrokSessionAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4837B97EA42724002AA98C64 /* GrokSessionAdapter.swift */; };
 		C5764764D81DEBC12D915ED4 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D208658C2B00183BD5F6A61 /* ContentView.swift */; };
@@ -121,6 +126,11 @@
 		B8C9D0E1F2031425364758 /* ProviderAccountOpen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAccountOpen.swift; sourceTree = "<group>"; };
 		D4E5F60718293A4B5C6D7E8F /* UsagePeekView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePeekView.swift; sourceTree = "<group>"; };
 		F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingAllowlistAndPeekTests.swift; sourceTree = "<group>"; };
+		A2B3C4D5E6F7081920A1B2C3 /* TalkQuotaStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkQuotaStore.swift; sourceTree = "<group>"; };
+		B3C4D5E6F7081920A1B2C3D4 /* TalkService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkService.swift; sourceTree = "<group>"; };
+		C4D5E6F7081920A1B2C3D4E5 /* TalkPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkPanelView.swift; sourceTree = "<group>"; };
+		D5E6F7081920A1B2C3D4E5F6 /* MomoAlertPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MomoAlertPresenter.swift; sourceTree = "<group>"; };
+		E6F7081920A1B2C3D4E5F607 /* OnboardingAndTalkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingAndTalkTests.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
 		6A1D379A0AD44CAB4D3F533E /* BrainWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainWorkspaceView.swift; sourceTree = "<group>"; };
 		6DE9F577C15F91515B933C8D /* MenuBarLabelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarLabelView.swift; sourceTree = "<group>"; };
@@ -269,6 +279,10 @@
 				DFC3538D9E8DBE96F0084BB3 /* UsageCaptureService.swift */,
 				6235DDAD89B9262458146285 /* UsageCaptureView.swift */,
 				D4E5F60718293A4B5C6D7E8F /* UsagePeekView.swift */,
+				A2B3C4D5E6F7081920A1B2C3 /* TalkQuotaStore.swift */,
+				B3C4D5E6F7081920A1B2C3D4 /* TalkService.swift */,
+				C4D5E6F7081920A1B2C3D4E5 /* TalkPanelView.swift */,
+				D5E6F7081920A1B2C3D4E5F6 /* MomoAlertPresenter.swift */,
 				15C114ABCEFAED659EEBE0D9 /* VaultIndexService.swift */,
 				B76996AA8D94E9B84E90875E /* VoiceInput.swift */,
 				670F0E4384D32C6842843F47 /* Adapters */,
@@ -301,6 +315,7 @@
 				DA84A3252D5B404FA9997089 /* SessionBackendTests.swift */,
 				B52E9D3F02C75E1F0D8B26E2 /* UsageCaptureTests.swift */,
 				F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */,
+				E6F7081920A1B2C3D4E5F607 /* OnboardingAndTalkTests.swift */,
 				18C3506B51651F4E05EC6AB7 /* Fixtures */,
 			);
 			path = Tests;
@@ -624,6 +639,7 @@
 				E1CFD1914907ED6EA2AD02F9 /* SessionBackendTests.swift in Sources */,
 				A41F8C2E91B64D0E9C7A15D1 /* UsageCaptureTests.swift in Sources */,
 				E5F60718293A4B5C6D7E8F90 /* TrackingAllowlistAndPeekTests.swift in Sources */,
+				F5A6B7C8D9E0F12C5364E5F6 /* OnboardingAndTalkTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -668,6 +684,10 @@
 				50CDD431A52D76DC9878D5F8 /* UsageCaptureService.swift in Sources */,
 				B40C0EA598C641131901D6B3 /* UsageCaptureView.swift in Sources */,
 				C3D4E5F60718293A4B5C6D7E /* UsagePeekView.swift in Sources */,
+				F1A2B3C4D5E6F7081920A1B2 /* TalkQuotaStore.swift in Sources */,
+				F2A3B4C5D6E7F8092031B2C3 /* TalkService.swift in Sources */,
+				F3A4B5C6D7E8F90A3142C3D4 /* TalkPanelView.swift in Sources */,
+				F4A5B6C7D8E9F01B4253D4E5 /* MomoAlertPresenter.swift in Sources */,
 				F17FFB4218519015022F8478 /* VaultIndexService.swift in Sources */,
 				84DED67B26BC691668B312A2 /* VoiceInput.swift in Sources */,
 			);

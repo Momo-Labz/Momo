@@ -9,6 +9,9 @@ final class ActivityMonitor: ObservableObject {
     // Keep the menu responsive without polling provider folders every few
     // seconds. File mtimes and the session cache make each refresh cheap.
     static let refreshInterval: TimeInterval = 60
+    static func configuredRefreshInterval() -> TimeInterval {
+        TimeInterval(PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1")))
+    }
 
     @Published private(set) var snapshots: [ProviderSnapshot] = .placeholder
     @Published private(set) var capabilityInventory: CapabilityInventory
@@ -49,7 +52,8 @@ final class ActivityMonitor: ObservableObject {
             timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     guard let self else { return }
-                    let interval: TimeInterval = self.menuIsVisible ? Self.refreshInterval : 300
+                    let baseInterval = Self.configuredRefreshInterval()
+                    let interval: TimeInterval = self.menuIsVisible ? baseInterval : max(300, baseInterval)
                     if self.lastUpdated.map({ Date().timeIntervalSince($0) >= interval }) ?? true { self.refresh() }
                 }
             }

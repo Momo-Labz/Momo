@@ -52,7 +52,7 @@ struct SettingsView: View {
     @State private var pendingProvider: AIProvider?
     @State private var pendingRoot: String?
     private var refreshIntervalLabel: String {
-        let seconds = Int(ActivityMonitor.refreshInterval)
+        let seconds = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
         return "\(seconds) second\(seconds == 1 ? "" : "s")"
     }
 
@@ -207,23 +207,16 @@ struct SettingsView: View {
 
     private var providers: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Local providers").font(.title2.bold())
-                Button("Set up Codex local access") { chooseLocalRoot(for: .codex) }
-                Button("MOMO Trackr onboarding") {
-                    NotificationCenter.default.post(
-                        name: .momoShowProviderChooser,
-                        object: nil,
-                        userInfo: ["step": TrackingOnboardingStep.welcome.rawValue]
-                    )
-                }
-                .barBoyButton()
-                Button("What you were looking for") {
-                    NotificationCenter.default.post(
-                        name: .momoShowProviderChooser,
-                        object: nil,
-                        userInfo: ["step": TrackingOnboardingStep.intents.rawValue]
-                    )
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Providers").font(.title2.bold())
+                Text("Allow-list controls the sticky strip and usage peek. Folder authorization below is separate. Connect opens the official login in your default browser — MOMO never imports cookies.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 8) {
+                Button("Replay onboarding") {
+                    preferences.reopenTrackingOnboarding()
                 }
                 .barBoyButton()
                 Button("Connect providers") {
@@ -234,15 +227,21 @@ struct SettingsView: View {
                     )
                 }
                 .barBoyButton()
-                Text("Onboarding intents gate tips for Usage vs Brain. Connect opens the official login in your default browser, then a local permission panel. Connect Usage below still uses Manual Preview → Confirm in isolated WebKit.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("Tracking allow-list controls the sticky strip, usage peek, and Connect Usage queue. Folder authorization below is separate.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
-                    .foregroundStyle(.secondary)
             }
+
+            Text("Allowed for tracking")
+                .font(BarBoyStyle.sectionLabel)
+                .foregroundStyle(.secondary)
+
+            if preferences.allowedTrackingProviders.isEmpty {
+                Text("None yet — use Connect providers or Replay onboarding.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(preferences.allowedTrackingProviders.map(\.name).sorted().joined(separator: " · "))
+                    .font(BarBoyStyle.bodySmall)
+            }
+
             VStack(spacing: 8) {
                 ForEach(AIProvider.allCases) { provider in
                     providerRow(provider)
@@ -344,9 +343,40 @@ struct SettingsView: View {
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
             LabeledContent("Refresh interval", value: refreshIntervalLabel)
             LabeledContent("Version", value: BarBoyAppInfo.marketingVersion)
+            Section("Talk") {
+                LabeledContent("Shortcut", value: shortcutService.bindings[.talk]?.label ?? "⌃⌥ T")
+                Button("Change Talk shortcut") { recordingShortcut = .talk; shortcutError = nil }
+                Toggle("Talk shortcut enabled", isOn: Binding(
+                    get: { shortcutService.isEnabled(.talk) },
+                    set: { value in
+                        shortcutError = shortcutService.setEnabled(value, for: .talk)
+                    }
+                ))
+                LabeledContent("Free Talk left", value: "\(TalkService.shared.quota.freeUsesRemaining) of \(TalkQuotaStore.freeUsesLimit)")
+                Toggle("MOMO+ (soft unlock)", isOn: Binding(
+                    get: { TalkService.shared.quota.momoPlusEntitled },
+                    set: { TalkService.shared.quota.setMomoPlusEntitled($0) }
+                ))
+                Text("Talk answers usage + activity via local Ollama only. Free = 1 onboarding trial + 3 asks. Mic permission is requested only when you start Talk.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .padding(10)
+        .sheet(item: $recordingShortcut) { action in
+            VStack(spacing: 16) {
+                Text("Press a new shortcut for \(action.title)").font(.headline)
+                Text("Include Control, Option or Command. Escape cancels.").font(.caption)
+                ShortcutRecorder { binding in
+                    if let binding {
+                        shortcutError = shortcutService.update(binding, for: action)
+                        shortcutNotice = shortcutError == nil ? "Saved \(action.title): \(binding.label)" : nil
+                    }
+                    recordingShortcut = nil
+                }.frame(width: 350, height: 35)
+                Button("Cancel") { recordingShortcut = nil }
+            }.padding(24)
+        }
     }
 
     private var notifications: some View {
@@ -362,6 +392,27 @@ struct SettingsView: View {
             Toggle("90%", isOn: $notifyThreshold90)
             Toggle("100%", isOn: $notifyThreshold100)
             Text("MOMO notifies once per crossing for the selected thresholds.")
+                .font(.caption).foregroundStyle(.secondary)
+            Divider()
+            Text("MOMO alert sound").font(.headline)
+            Toggle("Play sound with header flash", isOn: Binding(
+                get: { MomoAlertPresenter.shared.soundEnabled },
+                set: { MomoAlertPresenter.shared.soundEnabled = $0 }
+            ))
+            Toggle("Mute alert sounds", isOn: Binding(
+                get: { MomoAlertPresenter.shared.muted },
+                set: { MomoAlertPresenter.shared.muted = $0 }
+            ))
+            Picker("Sound", selection: Binding(
+                get: { MomoAlertPresenter.shared.soundName },
+                set: { MomoAlertPresenter.shared.soundName = $0 }
+            )) {
+                ForEach(MomoAlertPresenter.availableSounds, id: \.self) { name in
+                    Text(name).tag(name)
+                }
+            }
+            Button("Preview sound") { MomoAlertPresenter.shared.previewSound() }
+            Text("Mute always wins. Sound preference persists on this Mac.")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .formStyle(.grouped)

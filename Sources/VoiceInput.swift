@@ -33,11 +33,31 @@ final class VoiceInput: ObservableObject {
     }
     func start() async {
         guard !isActive else { return }
-        let token = UUID(); generation = token; state = .permission
-        let mic = await AVCaptureDevice.requestAccess(for: .audio)
+        let token = UUID(); generation = token
+        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        let mic: Bool
+        if micStatus == .authorized {
+            mic = true
+        } else if micStatus == .notDetermined {
+            state = .permission
+            mic = await AVCaptureDevice.requestAccess(for: .audio)
+        } else {
+            mic = false
+        }
         guard generation == token else { return }
         guard mic else { fail("Allow Microphone access in macOS System Settings → Privacy & Security."); return }
-        let speech = await withCheckedContinuation { continuation in SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) } }
+        let speechStatus = SFSpeechRecognizer.authorizationStatus()
+        let speech: SFSpeechRecognizerAuthorizationStatus
+        if speechStatus == .authorized {
+            speech = .authorized
+        } else if speechStatus == .notDetermined {
+            state = .permission
+            speech = await withCheckedContinuation { continuation in
+                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+            }
+        } else {
+            speech = speechStatus
+        }
         guard generation == token else { return }
         guard speech == .authorized else { fail("Allow Speech Recognition in macOS System Settings → Privacy & Security."); return }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {

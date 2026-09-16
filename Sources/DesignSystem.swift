@@ -14,6 +14,7 @@ enum BarBoyStyle {
     static let coral = Color(red: 226 / 255, green: 92 / 255, blue: 72 / 255)
     /// DESIGN.md `warning`. A question is waiting; nothing has gone wrong.
     static let amber = Color(red: 211 / 255, green: 154 / 255, blue: 83 / 255)
+    static let errorOrange = Color(red: 232 / 255, green: 132 / 255, blue: 60 / 255)
     static let ink = Color(red: 0.125, green: 0.118, blue: 0.114)
     static let paper = Color(red: 0.953, green: 0.949, blue: 0.949)
     static let inverseInk = Color(nsColor: NSColor(name: nil) { appearance in
@@ -172,7 +173,7 @@ private struct CursorGlyphShape: Shape {
 // Native port of Branding/index.html: fig(), LOOK, WALK and ANIMS.
 // Coordinates and holds match the index; animation never implies session status.
 enum MomoMotion {
-    case loop, wave, blink
+    case loop, wave, blink, alert
 
     var frames: [MomoPixelFrame] {
         switch self {
@@ -193,6 +194,16 @@ enum MomoMotion {
                     MomoPixelFrame(look: 1, arms: .down, milliseconds: 300)]
         case .blink:
             return [MomoPixelFrame(milliseconds: 2200), MomoPixelFrame(closed: true, milliseconds: 200)]
+        case .alert:
+            // Snap poses on a 100 ms grid — flash attention without tweening.
+            return [
+                MomoPixelFrame(look: 0, arms: .up, milliseconds: 100),
+                MomoPixelFrame(look: 2, arms: .down, milliseconds: 100),
+                MomoPixelFrame(look: 1, arms: .up, milliseconds: 100),
+                MomoPixelFrame(closed: true, arms: .flat, milliseconds: 100),
+                MomoPixelFrame(look: 2, arms: .down, milliseconds: 100),
+                MomoPixelFrame(look: 0, arms: .up, milliseconds: 100)
+            ]
         }
     }
 }
@@ -234,20 +245,30 @@ struct AnimatedMomoMark: View {
     var tile = true
     var animated = true
     var motion: MomoMotion = .loop
+    /// Coral flash for attention-worthy alerts (session stopped, usage low, failures).
+    var flashAlert = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
     @State private var frame = MomoPixelFrame()
+    @State private var flashOn = false
 
     private var shouldAnimate: Bool { animated && !reduceMotion && scenePhase == .active }
+    private var effectiveMotion: MomoMotion { flashAlert ? .alert : motion }
 
     var body: some View {
         PixelBarBoyMark(size: size, tile: tile, frame: shouldAnimate ? frame : MomoPixelFrame())
-            .task(id: shouldAnimate) {
+            .overlay {
+                if flashAlert && (reduceMotion || flashOn) {
+                    Rectangle().fill(BarBoyStyle.coral.opacity(reduceMotion ? 0.55 : 0.7))
+                }
+            }
+            .task(id: "\(shouldAnimate)-\(effectiveMotion)-\(flashAlert)") {
                 guard shouldAnimate else { return }
                 while !Task.isCancelled {
-                    for next in motion.frames {
+                    for next in effectiveMotion.frames {
                         guard !Task.isCancelled else { return }
                         frame = next
+                        if flashAlert { flashOn.toggle() }
                         do { try await Task.sleep(for: .milliseconds(next.milliseconds)) }
                         catch { return }
                     }

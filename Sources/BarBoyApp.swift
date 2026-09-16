@@ -40,6 +40,14 @@ final class MomoRuntime: ObservableObject {
             )
             self.statusItem.update(snapshots: snapshots)
         }.store(in: &cancellables)
+
+        // First-run: open the panel so Welcome is visible without hunting the status item.
+        if preferences.needsTrackingOnboarding {
+            MomoSurface.shared.expanded = true
+            DispatchQueue.main.async { [weak self] in
+                self?.statusItem.presentPanelForOnboarding()
+            }
+        }
     }
 
     private func applyProviderAuthorization() {
@@ -83,8 +91,11 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
     private var peekPanel: MomoPanel?
     private weak var runtime: MomoRuntime?
     private var surfaceObservation: AnyCancellable?
+    private var voiceObservation: AnyCancellable?
     private var lastUsageSegment: Int?
     private var singleClickWorkItem: DispatchWorkItem?
+    private var listeningPulseTimer: Timer?
+    private var listeningPulseVisible = false
 
     func install(runtime: MomoRuntime) {
         guard item == nil else { return }
@@ -99,6 +110,9 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         status.button?.toolTip = "MOMO provider activity · double-click for usage peek"
         surfaceObservation = MomoSurface.shared.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.resizeForSurface() }
+        }
+        voiceObservation = VoiceInput.shared.$state.sink { [weak self] state in
+            self?.updateListeningIndicator(state == .listening || state == .permission)
         }
         update(snapshots: runtime.monitor.snapshots)
     }
@@ -143,6 +157,29 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         }
     }
 
+    private func updateListeningIndicator(_ active: Bool) {
+        guard let button = item?.button else { return }
+        listeningPulseTimer?.invalidate()
+        listeningPulseTimer = nil
+        listeningPulseVisible = false
+        if active {
+            listeningPulseVisible = true
+            button.attributedTitle = NSAttributedString(
+                string: " 🎙",
+                attributes: [.foregroundColor: NSColor(BarBoyStyle.coral)]
+            )
+            listeningPulseTimer = Timer.scheduledTimer(withTimeInterval: 0.38, repeats: true) { [weak self] _ in
+                guard let self, let button = self.item?.button else { return }
+                self.listeningPulseVisible.toggle()
+                button.alphaValue = self.listeningPulseVisible ? 1 : 0.45
+            }
+            button.toolTip = "Talk listening… press shortcut again or stop in panel"
+        } else {
+            button.alphaValue = 1
+            runtime.map { update(snapshots: $0.monitor.snapshots) }
+        }
+    }
+
     @objc private func handleStatusItemClick(_ sender: Any?) {
         let clicks = NSApp.currentEvent?.clickCount ?? 1
         if clicks >= 2 {
@@ -169,6 +206,12 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         }
     }
 
+    /// Opens the tracking panel expanded for first-run Welcome (or Replay).
+    func presentPanelForOnboarding() {
+        MomoSurface.shared.expanded = true
+        show()
+    }
+
     private func togglePeek() {
         if peekPanel?.isVisible == true {
             hidePeek()
@@ -186,7 +229,7 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
     }
 
     private func showPeek() {
-        guard let runtime else { return }
+        guard runtime != nil else { return }
         if peekPanel == nil {
             let panel = MomoPanel(
                 contentRect: NSRect(origin: .zero, size: NSSize(width: 280, height: 120)),

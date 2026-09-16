@@ -33,6 +33,7 @@ enum MomoRoute: Equatable {
     case settings
     case session(String)
     case usage(AIProvider)
+    case talk
 }
 
 @MainActor
@@ -91,6 +92,10 @@ final class MomoSurface: ObservableObject {
     func openUsage(_ provider: AIProvider, fromKeyboard: Bool = false) {
         selectProvider(provider)
         open(.usage(provider), fromKeyboard: fromKeyboard)
+    }
+
+    func openTalk(fromKeyboard: Bool = false) {
+        open(.talk, fromKeyboard: fromKeyboard)
     }
 
     /// Soft return after browser login: banner only until the person chooses Confirm usage.
