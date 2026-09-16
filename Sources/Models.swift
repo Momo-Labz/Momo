@@ -412,8 +412,9 @@ struct ProviderSnapshot: Identifiable {
 
     /// Best local/desktop-derived usage percent when known; never invents a value.
     var primaryUsagePercent: Int? {
-        if let percent = recordedQuota?.percent ?? recordedQuotas.first?.percent, (0...100).contains(percent) {
-            return percent
+        if let raw = recordedQuota?.percent ?? recordedQuotas.first?.percent {
+            let percent = Int(raw.rounded())
+            if (0...100).contains(percent) { return percent }
         }
         if let percent = shortWindowPercent, (0...100).contains(percent) { return percent }
         if let percent = weekWindowPercent, (0...100).contains(percent) { return percent }
