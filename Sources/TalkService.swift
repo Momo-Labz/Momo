@@ -26,9 +26,11 @@ final class TalkService: ObservableObject {
     private let synthesizer = NSSpeechSynthesizer()
     private var isOnboardingTrial = false
 
-    init(quota: TalkQuotaStore = TalkQuotaStore(), ollama: OllamaService = .shared) {
-        self.quota = quota
-        self.ollama = ollama
+    /// Defaults are built in the MainActor init body — not as default-arg expressions —
+    /// so we do not call MainActor-isolated `TalkQuotaStore` / `OllamaService.shared` from a nonisolated context.
+    init(quota: TalkQuotaStore? = nil, ollama: OllamaService? = nil) {
+        self.quota = quota ?? TalkQuotaStore()
+        self.ollama = ollama ?? .shared
     }
 
     func begin(isOnboardingTrial: Bool = false) {

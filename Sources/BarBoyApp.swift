@@ -200,7 +200,7 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
     }
 
     private func showPeek() {
-        guard let runtime else { return }
+        guard runtime != nil else { return }
         if peekPanel == nil {
             let panel = MomoPanel(
                 contentRect: NSRect(origin: .zero, size: NSSize(width: 280, height: 120)),
