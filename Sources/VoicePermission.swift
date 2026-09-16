@@ -2,6 +2,10 @@ import AVFoundation
 import Speech
 
 /// Centralized microphone + speech authorization. Never re-prompts after the first system dialog.
+///
+/// Permission APIs often invoke their completion handlers on the main thread. Resuming a
+/// MainActor-awaited continuation directly from that callback deadlocks the UI (callback
+/// holds the main thread while MainActor work cannot proceed). Always resume off-main.
 enum VoicePermission {
     enum BlockReason: Equatable {
         case microphoneDenied
@@ -12,7 +16,9 @@ enum VoicePermission {
 
     private static let micPromptedKey = "voiceMicrophonePrompted.v1"
     private static let speechPromptedKey = "voiceSpeechPrompted.v1"
+    private static let micInFlightLock = NSLock()
     private static var micRequestInFlight = false
+    private static let speechInFlightLock = NSLock()
     private static var speechRequestInFlight = false
 
     static func microphoneAuthorized() -> Bool {
@@ -28,7 +34,6 @@ enum VoicePermission {
             case .granted: return nil
             case .denied: return .microphoneDenied
             case .undetermined:
-                // Already asked this install — never show the system dialog again.
                 if UserDefaults.standard.bool(forKey: micPromptedKey) { return .microphoneDenied }
                 return nil
             @unknown default: return .microphoneDenied
@@ -70,19 +75,34 @@ enum VoicePermission {
     static func requestMicrophoneIfNeeded() async -> Bool {
         if microphoneAuthorized() { return true }
         if microphoneBlockReason() != nil { return false }
-        guard !micRequestInFlight else { return false }
+
+        micInFlightLock.lock()
+        if micRequestInFlight {
+            micInFlightLock.unlock()
+            return false
+        }
         micRequestInFlight = true
-        defer { micRequestInFlight = false }
+        micInFlightLock.unlock()
+        defer {
+            micInFlightLock.lock()
+            micRequestInFlight = false
+            micInFlightLock.unlock()
+        }
+
         UserDefaults.standard.set(true, forKey: micPromptedKey)
         if #available(macOS 14.0, *) {
-            let granted = await withCheckedContinuation { continuation in
+            return await withCheckedContinuation { continuation in
                 AVAudioApplication.requestRecordPermission { granted in
-                    continuation.resume(returning: granted)
+                    // Off-main resume prevents MainActor deadlock when the OS calls back on main.
+                    Self.resumeOffMain(continuation, returning: granted)
                 }
             }
-            return granted
         }
-        return await AVCaptureDevice.requestAccess(for: .audio)
+        return await withCheckedContinuation { continuation in
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                Self.resumeOffMain(continuation, returning: granted)
+            }
+        }
     }
 
     /// Returns `.authorized` only when speech access is granted. Requests at most once per install.
@@ -90,12 +110,31 @@ enum VoicePermission {
         let current = SFSpeechRecognizer.authorizationStatus()
         if current == .authorized { return .authorized }
         if speechBlockReason() != nil { return current == .notDetermined ? .denied : current }
-        guard !speechRequestInFlight else { return .denied }
+
+        speechInFlightLock.lock()
+        if speechRequestInFlight {
+            speechInFlightLock.unlock()
+            return .denied
+        }
         speechRequestInFlight = true
-        defer { speechRequestInFlight = false }
+        speechInFlightLock.unlock()
+        defer {
+            speechInFlightLock.lock()
+            speechRequestInFlight = false
+            speechInFlightLock.unlock()
+        }
+
         UserDefaults.standard.set(true, forKey: speechPromptedKey)
         return await withCheckedContinuation { continuation in
-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+            SFSpeechRecognizer.requestAuthorization { status in
+                Self.resumeOffMain(continuation, returning: status)
+            }
+        }
+    }
+
+    private static func resumeOffMain<T>(_ continuation: CheckedContinuation<T, Never>, returning value: T) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.resume(returning: value)
         }
     }
 
@@ -103,5 +142,7 @@ enum VoicePermission {
     static func resetPromptLatchForTesting(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: micPromptedKey)
         defaults.removeObject(forKey: speechPromptedKey)
+        micInFlightLock.lock(); micRequestInFlight = false; micInFlightLock.unlock()
+        speechInFlightLock.lock(); speechRequestInFlight = false; speechInFlightLock.unlock()
     }
 }

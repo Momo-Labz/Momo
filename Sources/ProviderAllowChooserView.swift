@@ -19,6 +19,8 @@ struct TrackingOnboardingView: View {
     @State private var intents: Set<OnboardingIntent>
     @State private var allowed: Set<AIProvider>
     @State private var permissionProvider: AIProvider?
+    @State private var pendingStatus: DesktopConnectionVerifier.Status?
+    @State private var isVerifying = false
     @State private var allowUsage = true
     @State private var allowRecentPrompts = true
     @State private var plusGateMessage: String?
@@ -184,7 +186,7 @@ struct TrackingOnboardingView: View {
             Text("Connect the desktop apps you use")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("Start empty. Click a provider to open its Mac app, then allow local tracking for usage and recent prompts. Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers.")
+            Text("Start empty. Click a provider to open its Mac app. MOMO marks it connected only after a real local readiness check — not just because the process is running. Free includes up to \(DesktopAppCatalog.freeProviderLimit) verified providers.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -199,7 +201,7 @@ struct TrackingOnboardingView: View {
             }
 
             if let permissionProvider {
-                permissionPanel(for: permissionProvider)
+                verificationPanel(for: permissionProvider)
             } else {
                 VStack(spacing: 8) {
                     ForEach(AIProvider.allCases) { provider in
@@ -207,9 +209,20 @@ struct TrackingOnboardingView: View {
                     }
                 }
 
-                primaryButton("Continue") {
+                Button {
+                    guard !allowed.isEmpty else { return }
                     step = .preferences
+                } label: {
+                    Text(allowed.isEmpty ? "Connect at least one app to continue" : "Continue")
+                        .font(BarBoyStyle.navLabel)
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                        .contentShape(Rectangle())
+                        .foregroundStyle(BarBoyStyle.inverseInk)
+                        .background(allowed.isEmpty ? Color.primary.opacity(0.35) : Color.primary)
                 }
+                .buttonStyle(.plain)
+                .disabled(allowed.isEmpty)
+                .padding(.top, 4)
             }
         }
         .padding(.horizontal, 18)
@@ -328,17 +341,16 @@ struct TrackingOnboardingView: View {
                 plusGateMessage = "Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers. Unlock more on the Upgrade tab with MOMO+."
                 return
             }
-            if match.isInstalled {
-                _ = DesktopAppConnect.openDesktopApp(for: provider)
-            }
             allowUsage = true
             allowRecentPrompts = true
+            pendingStatus = nil
             permissionProvider = provider
+            beginVerification(for: provider, openApp: true)
         } label: {
             HStack(spacing: 12) {
                 ProviderMark(provider: provider, size: 28, active: isAllowed)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isAllowed ? "\(provider.connectButtonTitle) · Connected" : provider.connectButtonTitle)
+                    Text(isAllowed ? "\(provider.connectButtonTitle) · Verified" : provider.connectButtonTitle)
                         .font(BarBoyStyle.rowTitle)
                         .foregroundStyle(Color.primary)
                     Text(match.isInstalled ? match.displayName : "Not installed in Applications")
@@ -360,14 +372,12 @@ struct TrackingOnboardingView: View {
         .accessibilityLabel(provider.connectButtonTitle)
     }
 
-    private func permissionPanel(for provider: AIProvider) -> some View {
+    private func verificationPanel(for provider: AIProvider) -> some View {
         let match = DesktopAppCatalog.match(for: provider)
         return VStack(alignment: .leading, spacing: 12) {
             Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
-            Text(match.isInstalled
-                 ? "Allow MOMO to read local usage and recent prompts from \(match.displayName) on this Mac."
-                 : "\(match.displayName) isn’t in Applications yet. You can still allow local tracking for when it is installed and open.")
+            Text("MOMO opens \(match.displayName) and checks for a readable local session source. Running alone is not enough.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -382,9 +392,22 @@ struct TrackingOnboardingView: View {
             }
             .toggleStyle(.checkbox)
 
+            if isVerifying {
+                Text("Checking connection…")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            } else if let pendingStatus {
+                Text(pendingStatus.guidance)
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(pendingStatus.isVerified ? Color.primary : BarBoyStyle.coral)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: 8) {
-                Button("Not now") {
+                Button("Back") {
                     permissionProvider = nil
+                    pendingStatus = nil
+                    isVerifying = false
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
@@ -393,31 +416,64 @@ struct TrackingOnboardingView: View {
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                 .buttonStyle(.plain)
 
+                Button("Retry") {
+                    beginVerification(for: provider, openApp: true)
+                }
+                .font(BarBoyStyle.navLabel)
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .contentShape(Rectangle())
+                .background(BarBoyStyle.surface)
+                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                .buttonStyle(.plain)
+                .disabled(isVerifying)
+
                 Button("Allow") {
-                    guard allowUsage || allowRecentPrompts else { return }
-                    let already = allowed.contains(provider)
-                    guard talkQuota.momoPlusEntitled
-                            || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already) else {
-                        plusGateMessage = "Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers. Unlock more on the Upgrade tab with MOMO+."
-                        permissionProvider = nil
-                        return
-                    }
-                    allowed.insert(provider)
-                    permissionProvider = nil
-                    onProviderConnected?(allowed)
+                    commitVerifiedConnection(provider)
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
                 .contentShape(Rectangle())
                 .foregroundStyle(BarBoyStyle.inverseInk)
-                .background((allowUsage || allowRecentPrompts) ? Color.primary : Color.primary.opacity(0.35))
+                .background(canCommit(provider) ? Color.primary : Color.primary.opacity(0.35))
                 .buttonStyle(.plain)
-                .disabled(!(allowUsage || allowRecentPrompts))
+                .disabled(!canCommit(provider))
             }
         }
         .padding(14)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private func canCommit(_ provider: AIProvider) -> Bool {
+        guard allowUsage || allowRecentPrompts else { return false }
+        guard pendingStatus?.isVerified == true, !isVerifying else { return false }
+        let already = allowed.contains(provider)
+        return talkQuota.momoPlusEntitled
+            || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already)
+    }
+
+    private func beginVerification(for provider: AIProvider, openApp: Bool) {
+        isVerifying = true
+        pendingStatus = nil
+        if openApp {
+            _ = DesktopAppConnect.openDesktopApp(for: provider)
+        }
+        Task { @MainActor in
+            // Give the app a moment to come to the foreground / finish launching.
+            try? await Task.sleep(for: .milliseconds(900))
+            let status = DesktopConnectionVerifier.verify(provider)
+            pendingStatus = status
+            isVerifying = false
+        }
+    }
+
+    private func commitVerifiedConnection(_ provider: AIProvider) {
+        guard canCommit(provider) else { return }
+        allowed.insert(provider)
+        permissionProvider = nil
+        pendingStatus = nil
+        isVerifying = false
+        onProviderConnected?(allowed)
     }
 
     private func primaryButton(_ title: String, action: @escaping () -> Void) -> some View {

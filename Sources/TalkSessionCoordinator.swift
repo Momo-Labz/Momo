@@ -40,6 +40,8 @@ final class TalkSessionCoordinator {
         case .listening:
             wasListening = true
             TalkService.shared.noteListeningStarted()
+        case .starting, .permission:
+            break
         case .finished:
             guard wasListening, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 wasListening = false

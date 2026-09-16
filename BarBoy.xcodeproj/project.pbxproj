@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B6C7D8E9F0A118293A4B5C6D /* VoiceInputLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A5B6C7D8E9F018293A4B5C6D /* VoiceInputLifecycleTests.swift */; };
+		F4A5B6C7D8E90819293A4B5C /* UsageMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */; };
+		D2E3F4A5B6C70819293A4B5C /* DesktopConnectionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */; };
 		A2B3C4D5E6F70819293A4B5C /* TalkSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */; };
 		E2F3A4B5C6D70819293A4B5C /* VoicePermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */; };
 		B2C3D4E5F60718293A4B5C6D /* DesktopAppCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* DesktopAppCatalog.swift */; };
@@ -96,6 +99,9 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A5B6C7D8E9F018293A4B5C6D /* VoiceInputLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceInputLifecycleTests.swift; sourceTree = "<group>"; };
+		E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageMeter.swift; sourceTree = "<group>"; };
+		C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionVerifier.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkSessionCoordinator.swift; sourceTree = "<group>"; };
 		D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePermission.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* DesktopAppCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopAppCatalog.swift; sourceTree = "<group>"; };
@@ -268,6 +274,8 @@
 				7186CCEFF286C3FE6572CFF1 /* OllamaService.swift */,
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
 				A1B2C3D4E5F60718293A4B5C /* DesktopAppCatalog.swift */,
+				E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */,
+				C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */,
 				F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */,
 				D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */,
 				B2C3D4E5F60718293A4B5C6D /* ProviderAllowChooserView.swift */,
@@ -316,6 +324,7 @@
 				DA84A3252D5B404FA9997089 /* SessionBackendTests.swift */,
 				F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */,
 				E6F7081920A1B2C3D4E5F607 /* OnboardingAndTalkTests.swift */,
+				A5B6C7D8E9F018293A4B5C6D /* VoiceInputLifecycleTests.swift */,
 				18C3506B51651F4E05EC6AB7 /* Fixtures */,
 			);
 			path = Tests;
@@ -639,6 +648,7 @@
 				E1CFD1914907ED6EA2AD02F9 /* SessionBackendTests.swift in Sources */,
 				E5F60718293A4B5C6D7E8F90 /* TrackingAllowlistAndPeekTests.swift in Sources */,
 				F5A6B7C8D9E0F12C5364E5F6 /* OnboardingAndTalkTests.swift in Sources */,
+				B6C7D8E9F0A118293A4B5C6D /* VoiceInputLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -670,6 +680,8 @@
 				28D384AEEE6CA04FA5562F01 /* OllamaService.swift in Sources */,
 				AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */,
 				B2C3D4E5F60718293A4B5C6D /* DesktopAppCatalog.swift in Sources */,
+				F4A5B6C7D8E90819293A4B5C /* UsageMeter.swift in Sources */,
+				D2E3F4A5B6C70819293A4B5C /* DesktopConnectionVerifier.swift in Sources */,
 				A2B3C4D5E6F70819293A4B5C /* TalkSessionCoordinator.swift in Sources */,
 				E2F3A4B5C6D70819293A4B5C /* VoicePermission.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* ProviderAllowChooserView.swift in Sources */,

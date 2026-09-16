@@ -45,8 +45,8 @@ final class PreferencesStore: ObservableObject {
     /// True until the current onboarding schema finishes (Welcome → prefs → Talk trial).
     var needsTrackingOnboarding: Bool { !trackingOnboardingSeen }
 
-    /// Bump when onboarding source changes (v3 = desktop-app connect, no WebKit Connect Usage).
-    static let currentOnboardingSchemaVersion = 3
+    /// Bump when onboarding source changes (v4 = verified desktop connection before continue).
+    static let currentOnboardingSchemaVersion = 4
     static let freeProviderLimit = DesktopAppCatalog.freeProviderLimit
 
     private let defaults: UserDefaults
@@ -60,7 +60,7 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
-        static let trackingOnboardingComplete = "trackingOnboardingComplete.v3"
+        static let trackingOnboardingComplete = "trackingOnboardingComplete.v4"
         static let trackingOnboardingSchemaVersion = "trackingOnboardingSchemaVersion.v1"
         static let onboardingIntents = "onboardingIntents.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
@@ -93,17 +93,19 @@ final class PreferencesStore: ObservableObject {
         allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         let savedSchema = defaults.integer(forKey: Keys.trackingOnboardingSchemaVersion)
         let legacySeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
-        let completeV3 = defaults.bool(forKey: Keys.trackingOnboardingComplete)
+        let completeV4 = defaults.bool(forKey: Keys.trackingOnboardingComplete)
+            || defaults.bool(forKey: "trackingOnboardingComplete.v3")
             || defaults.bool(forKey: "trackingOnboardingComplete.v2")
         if savedSchema < Self.currentOnboardingSchemaVersion {
-            // Pre-desktop-connect onboarding — force one full re-run with empty allow-list.
+            // Pre-verified-desktop-connect — force one full re-run with empty allow-list.
             trackingOnboardingSeen = false
             allowedTrackingProviders = []
             defaults.set([], forKey: Keys.allowedTrackingProviders)
             defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+            defaults.set(false, forKey: "trackingOnboardingComplete.v3")
             defaults.set(false, forKey: "trackingOnboardingComplete.v2")
         } else {
-            trackingOnboardingSeen = completeV3 || (savedSchema >= Self.currentOnboardingSchemaVersion && legacySeen)
+            trackingOnboardingSeen = completeV4 || (savedSchema >= Self.currentOnboardingSchemaVersion && legacySeen)
         }
         let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
@@ -192,6 +194,7 @@ final class PreferencesStore: ObservableObject {
         allowedTrackingProviders = []
         defaults.set(false, forKey: Keys.trackingOnboardingSeen)
         defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+        defaults.set(false, forKey: "trackingOnboardingComplete.v3")
         defaults.set(false, forKey: "trackingOnboardingComplete.v2")
         defaults.set([], forKey: Keys.allowedTrackingProviders)
         NotificationCenter.default.post(

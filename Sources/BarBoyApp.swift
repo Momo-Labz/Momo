@@ -175,7 +175,7 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         case .thinking: next = .thinking
         case .listening: next = .listening
         default:
-            if voice.mode == .talk, voice.state == .listening || voice.state == .permission {
+            if voice.mode == .talk, voice.state == .listening || voice.state == .permission || voice.state == .starting {
                 next = .listening
             } else {
                 next = .idle

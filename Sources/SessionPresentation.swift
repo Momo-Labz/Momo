@@ -2,6 +2,8 @@ import Foundation
 
 /// Shared identity, ordering, and naming for every session surface.
 enum SessionPresentation {
+    static let maxChatsPerProvider = 3
+
     static func relevant(_ sessions: [AgentSession], limit: Int) -> [AgentSession] {
         guard limit > 0 else { return [] }
 
@@ -16,6 +18,19 @@ enum SessionPresentation {
         }
 
         return Array(unique.values.sorted(by: precedes).prefix(limit))
+    }
+
+    /// After provider grouping + stable recency sort, keep at most `limit` chats per provider.
+    static func topChatsPerProvider(
+        _ sessions: [AgentSession],
+        limit: Int = maxChatsPerProvider
+    ) -> [AgentSession] {
+        guard limit > 0 else { return [] }
+        let grouped = Dictionary(grouping: sessions, by: \.provider)
+        let providers = AIProvider.allCases.filter { grouped[$0] != nil }
+        return providers.flatMap { provider in
+            relevant(grouped[provider] ?? [], limit: limit)
+        }
     }
 
     static func title(for session: AgentSession) -> String {

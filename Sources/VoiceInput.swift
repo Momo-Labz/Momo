@@ -6,42 +6,84 @@ import SwiftUI
 @MainActor
 final class VoiceInput: ObservableObject {
     static let shared = VoiceInput()
-    enum State: String { case ready = "READY", permission = "ALLOW MICROPHONE", listening = "LISTENING", finished = "DRAFT READY", unavailable = "VOICE UNAVAILABLE" }
+    static let startTimeoutSeconds: TimeInterval = 20
+
+    enum State: String {
+        case ready = "READY"
+        case permission = "ALLOW MICROPHONE"
+        case starting = "STARTING"
+        case listening = "LISTENING"
+        case finished = "DRAFT READY"
+        case unavailable = "VOICE UNAVAILABLE"
+    }
+
     @Published private(set) var state: State = .ready
     @Published private(set) var text = ""
     @Published private(set) var level: Double = 0
     @Published private(set) var message = "Audio stays on this Mac. Nothing is sent to a provider."
     @Published private(set) var mode: ShortcutAction = .talk
-    private let engine = AVAudioEngine()
+
+    private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognition: SFSpeechRecognitionTask?
     private var timer: Timer?
+    private var startTimeoutTask: Task<Void, Never>?
     private var tapped = false
     private var generation = UUID()
     private var lastSpeech = Date()
     private var started = Date()
     private var destination: AgentSession?
     private var provider: AIProvider = .codex
+    private var startInFlight = false
+
     init() {}
 
-    var isActive: Bool { state == .listening || state == .permission }
+    /// Listening / permission / engine bring-up — blocks repeat Talk presses.
+    var isActive: Bool {
+        state == .listening || state == .permission || state == .starting
+    }
+
+    var isPendingStart: Bool { startInFlight || state == .permission || state == .starting }
 
     func prepare(_ mode: ShortcutAction) {
         // Do not cancel an in-flight system permission dialog — that causes re-prompts.
-        if state == .permission { return }
-        stop(); self.mode = mode; text = ""; state = .ready
-        destination = QuickAskContext.shared.session; provider = QuickAskContext.shared.provider
+        if state == .permission || state == .starting || startInFlight { return }
+        stop()
+        self.mode = mode
+        text = ""
+        state = .ready
+        destination = QuickAskContext.shared.session
+        provider = QuickAskContext.shared.provider
         message = "Audio stays on this Mac. Nothing is sent to a provider."
     }
+
     func start() async {
-        guard !isActive else { return }
-        let token = UUID(); generation = token
+        // Debounce: ignore repeat shortcut / mic taps while permission or start is pending.
+        guard !startInFlight, !isActive else { return }
+        startInFlight = true
+        defer { startInFlight = false }
+
+        let token = UUID()
+        generation = token
+        armStartTimeout(token: token)
+
         if let micBlock = VoicePermission.microphoneBlockReason() {
             fail(VoicePermission.settingsGuidance(for: micBlock))
             return
         }
+
         let needsMicPrompt = !VoicePermission.microphoneAuthorized()
-        if needsMicPrompt { state = .permission }
+        if needsMicPrompt {
+            state = .permission
+            message = "Waiting for Microphone access…"
+        } else {
+            state = .starting
+            message = "Starting microphone…"
+        }
+
+        // Yield so SwiftUI can paint permission/starting before the system sheet appears.
+        await Task.yield()
+
         let mic = await VoicePermission.requestMicrophoneIfNeeded()
         guard generation == token else { return }
         if let micBlock = VoicePermission.microphoneBlockReason() {
@@ -52,12 +94,21 @@ final class VoiceInput: ObservableObject {
             fail(VoicePermission.settingsGuidance(for: .microphoneDenied))
             return
         }
+
         if let speechBlock = VoicePermission.speechBlockReason() {
             fail(VoicePermission.settingsGuidance(for: speechBlock))
             return
         }
         let needsSpeechPrompt = SFSpeechRecognizer.authorizationStatus() == .notDetermined
-        if needsSpeechPrompt { state = .permission }
+        if needsSpeechPrompt {
+            state = .permission
+            message = "Waiting for Speech Recognition access…"
+            await Task.yield()
+        } else {
+            state = .starting
+            message = "Preparing on-device speech…"
+        }
+
         let speech = await VoicePermission.requestSpeechIfNeeded()
         guard generation == token else { return }
         if let speechBlock = VoicePermission.speechBlockReason() {
@@ -68,28 +119,41 @@ final class VoiceInput: ObservableObject {
             fail(VoicePermission.settingsGuidance(for: .speechDenied))
             return
         }
-        guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {
-            fail("On-device speech is unavailable for this Mac or language. Use typed input; no cloud fallback is used."); return
+
+        state = .starting
+        message = "Connecting microphone…"
+        await Task.yield()
+
+        let audio: AudioStartResult
+        do {
+            // AVAudioEngine inputNode / start can stall if done on MainActor after a permission grant.
+            audio = try await Self.installAudioPipeline(generation: token)
+        } catch {
+            fail("The microphone could not start. Check your audio input.")
+            return
         }
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true; request.requiresOnDeviceRecognition = true
-        self.request = request; text = ""
-        let input = engine.inputNode
-        let format = input.outputFormat(forBus: 0)
-        guard format.sampleRate > 0, format.channelCount > 0 else { fail("No microphone input is available."); return }
-        input.installTap(onBus: 0, bufferSize: 2048, format: format) { [weak self] buffer, _ in
-            request.append(buffer)
-            guard let channel = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
-            var energy: Float = 0
-            for i in 0..<Int(buffer.frameLength) { energy += channel[i] * channel[i] }
-            let amplitude = min(1, Double(sqrt(energy / Float(buffer.frameLength))) * 8)
-            Task { @MainActor [weak self] in
-                guard let self, self.generation == token else { return }
-                self.level = amplitude
-            }
+        guard generation == token else {
+            Self.teardownAudio(engine: audio.engine, tapped: true)
+            return
         }
+
+        engine = audio.engine
+        request = audio.request
         tapped = true
-        recognition = recognizer.recognitionTask(with: request) { [weak self] result, error in
+        text = ""
+
+        guard let recognizer = SFSpeechRecognizer(locale: .current),
+              recognizer.isAvailable,
+              recognizer.supportsOnDeviceRecognition else {
+            Self.teardownAudio(engine: audio.engine, tapped: true)
+            engine = nil
+            request = nil
+            tapped = false
+            fail("On-device speech is unavailable for this Mac or language. Use typed input; no cloud fallback is used.")
+            return
+        }
+
+        recognition = recognizer.recognitionTask(with: audio.request) { [weak self] result, error in
             Task { @MainActor [weak self] in
                 guard let self, self.generation == token else { return }
                 if let result {
@@ -97,53 +161,170 @@ final class VoiceInput: ObservableObject {
                     if self.text != recognized { self.lastSpeech = .now }
                     self.text = recognized
                     if self.mode == .handsFree, Self.hasDraftCommand(recognized) {
-                        self.text = Self.removingDraftCommand(recognized); self.stop(); self.useDraft(); return
+                        self.text = Self.removingDraftCommand(recognized)
+                        self.stop()
+                        self.useDraft()
+                        return
                     }
                     if self.mode == .handsFree, Self.hasStopCommand(recognized) {
-                        self.text = Self.removingStopCommand(recognized); self.stop(); return
+                        self.text = Self.removingStopCommand(recognized)
+                        self.stop()
+                        return
                     }
                     if result.isFinal { self.stop(); return }
                 }
-                if error != nil { self.fail("Recognition ended. Your partial draft is kept. Try again or type.") }
+                if error != nil {
+                    self.fail("Recognition ended. Your partial draft is kept. Try again or type.")
+                }
             }
         }
-        do { engine.prepare(); try engine.start() } catch { fail("The microphone could not start. Check your audio input."); return }
-        state = .listening; started = .now; lastSpeech = .now
-        message = mode == .handsFree ? "Say “MOMO stop” to finish or “MOMO use draft” to open your draft. Up to 55 seconds." : mode == .talk ? "Speak naturally. Silence sends your question to MOMO." : "Press Stop or your shortcut again to finish."
+
+        clearStartTimeout()
+        state = .listening
+        started = .now
+        lastSpeech = .now
+        message = mode == .handsFree
+            ? "Say “MOMO stop” to finish or “MOMO use draft” to open your draft. Up to 55 seconds."
+            : mode == .talk
+                ? "Speak naturally. Silence sends your question to MOMO."
+                : "Press Stop or your shortcut again to finish."
         MomoFeedback.listenStart()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.state == .listening else { return }
-                if Date().timeIntervalSince(self.started) >= 55 || (self.mode == .talk && !self.text.isEmpty && Date().timeIntervalSince(self.lastSpeech) >= 2) { self.stop() }
+                if Date().timeIntervalSince(self.started) >= 55
+                    || (self.mode == .talk && !self.text.isEmpty && Date().timeIntervalSince(self.lastSpeech) >= 2) {
+                    self.stop()
+                }
             }
         }
     }
+
     func stop() {
         let wasActive = isActive
-        generation = UUID(); timer?.invalidate(); timer = nil
-        engine.stop()
-        if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
-        request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil; level = 0
+        clearStartTimeout()
+        generation = UUID()
+        timer?.invalidate()
+        timer = nil
+        recognition?.cancel()
+        recognition = nil
+        request?.endAudio()
+        request = nil
+        if let engine {
+            Self.teardownAudio(engine: engine, tapped: tapped)
+        }
+        engine = nil
+        tapped = false
+        level = 0
+        startInFlight = false
         if wasActive {
             state = text.isEmpty ? .ready : .finished
-            message = text.isEmpty ? "No speech captured. Try again or type." : (mode == .talk ? "Sending to MOMO…" : "Review your words, then use them in your draft.")
+            message = text.isEmpty
+                ? "No speech captured. Try again or type."
+                : (mode == .talk ? "Sending to MOMO…" : "Review your words, then use them in your draft.")
             MomoFeedback.listenEnd()
         }
     }
-    private func fail(_ reason: String) { stop(); state = .unavailable; message = reason }
+
+    private func fail(_ reason: String) {
+        clearStartTimeout()
+        let keepMessage = reason
+        stop()
+        state = .unavailable
+        message = keepMessage
+    }
+
+    private func armStartTimeout(token: UUID) {
+        clearStartTimeout()
+        startTimeoutTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(Self.startTimeoutSeconds))
+            guard let self, !Task.isCancelled, self.generation == token else { return }
+            guard self.state == .permission || self.state == .starting else { return }
+            self.fail("Talk timed out while starting the microphone. Try again, or type your question.")
+        }
+    }
+
+    private func clearStartTimeout() {
+        startTimeoutTask?.cancel()
+        startTimeoutTask = nil
+    }
+
+    private struct AudioStartResult {
+        let engine: AVAudioEngine
+        let request: SFSpeechAudioBufferRecognitionRequest
+    }
+
+    /// Build + start AVAudioEngine off the main actor to avoid UI freezes after permission grants.
+    private nonisolated static func installAudioPipeline(generation: UUID) async throws -> AudioStartResult {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AudioStartResult, Error>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let engine = AVAudioEngine()
+                    let request = SFSpeechAudioBufferRecognitionRequest()
+                    request.shouldReportPartialResults = true
+                    request.requiresOnDeviceRecognition = true
+                    let input = engine.inputNode
+                    let format = input.outputFormat(forBus: 0)
+                    guard format.sampleRate > 0, format.channelCount > 0 else {
+                        throw AudioPipelineError.noInput
+                    }
+                    input.installTap(onBus: 0, bufferSize: 2048, format: format) { buffer, _ in
+                        request.append(buffer)
+                        guard let channel = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
+                        var energy: Float = 0
+                        for i in 0..<Int(buffer.frameLength) { energy += channel[i] * channel[i] }
+                        let amplitude = min(1, Double(sqrt(energy / Float(buffer.frameLength))) * 8)
+                        Task { @MainActor in
+                            let voice = VoiceInput.shared
+                            guard voice.generation == generation else { return }
+                            voice.level = amplitude
+                        }
+                    }
+                    engine.prepare()
+                    try engine.start()
+                    continuation.resume(returning: AudioStartResult(engine: engine, request: request))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private nonisolated static func teardownAudio(engine: AVAudioEngine, tapped: Bool) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            engine.stop()
+            if tapped { engine.inputNode.removeTap(onBus: 0) }
+        }
+    }
+
+    private enum AudioPipelineError: Error { case noInput }
+
     func useDraft() {
         stop()
         if let destination { QuickAskContext.shared.select(destination) }
         else { QuickAskContext.shared.newChat(); QuickAskContext.shared.provider = provider }
         let existing = QuickAskContext.shared.draft
         QuickAskContext.shared.draft = existing + (existing.isEmpty || text.isEmpty ? "" : "\n") + text
-        text = ""; state = .ready; message = "Added to your draft. The microphone is off."
+        text = ""
+        state = .ready
+        message = "Added to your draft. The microphone is off."
         NotificationCenter.default.post(name: .showCommandPalette, object: nil)
     }
-    static func hasDraftCommand(_ text: String) -> Bool { text.range(of: #"\bmomo\s+use\s+draft[.!?]*\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil }
-    static func removingDraftCommand(_ text: String) -> String { text.replacingOccurrences(of: #"\bmomo\s+use\s+draft[.!?]*\s*$"#, with: "", options: [.regularExpression, .caseInsensitive]).trimmingCharacters(in: .whitespacesAndNewlines) }
-    static func hasStopCommand(_ text: String) -> Bool { text.range(of: #"\bmomo\s+stop[.!?]*\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil }
-    static func removingStopCommand(_ text: String) -> String { text.replacingOccurrences(of: #"\bmomo\s+stop[.!?]*\s*$"#, with: "", options: [.regularExpression, .caseInsensitive]).trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    static func hasDraftCommand(_ text: String) -> Bool {
+        text.range(of: #"\bmomo\s+use\s+draft[.!?]*\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    static func removingDraftCommand(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\bmomo\s+use\s+draft[.!?]*\s*$"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    static func hasStopCommand(_ text: String) -> Bool {
+        text.range(of: #"\bmomo\s+stop[.!?]*\s*$"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+    static func removingStopCommand(_ text: String) -> String {
+        text.replacingOccurrences(of: #"\bmomo\s+stop[.!?]*\s*$"#, with: "", options: [.regularExpression, .caseInsensitive])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 }
 
 @MainActor
@@ -181,7 +362,6 @@ enum MomoFeedback {
 }
 
 struct VoicePopup: View {
-    /// Rendered inside the MOMO window rather than a window of its own.
     var embedded = false
 
     private func leave() {
