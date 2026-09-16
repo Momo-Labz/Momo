@@ -159,12 +159,8 @@ struct TrackingDashboardView: View {
             loading = false
             if preferences.needsTrackingOnboarding {
                 surface.expanded = true
-                // Resume mid-flow after TCC quit/relaunch instead of dumping to Welcome.
-                if let resumed = preferences.resumedOnboardingStep() {
-                    onboardingStartStep = resumed
-                } else {
-                    onboardingStartStep = .welcome
-                }
+                // Resume mid-flow after TCC quit/relaunch; schema upgrade clears stale resume → Welcome.
+                onboardingStartStep = preferences.resumedOnboardingStep() ?? .welcome
                 showOnboarding = true
             }
         }

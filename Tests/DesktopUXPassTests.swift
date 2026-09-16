@@ -125,18 +125,19 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(mapped.weekly.percentage, 44)
     }
 
-    func testOnboardingSchemaIsV6ForForcedConnect() {
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 6)
-        let suite = UserDefaults(suiteName: "MomoSchemaV6UX.\(UUID().uuidString)")!
+    func testOnboardingSchemaIsV7ForForcedConnect() {
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 7)
+        let suite = UserDefaults(suiteName: "MomoSchemaV7UX.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(5, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v5")
+        suite.set(6, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v6")
+        suite.set(true, forKey: "onboardingMigration.v6")
         suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
-        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v7"))
     }
 
     func testConnectUsageHonestyReportsFoundMissingAndBlocked() {

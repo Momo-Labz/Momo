@@ -1,8 +1,18 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-16 (honest CLI/file usage + Settings deep-links + onboarding resume + interval refresh)
+Updated: 2026-09-16 (schema v7 forces Welcome again + usage/CLI + Settings deep-links + TCC resume)
 
-Branch `cursor/usage-cli-onboarding-resume-02e3` off `main` after PR #5 merge `6d816e9`.
+Branch `cursor/usage-cli-onboarding-resume-02e3` / PR #6 off `main` after PR #5 (`6d816e9`).
+
+## P0 — Onboarding skip regression (schema v7)
+
+**Cause:** PR #5 wrote `trackingOnboardingSchemaVersion=6` + `onboardingMigration.v6=true`. A broken/skipped grok9–10 run could also leave `trackingOnboardingComplete.v6` + a non-empty allow-list. This branch’s gate treated that as finished (`needsTrackingOnboarding == false`) and opened the main UI with no Welcome.
+
+**Fix:** Schema **v7** + one-time `onboardingMigration.v7` clears allow-list, completion flags (v2…v7), and stale resume keys, then forces Welcome → intents → connect. No Terminal `defaults delete`.
+
+**Resume preserved:** After v7 is applied, genuine mid-flow TCC checkpoints (`onboardingResumeStep.v1` while `trackingOnboardingSeen == false`) still restore the unfinished step — never used to skip a forced Welcome upgrade.
+
+Settings → **Replay onboarding** remains the retest path.
 
 ## P0 — Usage sources that match the apps (no invented %)
 
@@ -17,54 +27,30 @@ MOMO never scrapes WebKit / cookies and never invents percentages. Empty provide
 
 ### CLI commands (read-only, timeout off-main)
 
-Documented probes in `ProviderCLIUsageProbe`:
-
 ```sh
-# Preferred Claude helper when installed (writes/prints OAuth windows)
 ccusage json
-
-# Detected for messaging / next steps (not required to invent %)
 which claude
 which codex
 which cursor
 which grok
 ```
 
-`LocalUsageArtifactReader.probeDetail(for:)` = local files first, then optional `ccusage json`. Connect honesty uses the same probe.
-
 ## P0 — Settings deep-link buttons
 
-`SystemSettingsDeepLink`:
-
-- **Open Microphone Settings** → `x-apple.systempreferences:…Privacy_Microphone`
-- **Open Notifications Settings** → Notifications pane for MOMO bundle id
-- Also Speech / FDA helpers
-
-Used in Talk panel (mic off), onboarding Talk + Notifications steps, Settings → Notifications.
+`SystemSettingsDeepLink`: Microphone, Notifications (MOMO bundle), Speech, FDA.
 
 ## P0 — Survive TCC quit/relaunch mid-onboarding
 
-`PreferencesStore.saveOnboardingProgress` persists:
+Checkpoint: step + partial allow-list + pending provider. Cleared on Finish / Replay / schema upgrade wipe.
 
-- `onboardingResumeStep.v1`
-- `onboardingPartialAllowed.v1`
-- `onboardingPendingProvider.v1`
-- intents
+## P1 — Minute refresh
 
-Relaunch resumes the same step + partial allow-list (not empty TRACKR / Welcome from scratch). Cleared on Finish / Replay.
-
-## P1 — Minute refresh that runs
-
-- Timer tick every `min(60, interval)`; refresh when age ≥ prefs interval (1/5/10/30 min)
-- Settings picker can change interval and calls `rescheduleRefreshTimer()`
-- Usage tab shows **Updated …** from `ActivityMonitor.lastUpdated`
-
-## Preserve
-
-Live connect status UI, no MainActor hang, schema v6 migration, four tabs, Claude Code–style Usage layout, no WebKit scrape.
+Honors 1/5/10/30 min prefs; Usage tab shows last-updated.
 
 Mac verify:
 
 ```sh
 xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' test CODE_SIGNING_ALLOWED=NO
 ```
+
+Manual: upgrade from grok10/PR#5 install (even with prior complete flags) → Welcome without `defaults delete`; mid-flow Allow that relaunches → same unfinished step; Finish once → next launch stays on main UI.

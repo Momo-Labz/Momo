@@ -45,13 +45,17 @@ final class PreferencesStore: ObservableObject {
 
     /// Incomplete installs always force Welcome → intents → verified connect.
     /// Empty allow-list never counts as finished, even if a legacy complete flag is set.
-    /// Mid-flow TCC relaunch resumes via `onboardingResumeStep` when progress was persisted.
+    /// Mid-flow TCC relaunch resumes via `onboardingResumeStep` when progress was persisted
+    /// **and** onboarding is still incomplete — resume never skips a forced Welcome upgrade.
     var needsTrackingOnboarding: Bool {
         !trackingOnboardingSeen || allowedTrackingProviders.isEmpty
     }
 
-    /// Bump when onboarding source changes (v6 = upgrade forces Welcome→connect; empty allow-list never completes).
-    static let currentOnboardingSchemaVersion = 6
+    /// Bump when onboarding source changes.
+    /// v6 = first force Welcome without Terminal wipe.
+    /// v7 = re-force Welcome for installs that already wrote schema v6 complete from a broken/skipped run
+    ///      (migration.v6 alone must not keep skipping Welcome).
+    static let currentOnboardingSchemaVersion = 7
     static let freeProviderLimit = DesktopAppCatalog.freeProviderLimit
 
     private let defaults: UserDefaults
@@ -65,10 +69,12 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
-        static let trackingOnboardingComplete = "trackingOnboardingComplete.v6"
+        static let trackingOnboardingComplete = "trackingOnboardingComplete.v7"
         static let trackingOnboardingSchemaVersion = "trackingOnboardingSchemaVersion.v1"
-        /// One-time flag set on first launch of the v6 build (upgrade path without Terminal wipe).
+        /// Legacy one-time v6 wipe (kept so we can detect “already on v6” upgrades).
         static let onboardingMigrationV6 = "onboardingMigration.v6"
+        /// One-time flag for the v7 Welcome re-force (no Terminal wipe).
+        static let onboardingMigrationV7 = "onboardingMigration.v7"
         static let onboardingIntents = "onboardingIntents.v1"
         /// Persisted mid-flow step so TCC quit/relaunch resumes (not Welcome from scratch).
         static let onboardingResumeStep = "onboardingResumeStep.v1"
@@ -107,29 +113,35 @@ final class PreferencesStore: ObservableObject {
         let completeCurrent = defaults.bool(forKey: Keys.trackingOnboardingComplete)
         let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
 
-        let migrationApplied = defaults.bool(forKey: Keys.onboardingMigrationV6)
+        let migrationV7Applied = defaults.bool(forKey: Keys.onboardingMigrationV7)
         let resolvedAllowed: Set<AIProvider>
         let resolvedSeen: Bool
-        if savedSchema < Self.currentOnboardingSchemaVersion || !migrationApplied {
+        if savedSchema < Self.currentOnboardingSchemaVersion || !migrationV7Applied {
             // Upgrade / first run of this build: force Welcome → connect without Terminal wipe.
-            // Missing/legacy schema keys and incomplete allow-lists are treated as incomplete.
+            // Covers grok10/PR#5 installs that already wrote schema v6 + complete + allow-list
+            // from a broken/skipped run — migration.v6 alone must not keep skipping Welcome.
             Self.clearOnboardingFlags(in: defaults)
             defaults.set([], forKey: Keys.allowedTrackingProviders)
-            defaults.removeObject(forKey: Keys.onboardingResumeStep)
-            defaults.removeObject(forKey: Keys.onboardingPendingProvider)
-            defaults.removeObject(forKey: Keys.onboardingPartialAllowed)
+            Self.clearOnboardingProgressKeys(in: defaults)
             defaults.set(true, forKey: Keys.onboardingMigrationV6)
+            defaults.set(true, forKey: Keys.onboardingMigrationV7)
             defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
             resolvedAllowed = []
             resolvedSeen = false
         } else if parsedAllowed.isEmpty {
             // Schema current but no verified providers — never treat as finished.
             Self.clearOnboardingFlags(in: defaults)
+            // Keep mid-flow resume keys so TCC relaunch can restore step when allow-list is still empty.
             resolvedAllowed = []
             resolvedSeen = false
-        } else {
+        } else if completeCurrent || legacySeen {
+            // Genuine finish after this build’s Finish path (v7 complete and/or seen).
             resolvedAllowed = parsedAllowed
-            resolvedSeen = completeCurrent || legacySeen
+            resolvedSeen = true
+        } else {
+            // Providers on the strip mid-flow, but Finish never ran — still needs onboarding.
+            resolvedAllowed = parsedAllowed
+            resolvedSeen = false
         }
 
         allowedTrackingProviders = resolvedAllowed
@@ -137,15 +149,22 @@ final class PreferencesStore: ObservableObject {
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
     }
 
-    /// Clears every known onboarding completion key (v2…v6) plus the seen flag.
+    /// Clears every known onboarding completion key (v2…v7) plus the seen flag.
     static func clearOnboardingFlags(in defaults: UserDefaults) {
         defaults.set(false, forKey: Keys.trackingOnboardingSeen)
         defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+        defaults.set(false, forKey: "trackingOnboardingComplete.v7")
         defaults.set(false, forKey: "trackingOnboardingComplete.v6")
         defaults.set(false, forKey: "trackingOnboardingComplete.v5")
         defaults.set(false, forKey: "trackingOnboardingComplete.v4")
         defaults.set(false, forKey: "trackingOnboardingComplete.v3")
         defaults.set(false, forKey: "trackingOnboardingComplete.v2")
+    }
+
+    static func clearOnboardingProgressKeys(in defaults: UserDefaults) {
+        defaults.removeObject(forKey: Keys.onboardingResumeStep)
+        defaults.removeObject(forKey: Keys.onboardingPendingProvider)
+        defaults.removeObject(forKey: Keys.onboardingPartialAllowed)
     }
 
     func setLabel(name: String, folder: String, for session: AgentSession) {
@@ -233,6 +252,7 @@ final class PreferencesStore: ObservableObject {
         defaults.set(true, forKey: Keys.trackingOnboardingComplete)
         defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
         defaults.set(true, forKey: Keys.onboardingMigrationV6)
+        defaults.set(true, forKey: Keys.onboardingMigrationV7)
         clearOnboardingProgress()
     }
 
@@ -263,18 +283,19 @@ final class PreferencesStore: ObservableObject {
     }
 
     func clearOnboardingProgress() {
-        defaults.removeObject(forKey: Keys.onboardingResumeStep)
-        defaults.removeObject(forKey: Keys.onboardingPendingProvider)
-        defaults.removeObject(forKey: Keys.onboardingPartialAllowed)
+        Self.clearOnboardingProgressKeys(in: defaults)
     }
 
-    /// Step to resume after relaunch. Nil when no in-progress checkpoint exists.
+    /// Step to resume after relaunch. Nil when finished, or when no in-progress checkpoint exists.
+    /// Never used to skip a forced Welcome — callers only resume while `needsTrackingOnboarding`.
     func resumedOnboardingStep() -> TrackingOnboardingStep? {
+        guard !trackingOnboardingSeen else { return nil }
         guard defaults.object(forKey: Keys.onboardingResumeStep) != nil else { return nil }
         return TrackingOnboardingStep(rawValue: defaults.integer(forKey: Keys.onboardingResumeStep))
     }
 
     func resumedOnboardingPartialAllowed() -> Set<AIProvider> {
+        guard !trackingOnboardingSeen else { return [] }
         let saved = defaults.stringArray(forKey: Keys.onboardingPartialAllowed) ?? []
         let parsed = Set(saved.compactMap(AIProvider.init(rawValue:)))
         if !parsed.isEmpty { return parsed }
@@ -282,7 +303,8 @@ final class PreferencesStore: ObservableObject {
     }
 
     func resumedOnboardingPendingProvider() -> AIProvider? {
-        defaults.string(forKey: Keys.onboardingPendingProvider).flatMap(AIProvider.init(rawValue:))
+        guard !trackingOnboardingSeen else { return nil }
+        return defaults.string(forKey: Keys.onboardingPendingProvider).flatMap(AIProvider.init(rawValue:))
     }
 
     /// Tester/Settings path: clear the first-run gate so Welcome shows again.
@@ -293,8 +315,9 @@ final class PreferencesStore: ObservableObject {
         Self.clearOnboardingFlags(in: defaults)
         defaults.set([], forKey: Keys.allowedTrackingProviders)
         clearOnboardingProgress()
-        // Keep migration flag so Replay does not fight the one-time upgrade wipe.
+        // Keep migration flags so Replay does not fight the one-time upgrade wipe.
         defaults.set(true, forKey: Keys.onboardingMigrationV6)
+        defaults.set(true, forKey: Keys.onboardingMigrationV7)
         defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
         NotificationCenter.default.post(
             name: .momoShowProviderChooser,
