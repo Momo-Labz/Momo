@@ -202,6 +202,12 @@ struct TrackingDashboardView: View {
     }
 
     private func finishOnboarding(intents: Set<OnboardingIntent>, allowed: Set<AIProvider>) {
+        // Never complete onboarding without ≥1 verified provider.
+        guard !allowed.isEmpty else {
+            showOnboarding = true
+            onboardingStartStep = .connectProviders
+            return
+        }
         preferences.setOnboardingIntents(intents)
         preferences.syncRefreshIntervalFromDefaults()
         for provider in allowed {
@@ -213,6 +219,11 @@ struct TrackingDashboardView: View {
             )
         }
         preferences.setAllowedTrackingProviders(allowed, markOnboardingSeen: true)
+        guard !preferences.needsTrackingOnboarding else {
+            showOnboarding = true
+            onboardingStartStep = .connectProviders
+            return
+        }
         monitor.setAuthorizedProviders(preferences.enabledProviders)
         monitor.refresh()
         showOnboarding = false
@@ -469,7 +480,7 @@ struct TrackingDashboardView: View {
         }
     }
 
-    /// Local-only usage tab: per-provider 5HR/W meters + top-3 chats. No WebKit scrape.
+    /// Local-only usage tab: Claude Code `/usage`-shaped meters. No chat list (Activity owns chats).
     private var usage: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 12) {
@@ -478,83 +489,27 @@ struct TrackingDashboardView: View {
                     Spacer()
                     Text("LOCAL ONLY").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
                 }
-                Text("5HR and W meters come from desktop-local quota files when present. Empty bars mean no readable local usage — never invented.")
+                Text("Approximate, based on local sessions and quota caches on this Mac — never invented. Empty bars mean no readable local usage.")
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if railSnapshots.isEmpty {
-                    Text("Connect a desktop app to see local usage meters.")
+                    Text("Connect a desktop app to see local usage.")
                         .font(BarBoyStyle.bodySmall)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 12)
                 } else {
                     ForEach(railSnapshots) { snapshot in
-                        usageProviderBlock(snapshot)
+                        ClaudeStyleUsageBlock(
+                            snapshot: snapshot,
+                            observations: monitor.usageObservations.filter { $0.provider == snapshot.provider }
+                        )
                     }
                 }
             }
             .padding(12)
         }
-    }
-
-    private func usageProviderBlock(_ snapshot: ProviderSnapshot) -> some View {
-        let windows = UsagePeekMapping.map(
-            observations: monitor.usageObservations.filter { $0.provider == snapshot.provider },
-            snapshot: snapshot
-        )
-        let chats = SessionPresentation.topChatsPerProvider(
-            snapshot.sessions,
-            limit: SessionPresentation.maxChatsPerProvider
-        )
-        let privacyBlocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(snapshot.provider)
-        let hasMeters = windows.fiveHour.percentage != nil || windows.weekly.percentage != nil
-        return VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                ProviderMark(provider: snapshot.provider, size: 22, active: snapshot.activeCount > 0)
-                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel)
-                Spacer(minLength: 0)
-                Text(snapshot.activeCount > 0 ? "LIVE" : (snapshot.isInstalled ? "IDLE" : "—"))
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-            }
-            DualUsageMeters(fiveHour: windows.fiveHour, weekly: windows.weekly, compact: false)
-            if !hasMeters {
-                if privacyBlocked {
-                    Text(LocalUsageArtifactReader.privacyGuidance(for: snapshot.provider))
-                        .font(BarBoyStyle.microLabel)
-                        .foregroundStyle(BarBoyStyle.coral)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Open Privacy Settings") {
-                        LocalUsageArtifactReader.openPrivacySettings()
-                    }
-                    .barBoyButton()
-                } else if snapshot.provider == .claude || snapshot.provider == .cursor {
-                    Text(snapshot.provider == .claude
-                          ? "No local Claude usage cache yet (statusline/OAuth cache under ~/.claude or /tmp/claude). Bars appear when that file exists — MOMO does not invent %."
-                          : "Cursor does not expose account % in transcripts. Bars appear only if a local usage-cache.json is present.")
-                        .font(BarBoyStyle.microLabel)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            if !chats.isEmpty {
-                Text("TOP CHATS").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
-                ForEach(chats) { session in
-                    Button { surface.openSession(session) } label: {
-                        TrackingSessionRow(session: session)
-                    }
-                    .buttonStyle(.plain)
-                }
-            } else {
-                Text("No recent chats for \(snapshot.provider.name).")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(12)
-        .background(BarBoyStyle.surface)
-        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 
     private var upgrade: some View {
@@ -684,6 +639,183 @@ private struct ProviderCard: View {
         .buttonStyle(.plain)
         .frame(width: width)
         .accessibilityLabel("\(snapshot.provider.name), \(statusLine)")
+    }
+}
+
+/// Claude Code `/usage`-inspired layout for one connected provider. No activity chat list.
+private struct ClaudeStyleUsageBlock: View {
+    let snapshot: ProviderSnapshot
+    let observations: [ProviderUsageObservation]
+    var now: Date = .now
+
+    private var artifact: LocalUsageDetail {
+        LocalUsageArtifactReader.detail(for: snapshot.provider, now: now)
+    }
+
+    private var mapped: (fiveHour: UsagePeekMetric, weekly: UsagePeekMetric) {
+        let base = UsagePeekMapping.map(observations: observations, snapshot: snapshot, now: now)
+        let five: UsagePeekMetric
+        if let window = artifact.fiveHour {
+            five = UsagePeekMetric(percentage: Int(window.percent.rounded()), resetsAt: window.resetsAt)
+        } else {
+            five = base.fiveHour
+        }
+        let weekly: UsagePeekMetric
+        if let window = artifact.weekly {
+            weekly = UsagePeekMetric(percentage: Int(window.percent.rounded()), resetsAt: window.resetsAt)
+        } else {
+            weekly = base.weekly
+        }
+        return (five, weekly)
+    }
+
+    private var privacyBlocked: Bool {
+        LocalUsageArtifactReader.isSessionRootPrivacyBlocked(snapshot.provider)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                ProviderMark(provider: snapshot.provider, size: 22, active: snapshot.activeCount > 0)
+                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel)
+                Spacer(minLength: 0)
+                Text(snapshot.activeCount > 0 ? "LIVE" : (snapshot.isInstalled ? "IDLE" : "—"))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+
+            if artifact.hasSessionStats {
+                sessionStatsSection
+            }
+
+            limitSection(
+                title: "Current session",
+                subtitle: "5-hour window when recorded",
+                metric: mapped.fiveHour
+            )
+            limitSection(
+                title: "Current week",
+                subtitle: "All models when recorded",
+                metric: mapped.weekly
+            )
+
+            if mapped.fiveHour.percentage == nil, mapped.weekly.percentage == nil, !artifact.hasSessionStats {
+                if privacyBlocked {
+                    Text(LocalUsageArtifactReader.privacyGuidance(for: snapshot.provider))
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(BarBoyStyle.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Open Privacy Settings") {
+                        LocalUsageArtifactReader.openPrivacySettings()
+                    }
+                    .barBoyButton()
+                } else {
+                    Text(emptyGuidance)
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Text("What’s contributing to your limits usage?")
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(.secondary)
+            Text("Approximate, based on local sessions on this machine — does not include usage from other devices.")
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var emptyGuidance: String {
+        switch snapshot.provider {
+        case .claude:
+            return "No readable Claude usage cache yet (~/.claude or /tmp/claude statusline cache). Bars and resets appear when that file exists."
+        case .cursor:
+            return "Cursor transcripts do not expose account %. Bars appear only if a local usage-cache.json is present."
+        case .codex:
+            return "No recorded Codex rate_limits in recent local sessions yet."
+        default:
+            return "No readable local usage for \(snapshot.provider.name)."
+        }
+    }
+
+    @ViewBuilder
+    private var sessionStatsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Session").font(BarBoyStyle.sectionLabel)
+            if let cost = artifact.totalCostUSD {
+                statRow("Total cost", String(format: "$%.4f", cost))
+            }
+            if let api = artifact.durationAPISeconds {
+                statRow("Total duration (API)", formatDuration(api))
+            }
+            if let wall = artifact.durationWallSeconds {
+                statRow("Total duration (wall)", formatDuration(wall))
+            }
+            if artifact.linesAdded != nil || artifact.linesRemoved != nil {
+                let added = artifact.linesAdded.map(String.init) ?? "—"
+                let removed = artifact.linesRemoved.map(String.init) ?? "—"
+                statRow("Total code changes", "\(added) lines added, \(removed) lines removed")
+            }
+            if artifact.inputTokens != nil || artifact.outputTokens != nil
+                || artifact.cacheReadTokens != nil || artifact.cacheWriteTokens != nil {
+                Text("Usage").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                if let v = artifact.inputTokens { statRow("input", "\(v) tokens") }
+                if let v = artifact.outputTokens { statRow("output", "\(v) tokens") }
+                if let v = artifact.cacheReadTokens { statRow("cache read", "\(v) tokens") }
+                if let v = artifact.cacheWriteTokens { statRow("cache write", "\(v) tokens") }
+            }
+        }
+    }
+
+    private func limitSection(title: String, subtitle: String, metric: UsagePeekMetric) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title).font(BarBoyStyle.sectionLabel)
+                Spacer(minLength: 8)
+                Text(metric.percentage.map { "\($0)% used" } ?? "— used")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Text(subtitle)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(.secondary)
+            UsageMeter(percent: metric.percentage, alert: (metric.percentage ?? 0) >= 100, height: 10)
+            if let reset = LocalUsageArtifactReader.resetCaption(metric.resetsAt, now: now) {
+                Text(reset)
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func statRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label)
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(BarBoyStyle.bodySmall)
+                .monospacedDigit()
+        }
+    }
+
+    private func formatDuration(_ seconds: Double) -> String {
+        if seconds < 60 { return "\(Int(seconds.rounded()))s" }
+        if seconds < 3600 {
+            let m = Int(seconds / 60)
+            let s = Int(seconds.truncatingRemainder(dividingBy: 60))
+            return s == 0 ? "\(m)m" : "\(m)m \(s)s"
+        }
+        let h = Int(seconds / 3600)
+        let m = Int((seconds.truncatingRemainder(dividingBy: 3600)) / 60)
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
     }
 }
 

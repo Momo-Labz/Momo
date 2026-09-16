@@ -311,6 +311,7 @@ struct TrackingOnboardingView: View {
             }
 
             Button("Skip for now") {
+                guard !allowed.isEmpty else { return }
                 onFinish(intents, allowed)
             }
             .font(BarBoyStyle.navLabel)
@@ -319,8 +320,10 @@ struct TrackingOnboardingView: View {
             .background(BarBoyStyle.surface)
             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
             .buttonStyle(.plain)
+            .disabled(allowed.isEmpty)
 
             primaryButton("Finish setup") {
+                guard !allowed.isEmpty else { return }
                 onFinish(intents, allowed)
             }
         }

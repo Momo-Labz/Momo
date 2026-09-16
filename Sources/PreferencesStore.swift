@@ -42,11 +42,15 @@ final class PreferencesStore: ObservableObject {
     /// First-run intents that emphasize Usage vs Brain tips without inventing features.
     @Published private(set) var onboardingIntents: Set<OnboardingIntent>
     @Published private(set) var localProviderRoots: [AIProvider: [String]]
-    /// True until the current onboarding schema finishes (Welcome → prefs → Talk trial).
-    var needsTrackingOnboarding: Bool { !trackingOnboardingSeen }
 
-    /// Bump when onboarding source changes (v4 = verified desktop connection before continue).
-    static let currentOnboardingSchemaVersion = 4
+    /// Incomplete installs always force Welcome → intents → verified connect.
+    /// Empty allow-list never counts as finished, even if a legacy complete flag is set.
+    var needsTrackingOnboarding: Bool {
+        !trackingOnboardingSeen || allowedTrackingProviders.isEmpty
+    }
+
+    /// Bump when onboarding source changes (v5 = force re-run; empty allow-list never completes).
+    static let currentOnboardingSchemaVersion = 5
     static let freeProviderLimit = DesktopAppCatalog.freeProviderLimit
 
     private let defaults: UserDefaults
@@ -60,7 +64,7 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
-        static let trackingOnboardingComplete = "trackingOnboardingComplete.v4"
+        static let trackingOnboardingComplete = "trackingOnboardingComplete.v5"
         static let trackingOnboardingSchemaVersion = "trackingOnboardingSchemaVersion.v1"
         static let onboardingIntents = "onboardingIntents.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
@@ -93,22 +97,33 @@ final class PreferencesStore: ObservableObject {
         allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         let savedSchema = defaults.integer(forKey: Keys.trackingOnboardingSchemaVersion)
         let legacySeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
-        let completeV4 = defaults.bool(forKey: Keys.trackingOnboardingComplete)
-            || defaults.bool(forKey: "trackingOnboardingComplete.v3")
-            || defaults.bool(forKey: "trackingOnboardingComplete.v2")
+        let completeCurrent = defaults.bool(forKey: Keys.trackingOnboardingComplete)
+
         if savedSchema < Self.currentOnboardingSchemaVersion {
-            // Pre-verified-desktop-connect — force one full re-run with empty allow-list.
+            // Force full Welcome → intents → empty providers → verified desktop connect.
+            Self.clearOnboardingFlags(in: defaults)
             trackingOnboardingSeen = false
             allowedTrackingProviders = []
             defaults.set([], forKey: Keys.allowedTrackingProviders)
-            defaults.set(false, forKey: Keys.trackingOnboardingComplete)
-            defaults.set(false, forKey: "trackingOnboardingComplete.v3")
-            defaults.set(false, forKey: "trackingOnboardingComplete.v2")
+        } else if allowedTrackingProviders.isEmpty {
+            // Schema current but no verified providers — never treat as finished.
+            trackingOnboardingSeen = false
+            Self.clearOnboardingFlags(in: defaults)
         } else {
-            trackingOnboardingSeen = completeV4 || (savedSchema >= Self.currentOnboardingSchemaVersion && legacySeen)
+            trackingOnboardingSeen = completeCurrent || legacySeen
         }
         let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
+    }
+
+    /// Clears every known onboarding completion key (v2…v5) plus the seen flag.
+    static func clearOnboardingFlags(in defaults: UserDefaults) {
+        defaults.set(false, forKey: Keys.trackingOnboardingSeen)
+        defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+        defaults.set(false, forKey: "trackingOnboardingComplete.v5")
+        defaults.set(false, forKey: "trackingOnboardingComplete.v4")
+        defaults.set(false, forKey: "trackingOnboardingComplete.v3")
+        defaults.set(false, forKey: "trackingOnboardingComplete.v2")
     }
 
     func setLabel(name: String, folder: String, for session: AgentSession) {
@@ -167,6 +182,10 @@ final class PreferencesStore: ObservableObject {
     func setTrackingAllowed(_ allowed: Bool, for provider: AIProvider) {
         if allowed { allowedTrackingProviders.insert(provider) } else { allowedTrackingProviders.remove(provider) }
         defaults.set(allowedTrackingProviders.map(\.rawValue).sorted(), forKey: Keys.allowedTrackingProviders)
+        if allowedTrackingProviders.isEmpty {
+            trackingOnboardingSeen = false
+            Self.clearOnboardingFlags(in: defaults)
+        }
     }
 
     func setAllowedTrackingProviders(_ providers: Set<AIProvider>, markOnboardingSeen: Bool = true) {
@@ -174,10 +193,19 @@ final class PreferencesStore: ObservableObject {
         defaults.set(providers.map(\.rawValue).sorted(), forKey: Keys.allowedTrackingProviders)
         if markOnboardingSeen {
             markTrackingOnboardingSeen()
+        } else if providers.isEmpty {
+            trackingOnboardingSeen = false
+            Self.clearOnboardingFlags(in: defaults)
         }
     }
 
+    /// Completes onboarding only when ≥1 provider is on the allow-list.
     func markTrackingOnboardingSeen() {
+        guard !allowedTrackingProviders.isEmpty else {
+            trackingOnboardingSeen = false
+            Self.clearOnboardingFlags(in: defaults)
+            return
+        }
         trackingOnboardingSeen = true
         defaults.set(true, forKey: Keys.trackingOnboardingSeen)
         defaults.set(true, forKey: Keys.trackingOnboardingComplete)
@@ -192,10 +220,7 @@ final class PreferencesStore: ObservableObject {
     func reopenTrackingOnboarding() {
         trackingOnboardingSeen = false
         allowedTrackingProviders = []
-        defaults.set(false, forKey: Keys.trackingOnboardingSeen)
-        defaults.set(false, forKey: Keys.trackingOnboardingComplete)
-        defaults.set(false, forKey: "trackingOnboardingComplete.v3")
-        defaults.set(false, forKey: "trackingOnboardingComplete.v2")
+        Self.clearOnboardingFlags(in: defaults)
         defaults.set([], forKey: Keys.allowedTrackingProviders)
         NotificationCenter.default.post(
             name: .momoShowProviderChooser,

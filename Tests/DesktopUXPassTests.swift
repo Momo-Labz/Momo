@@ -125,13 +125,13 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(mapped.weekly.percentage, 44)
     }
 
-    func testOnboardingSchemaIsV4ForVerifiedConnect() {
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 4)
-        let suite = UserDefaults(suiteName: "MomoSchemaV4.\(UUID().uuidString)")!
+    func testOnboardingSchemaIsV5ForForcedConnect() {
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 5)
+        let suite = UserDefaults(suiteName: "MomoSchemaV5UX.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(3, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v3")
+        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v4")
         suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
@@ -150,16 +150,39 @@ final class DesktopUXPassTests: XCTestCase {
         let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
         let payload: [String: Any] = [
-            "five_hour": ["utilization": 27.0, "resets_at": "2026-09-16T20:00:00Z"],
-            "seven_day": ["utilization": 61.0, "resets_at": "2026-09-20T12:00:00Z"]
+            "five_hour": ["utilization": 27.0, "resets_at": "2026-09-20T20:00:00Z"],
+            "seven_day": ["utilization": 100.0, "resets_at": "2026-09-19T18:59:00Z"],
+            "cost": [
+                "total_cost_usd": 0.0123,
+                "total_api_duration_ms": 1500,
+                "total_duration_ms": 8000,
+                "total_lines_added": 10,
+                "total_lines_removed": 2
+            ],
+            "context_window": [
+                "total_input_tokens": 100,
+                "total_output_tokens": 40,
+                "cache_read_input_tokens": 20,
+                "cache_creation_input_tokens": 5
+            ]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         try data.write(to: cacheDir.appendingPathComponent("usage-cache.json"))
 
-        let windows = LocalUsageArtifactReader.quotaWindows(for: .claude, home: tmp, now: .now)
-        XCTAssertEqual(windows.count, 2)
-        XCTAssertEqual(Int(windows.first { $0.minutes == 300 }?.percent ?? -1), 27)
-        XCTAssertEqual(Int(windows.first { $0.minutes == 10_080 }?.percent ?? -1), 61)
+        let detail = LocalUsageArtifactReader.detail(for: .claude, home: tmp, now: .now)
+        XCTAssertEqual(Int(detail.fiveHour?.percent ?? -1), 27)
+        XCTAssertEqual(Int(detail.weekly?.percent ?? -1), 100)
+        XCTAssertNotNil(detail.weekly?.resetsAt)
+        XCTAssertEqual(detail.totalCostUSD, 0.0123, accuracy: 0.0001)
+        XCTAssertEqual(detail.durationAPISeconds, 1.5, accuracy: 0.01)
+        XCTAssertEqual(detail.durationWallSeconds, 8, accuracy: 0.01)
+        XCTAssertEqual(detail.linesAdded, 10)
+        XCTAssertEqual(detail.linesRemoved, 2)
+        XCTAssertEqual(detail.inputTokens, 100)
+        XCTAssertEqual(detail.outputTokens, 40)
+        XCTAssertEqual(detail.cacheReadTokens, 20)
+        XCTAssertEqual(detail.cacheWriteTokens, 5)
+        XCTAssertNotNil(LocalUsageArtifactReader.resetCaption(detail.weekly?.resetsAt))
 
         let statusline: [String: Any] = [
             "rate_limits": [
@@ -180,5 +203,6 @@ final class DesktopUXPassTests: XCTestCase {
         )
         XCTAssertNotNil(invalid)
         XCTAssertTrue(invalid?.isEmpty == true)
+        XCTAssertTrue(LocalUsageDetail.parse(["hello": "world"], observedAt: .now).isEmpty)
     }
 }

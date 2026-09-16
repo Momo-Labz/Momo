@@ -19,10 +19,45 @@ final class OnboardingAndTalkTests: XCTestCase {
         XCTAssertFalse(preferences.trackingOnboardingSeen)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
 
-        preferences.markTrackingOnboardingSeen()
+        preferences.setAllowedTrackingProviders([.codex], markOnboardingSeen: true)
         XCTAssertFalse(preferences.needsTrackingOnboarding)
         XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
-        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v4"))
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v5"))
+    }
+
+    func testSchemaV5ClearsV4CompleteAndEmptyAllowListNeverFinishes() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV5.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        suite.set(true, forKey: "trackingOnboardingSeen.v1")
+        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v4")
+        suite.set([], forKey: "allowedTrackingProviders.v1")
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 5)
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertFalse(preferences.trackingOnboardingSeen)
+        XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+
+        // Marking complete without providers must not stick.
+        preferences.markTrackingOnboardingSeen()
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertFalse(preferences.trackingOnboardingSeen)
+    }
+
+    func testCompletedV4WithProvidersStillForcedBySchemaV5() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV5Providers.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        suite.set(true, forKey: "trackingOnboardingSeen.v1")
+        suite.set(4, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v4")
+        suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
     }
 
     func testFreeProviderSoftLockAndDesktopConnect() {

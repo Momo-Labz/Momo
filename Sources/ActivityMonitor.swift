@@ -257,17 +257,18 @@ actor LocalActivityScanner {
                 updatedAt: now,
                 isInstalled: processLive || hasSessionRoot(for: provider) || DesktopAppCatalog.isPresentOnDisk(provider)
             )
-            let sessionWindows = diskSessions.flatMap(\.recordedQuotaWindows)
+            let sessionWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
+                now >= $0.observedAt
+                    && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
+            }
+            // Artifact caches (Claude statusline / OAuth) stay useful until reset — not 15m only.
             let artifactWindows = LocalUsageArtifactReader.quotaWindows(
                 for: provider,
                 home: home,
                 now: now,
                 fileManager: fileManager
-            )
-            let freshWindows = (sessionWindows + artifactWindows).filter {
-                now >= $0.observedAt
-                    && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
-            }
+            ).filter { LocalUsageArtifactReader.isFresh($0, now: now) }
+            let freshWindows = sessionWindows + artifactWindows
             // Prefer newest observation; when timestamps tie, keep both 5HR and W by minutes.
             let ranked = freshWindows.sorted {
                 if $0.observedAt != $1.observedAt { return $0.observedAt > $1.observedAt }
