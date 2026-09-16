@@ -80,9 +80,11 @@ final class BarBoyApp: NSObject, NSApplicationDelegate {
 final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelegate {
     private var item: NSStatusItem?
     private var panel: MomoPanel?
+    private var peekPanel: MomoPanel?
     private weak var runtime: MomoRuntime?
     private var surfaceObservation: AnyCancellable?
     private var lastUsageSegment: Int?
+    private var singleClickWorkItem: DispatchWorkItem?
 
     func install(runtime: MomoRuntime) {
         guard item == nil else { return }
@@ -92,8 +94,9 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         status.button?.image = MenuBarLabelView.statusIcon
         status.button?.image?.isTemplate = false
         status.button?.target = self
-        status.button?.action = #selector(toggle)
-        status.button?.toolTip = "MOMO provider activity"
+        status.button?.action = #selector(handleStatusItemClick(_:))
+        status.button?.sendAction(on: [.leftMouseUp])
+        status.button?.toolTip = "MOMO provider activity · double-click for usage peek"
         surfaceObservation = MomoSurface.shared.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.resizeForSurface() }
         }
@@ -112,18 +115,18 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
                 attributes: [.foregroundColor: NSColor(BarBoyStyle.coral)]
             )
             button.contentTintColor = nil
-            button.toolTip = "\(attention) session\(attention == 1 ? "" : "s") need attention"
+            button.toolTip = "\(attention) session\(attention == 1 ? "" : "s") need attention · double-click for usage peek"
         } else if let nextSegment {
             button.attributedTitle = NSAttributedString(
                 string: " " + String(repeating: "▮", count: nextSegment) + String(repeating: "▯", count: 4 - nextSegment),
                 attributes: [.foregroundColor: NSColor.white]
             )
             button.contentTintColor = nil
-            button.toolTip = percent.map { "Highest verified provider usage: \($0)%" }
+            button.toolTip = percent.map { "Highest verified provider usage: \($0)% · double-click for usage peek" }
         } else {
             button.attributedTitle = NSAttributedString(string: "")
             button.contentTintColor = nil
-            button.toolTip = "MOMO provider activity"
+            button.toolTip = "MOMO provider activity · double-click for usage peek"
         }
         if let previous = lastUsageSegment, let nextSegment, nextSegment > previous,
            !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -135,9 +138,29 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
             }
         }
         lastUsageSegment = nextSegment
+        if peekPanel?.isVisible == true {
+            refreshPeekContent()
+        }
     }
 
-    @objc private func toggle() {
+    @objc private func handleStatusItemClick(_ sender: Any?) {
+        let clicks = NSApp.currentEvent?.clickCount ?? 1
+        if clicks >= 2 {
+            singleClickWorkItem?.cancel()
+            singleClickWorkItem = nil
+            togglePeek()
+            return
+        }
+        singleClickWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            self?.togglePanel()
+        }
+        singleClickWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22, execute: work)
+    }
+
+    private func togglePanel() {
+        hidePeek()
         if panel?.isVisible == true {
             panel?.orderOut(nil)
             runtime?.monitor.setMenuVisible(false)
@@ -146,8 +169,79 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         }
     }
 
+    private func togglePeek() {
+        if peekPanel?.isVisible == true {
+            hidePeek()
+            return
+        }
+        if panel?.isVisible == true {
+            panel?.orderOut(nil)
+            runtime?.monitor.setMenuVisible(false)
+        }
+        showPeek()
+    }
+
+    private func hidePeek() {
+        peekPanel?.orderOut(nil)
+    }
+
+    private func showPeek() {
+        guard let runtime else { return }
+        if peekPanel == nil {
+            let panel = MomoPanel(
+                contentRect: NSRect(origin: .zero, size: NSSize(width: 280, height: 120)),
+                styleMask: [.borderless, .nonactivatingPanel],
+                backing: .buffered,
+                defer: false
+            )
+            panel.backgroundColor = .clear
+            panel.isOpaque = false
+            panel.hidesOnDeactivate = false
+            panel.level = .statusBar
+            panel.hasShadow = true
+            panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+            panel.delegate = self
+            self.peekPanel = panel
+        }
+        refreshPeekContent()
+        positionPeek()
+        peekPanel?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    private func refreshPeekContent() {
+        guard let runtime, let peekPanel else { return }
+        let allowed = runtime.preferences.trackingStripProviders()
+        let rows = UsagePeekMapping.rows(
+            allowed: allowed,
+            observations: runtime.monitor.usageObservations,
+            snapshots: runtime.monitor.snapshots
+        )
+        let root = UsagePeekView(rows: rows)
+            .environmentObject(runtime.monitor)
+            .environmentObject(runtime.preferences)
+        let hosting = NSHostingView(rootView: root)
+        hosting.frame = NSRect(origin: .zero, size: hosting.fittingSize)
+        peekPanel.contentView = hosting
+        peekPanel.setContentSize(hosting.fittingSize)
+        positionPeek()
+    }
+
+    private func positionPeek() {
+        guard let peekPanel else { return }
+        let size = peekPanel.frame.size
+        let screen = item?.button?.window?.screen ?? peekPanel.screen ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return }
+        let anchor = item?.button.flatMap { button in button.window?.convertToScreen(button.frame) }
+        var frame = NSRect(origin: .zero, size: size)
+        frame.origin.x = max(visible.minX, min((anchor?.midX ?? visible.maxX) - size.width / 2, visible.maxX - size.width - 8))
+        frame.origin.y = min(visible.maxY - size.height, max(visible.minY, (anchor?.minY ?? visible.maxY) - size.height - 6))
+        peekPanel.setFrame(frame, display: true)
+    }
+
     private func show() {
         guard let runtime else { return }
+        hidePeek()
         if panel == nil {
             let root = DashboardView()
                 .environmentObject(runtime.monitor)
@@ -210,7 +304,9 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         sender.orderOut(nil)
-        runtime?.monitor.setMenuVisible(false)
+        if sender === panel {
+            runtime?.monitor.setMenuVisible(false)
+        }
         return false
     }
 }

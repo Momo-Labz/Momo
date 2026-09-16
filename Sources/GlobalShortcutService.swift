@@ -111,6 +111,7 @@ final class GlobalShortcutService: ObservableObject {
     }
 }
 extension Notification.Name { static let momoShortcut = Notification.Name("momoShortcut") }
+extension Notification.Name { static let momoShowProviderChooser = Notification.Name("momoShowProviderChooser") }
 
 struct ShortcutRecorder: NSViewRepresentable {
     let onCapture: (ShortcutBinding?) -> Void

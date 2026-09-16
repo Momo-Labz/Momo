@@ -133,7 +133,7 @@ struct BrainWorkspaceView: View {
             if vault.vaultURL == nil {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Your notes, connected to your work.").font(.system(size: 19, weight: .semibold))
-                    Text("Choose an Obsidian vault to explore its notes and links. Ollama runs only when you ask. Saving always previews a new note first.")
+                    Text("Choose an Obsidian vault to explore its notes and links. The local model runs only when you ask. Saving always previews a new note first.")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading).background(BarBoyStyle.surface)
             } else {
@@ -247,23 +247,37 @@ struct BrainWorkspaceView: View {
                     ForEach(ollama.models, id: \.self) { Text($0).tag(Optional($0)) }
                 }.frame(maxWidth: 230)
             }
-            HStack {
+            HStack(spacing: 8) {
                 TextField("Ask about the selected note", text: $question).textFieldStyle(.roundedBorder)
-                Button("ASK") { ask(suggest: false) }.disabled(selected == nil || !ollama.isAvailable || ollama.isGenerating)
-                Button("SUGGEST LINKS") { ask(suggest: true) }.disabled(selected == nil || !ollama.isAvailable || ollama.isGenerating)
-                if ollama.isGenerating { Button("CANCEL") { ollama.cancel() } }
+                Button("ASK") { ask(suggest: false) }
+                    .barBoyButton()
+                    .disabled(selected == nil || !ollama.isAvailable || ollama.isGenerating)
+                Button("SUGGEST LINKS") { ask(suggest: true) }
+                    .barBoyButton()
+                    .disabled(selected == nil || !ollama.isAvailable || ollama.isGenerating)
+                if ollama.isGenerating {
+                    Button("CANCEL") { ollama.cancel() }
+                        .barBoyButton()
+                }
             }
             if !answer.isEmpty {
                 Text(answer).font(.system(size: 12)).textSelection(.enabled)
                 Text("Sources supplied: " + sources.joined(separator: ", ")).font(.system(size: 10)).foregroundStyle(.secondary)
-                Button("SAVE TO OBSIDIAN") { saveTitle = focusedNote.map { $0.title + " — Brain" } ?? "Brain notes"; saveBody = answer + "\n\nSources:\n" + sources.map { "- [[\($0)]]" }.joined(separator: "\n"); preview = true }.barBoyButton()
+                Button("SAVE TO OBSIDIAN") {
+                    saveTitle = focusedNote.map { $0.title + " — Brain" } ?? "Brain notes"
+                    saveBody = answer + "\n\nSources:\n" + sources.map { "- [[\($0)]]" }.joined(separator: "\n")
+                    preview = true
+                }
+                .barBoyButton()
             }
             ForEach(suggestions) { edge in
                 HStack {
                     Text("Suggested: " + (vault.notes.first { $0.id == edge.to }?.title ?? edge.to))
                     Spacer()
                     Button("ACCEPT") { accepted.append(VaultVisualEdge(from: edge.from, to: edge.to)); suggestions.removeAll { $0.id == edge.id } }
+                        .barBoyButton()
                     Button("DISMISS") { suggestions.removeAll { $0.id == edge.id } }
+                        .barBoyButton()
                 }.font(.system(size: 11))
             }
             if !accepted.isEmpty {

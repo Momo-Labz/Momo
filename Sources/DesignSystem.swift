@@ -295,19 +295,14 @@ struct Surface<Content: View>: View {
 }
 
 extension View {
+    /// Bordered text action — chrome lives inside the button style so the full box is tappable.
     func barBoyButton() -> some View {
-        self.buttonStyle(MomoActionButtonStyle())
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .background(BarBoyStyle.raised, in: Rectangle())
-            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        self.buttonStyle(MomoBoxedButtonStyle(kind: .text))
     }
 
+    /// Square icon action — full 32×32 bordered box is the hit target.
     func barBoyIconButton() -> some View {
-        self.buttonStyle(MomoActionButtonStyle())
-            .frame(width: 32, height: 32)
-            .background(BarBoyStyle.raised)
-            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        self.buttonStyle(MomoBoxedButtonStyle(kind: .icon))
     }
 }
 
@@ -332,5 +327,35 @@ struct MomoActionButtonStyle: ButtonStyle {
             .opacity(enabled ? 1 : 0.4)
             .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
             .onChange(of: configuration.isPressed) { _, pressed in if pressed && enabled { MomoFeedback.perform() } }
+    }
+}
+
+/// Puts padding, frame, fill, and stroke inside the button label so hit-testing matches the bordered box.
+struct MomoBoxedButtonStyle: ButtonStyle {
+    enum Kind { case text, icon }
+
+    let kind: Kind
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isEnabled) private var enabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        Group {
+            switch kind {
+            case .icon:
+                configuration.label
+                    .frame(width: 32, height: 32)
+            case .text:
+                configuration.label
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 7)
+            }
+        }
+        .foregroundStyle(configuration.isPressed ? BarBoyStyle.coral : Color.primary)
+        .opacity(enabled ? 1 : 0.4)
+        .background(BarBoyStyle.raised)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .contentShape(Rectangle())
+        .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+        .onChange(of: configuration.isPressed) { _, pressed in if pressed && enabled { MomoFeedback.perform() } }
     }
 }

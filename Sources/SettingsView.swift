@@ -3,13 +3,40 @@ import CoreImage.CIFilterBuiltins
 import SwiftUI
 
 struct SettingsView: View {
+    enum Pane: String, CaseIterable, Identifiable {
+        case providers, access, general, notifications, deskDisplay, privacy
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .providers: return "Providers"
+            case .access: return "Access"
+            case .general: return "General"
+            case .notifications: return "Notifications"
+            case .deskDisplay: return "Desk Display"
+            case .privacy: return "Privacy"
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .providers: return "sparkles"
+            case .access: return "key.horizontal"
+            case .general: return "gearshape"
+            case .notifications: return "bell"
+            case .deskDisplay: return "display"
+            case .privacy: return "hand.raised"
+            }
+        }
+    }
+
     var embedded = false
+    var onBack: (() -> Void)? = nil
     @EnvironmentObject private var monitor: ActivityMonitor
     @EnvironmentObject private var preferences: PreferencesStore
     @EnvironmentObject private var deskDisplay: DeskDisplayServer
     @EnvironmentObject private var attentionNotifier: AttentionNotifier
 
     @ObservedObject private var shortcutService = GlobalShortcutService.shared
+    @State private var pane: Pane = .providers
     @State private var recordingShortcut: ShortcutAction?
     @State private var shortcutError: String?
     @State private var shortcutNotice: String?
@@ -30,22 +57,21 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        TabView {
-            providers
-                .tabItem { Label("Providers", systemImage: "sparkles") }
-            accountAccess
-                .tabItem { Label("Access", systemImage: "key.horizontal") }
-            general
-                .tabItem { Label("General", systemImage: "gearshape") }
-            notifications
-                .tabItem { Label("Notifications", systemImage: "bell") }
-            deskDisplaySettings
-                .tabItem { Label("Desk Display", systemImage: "display") }
-            privacy
-                .tabItem { Label("Privacy", systemImage: "hand.raised") }
+        Group {
+            if embedded {
+                embeddedBody
+            } else {
+                TabView(selection: $pane) {
+                    providers.tabItem { Label(Pane.providers.title, systemImage: Pane.providers.symbol) }.tag(Pane.providers)
+                    accountAccess.tabItem { Label(Pane.access.title, systemImage: Pane.access.symbol) }.tag(Pane.access)
+                    general.tabItem { Label(Pane.general.title, systemImage: Pane.general.symbol) }.tag(Pane.general)
+                    notifications.tabItem { Label(Pane.notifications.title, systemImage: Pane.notifications.symbol) }.tag(Pane.notifications)
+                    deskDisplaySettings.tabItem { Label(Pane.deskDisplay.title, systemImage: Pane.deskDisplay.symbol) }.tag(Pane.deskDisplay)
+                    privacy.tabItem { Label(Pane.privacy.title, systemImage: Pane.privacy.symbol) }.tag(Pane.privacy)
+                }
+                .frame(width: 590, height: 480)
+            }
         }
-        .frame(width: embedded ? nil : 590, height: embedded ? nil : 480)
-        .frame(maxWidth: embedded ? .infinity : nil, maxHeight: embedded ? .infinity : nil)
         .alert("Authorize local access", isPresented: Binding(
             get: { pendingProvider != nil },
             set: { if !$0 { pendingProvider = nil; pendingRoot = nil } }
@@ -60,6 +86,77 @@ struct SettingsView: View {
             Button("Cancel", role: .cancel) { pendingProvider = nil; pendingRoot = nil }
         } message: { provider in
             Text(authorizationMessage(for: provider, root: pendingRoot))
+        }
+    }
+
+    private var embeddedBody: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 9) {
+                if let onBack {
+                    Button(action: onBack) {
+                        Label("BACK", systemImage: "chevron.left")
+                            .font(BarBoyStyle.navLabel)
+                            .frame(width: 100, height: 36)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .background(BarBoyStyle.surface)
+                    .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+                    .contentShape(Rectangle())
+                }
+                Text("SETTINGS").font(BarBoyStyle.sectionLabel)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 48)
+
+            Divider().opacity(0.55)
+
+            HStack(spacing: 4) {
+                ForEach(Pane.allCases) { item in
+                    Button {
+                        pane = item
+                    } label: {
+                        Text(item.title.uppercased())
+                            .font(BarBoyStyle.navLabel)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity, minHeight: 34)
+                            .contentShape(Rectangle())
+                            .foregroundStyle(pane == item ? BarBoyStyle.inverseInk : Color.primary)
+                            .background(pane == item ? Color.primary : .clear)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+            }
+            .padding(4)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+
+            Divider().opacity(0.55)
+
+            ScrollView {
+                paneContent
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(BarBoyStyle.panel)
+    }
+
+    @ViewBuilder private var paneContent: some View {
+        switch pane {
+        case .providers: providers
+        case .access: accountAccess
+        case .general: general
+        case .notifications: notifications
+        case .deskDisplay: deskDisplaySettings
+        case .privacy: privacy
         }
     }
 
@@ -113,6 +210,36 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Local providers").font(.title2.bold())
                 Button("Set up Codex local access") { chooseLocalRoot(for: .codex) }
+                Button("MOMO Trackr onboarding") {
+                    NotificationCenter.default.post(
+                        name: .momoShowProviderChooser,
+                        object: nil,
+                        userInfo: ["step": TrackingOnboardingStep.welcome.rawValue]
+                    )
+                }
+                .barBoyButton()
+                Button("What you were looking for") {
+                    NotificationCenter.default.post(
+                        name: .momoShowProviderChooser,
+                        object: nil,
+                        userInfo: ["step": TrackingOnboardingStep.intents.rawValue]
+                    )
+                }
+                .barBoyButton()
+                Button("Connect providers") {
+                    NotificationCenter.default.post(
+                        name: .momoShowProviderChooser,
+                        object: nil,
+                        userInfo: ["step": TrackingOnboardingStep.connectProviders.rawValue]
+                    )
+                }
+                .barBoyButton()
+                Text("Onboarding intents gate tips for Usage vs Brain. Connect opens the official login in your default browser, then a local permission panel. Connect Usage below still uses Manual Preview → Confirm in isolated WebKit.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Tracking allow-list controls the sticky strip, usage peek, and Connect Usage queue. Folder authorization below is separate.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Text("BAR BOY reads local session files and running processes. It never asks for your account password.")
                     .foregroundStyle(.secondary)
             }

@@ -56,6 +56,10 @@ final class MomoSurface: ObservableObject {
     /// True when the pane changed from a keyboard shortcut, which must not animate.
     @Published var lastChangeWasKeyboard = false
     @Published private(set) var route: MomoRoute = .dashboard
+    /// Connect Usage providers queued after allow-list connect (Manual preview path).
+    @Published private(set) var pendingUsageConnect: [AIProvider] = []
+    /// Providers ready for a lightweight “Confirm usage when ready” return (no auto WebKit).
+    @Published private(set) var pendingUsageReturn: [AIProvider] = []
     private var expandedBeforeRoute = false
 
     var presentsFullPage: Bool { route != .dashboard }
@@ -89,8 +93,43 @@ final class MomoSurface: ObservableObject {
         open(.usage(provider), fromKeyboard: fromKeyboard)
     }
 
+    /// Soft return after browser login: banner only until the person chooses Confirm usage.
+    func offerUsageReturn(_ providers: [AIProvider]) {
+        pendingUsageReturn = providers.filter(\.supportsUsageCapture)
+    }
+
+    func dismissUsageReturn() {
+        pendingUsageReturn = []
+    }
+
+    /// Start Manual Confirm for the first pending return provider (existing capture path).
+    func beginPendingUsageReturn(fromKeyboard: Bool = false) {
+        let next = pendingUsageReturn
+        pendingUsageReturn = []
+        queueUsageConnect(next, fromKeyboard: fromKeyboard)
+    }
+
+    /// Persist an ordered Connect Usage queue and open the first allowlisted provider.
+    func queueUsageConnect(_ providers: [AIProvider], fromKeyboard: Bool = false) {
+        let next = providers.filter(\.supportsUsageCapture)
+        guard let first = next.first else {
+            pendingUsageConnect = []
+            return
+        }
+        pendingUsageConnect = Array(next.dropFirst())
+        openUsage(first, fromKeyboard: fromKeyboard)
+    }
+
     func goBack(fromKeyboard: Bool = false) {
         lastChangeWasKeyboard = fromKeyboard
+        if case .usage = route, let next = pendingUsageConnect.first {
+            pendingUsageConnect = Array(pendingUsageConnect.dropFirst())
+            selectProvider(next)
+            route = .usage(next)
+            expanded = true
+            return
+        }
+        pendingUsageConnect = []
         route = .dashboard
         expanded = expandedBeforeRoute
     }

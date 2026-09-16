@@ -73,7 +73,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .claude: return URL(string: "https://claude.ai/settings/usage")
         case .gemini: return URL(string: "https://aistudio.google.com/app/usage")
         case .cursor: return URL(string: "https://cursor.com/dashboard/usage")
-        case .grok: return URL(string: "https://grok.com/")
+        // xAI documents Settings → Usage on grok.com; `?_s=usage` opens that panel when signed in.
+        case .grok: return URL(string: "https://grok.com/?_s=usage")
         }
     }
 
@@ -84,6 +85,29 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .gemini: return URL(string: "https://gemini.google.com/app")
         case .cursor: return URL(string: "https://cursor.com/")
         case .grok: return URL(string: "https://grok.com/")
+        }
+    }
+
+    /// Official login / account URL opened in the default system browser during onboarding.
+    /// Opening this URL does not grant MOMO cookies or session credentials.
+    var accountLoginURL: URL? {
+        switch self {
+        case .codex: return URL(string: "https://chatgpt.com/auth/login")
+        case .claude: return URL(string: "https://claude.ai/login")
+        case .gemini: return URL(string: "https://accounts.google.com/ServiceLogin")
+        case .cursor: return URL(string: "https://authenticator.cursor.sh/")
+        case .grok: return URL(string: "https://grok.com/")
+        }
+    }
+
+    /// Button label for Higgsfield-style connect rows (Codex pairs with ChatGPT login).
+    var connectButtonTitle: String {
+        switch self {
+        case .codex: return "Continue with Codex / ChatGPT"
+        case .claude: return "Continue with Claude"
+        case .gemini: return "Continue with Gemini"
+        case .cursor: return "Continue with Cursor"
+        case .grok: return "Continue with Grok"
         }
     }
 

@@ -13,6 +13,27 @@ enum UsageCaptureState: String, Equatable {
     case failed
 }
 
+/// Host allowlists used from nonisolated contexts (for example `AIProvider.supportsUsageCapture`).
+/// Kept outside `@MainActor` `UsageCaptureService` so Release builds compile under Swift concurrency.
+fileprivate enum UsageCaptureHostAllowlist {
+    static let providerPageHosts: [AIProvider: Set<String>] = [
+        .codex: ["chatgpt.com"],
+        .claude: ["claude.ai"],
+        .gemini: ["aistudio.google.com"],
+        .cursor: ["cursor.com"],
+        .grok: ["grok.com"]
+    ]
+
+    static let authenticationHosts: [AIProvider: Set<String>] = [
+        .codex: ["auth.openai.com"],
+        .claude: [],
+        .gemini: ["accounts.google.com"],
+        .cursor: ["authenticator.cursor.sh"],
+        // xAI documents sign-in management at accounts.x.ai; X SSO still uses x.com.
+        .grok: ["x.com", "accounts.x.ai"]
+    ]
+}
+
 @MainActor
 final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegate {
     static let visibleTextByteLimit = 64 * 1024
@@ -48,7 +69,12 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
     /// Creates a cookie-isolated view for one official provider page.
     /// MOMO never imports browser cookies, user scripts, local storage, or provider credentials.
     func makeWebView(for provider: AIProvider) -> WKWebView? {
-        guard let url = provider.usageURL, Self.isAllowedCapture(url, for: provider) else { return nil }
+        guard let url = provider.usageURL, Self.isAllowedCapture(url, for: provider) else {
+            activeProvider = provider
+            state = .failed
+            status = "USAGE PAGE UNAVAILABLE"
+            return nil
+        }
         let configuration = WKWebViewConfiguration()
         // WKWebView's default store persists only MOMO's own WebKit session. It does
         // not import Safari, Chrome, or another app's cookies or local storage.
@@ -131,10 +157,24 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
             observations: observations,
             expiresAt: capturedAt.addingTimeInterval(Self.interpretationCacheLifetime)
         )
-        _ = await cache.accept(observations, now: capturedAt)
         state = .ready
         status = observations.isEmpty ? "USAGE UNKNOWN" : "USAGE READY"
         return observations
+    }
+
+    /// Persists a previously previewed observation set. Preview never writes.
+    @discardableResult
+    func acceptPreview(_ observations: [ProviderUsageObservation]) async -> Int {
+        let count = await cache.accept(observations, now: now())
+        state = .ready
+        if count > 0 {
+            status = "USAGE SAVED"
+        } else if observations.isEmpty {
+            status = "NOTHING TO SAVE"
+        } else {
+            status = "SAVE REJECTED"
+        }
+        return count
     }
 
     func acceptedObservations(for provider: AIProvider? = nil) async -> [ProviderUsageObservation] {
@@ -149,18 +189,48 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
         status = "CAPTURE CANCELLED"
     }
 
-    static func isAllowedCapture(_ url: URL, for provider: AIProvider) -> Bool {
-        isSecure(url) && providerPageHosts[provider, default: []].contains(url.host?.lowercased() ?? "")
+    /// Short operator-facing copy for the connect panel. Does not invent usage values.
+    var guidance: String {
+        switch state {
+        case .idle:
+            return "Open the official usage page, sign in if needed, then preview. Nothing is saved until you confirm."
+        case .loading:
+            return "Opening \(activeProvider?.name ?? "provider")'s official usage page in an isolated WebKit view."
+        case .ready:
+            return status == "USAGE SAVED"
+                ? "Saved to the local usage cache. You can go back to Tracking."
+                : status == "USAGE READY" || status == "USAGE READY · CACHED"
+                ? "Preview ready. Confirm only if the values match what you see on the page."
+                : status == "USAGE UNKNOWN"
+                ? "The page loaded, but no explicit usage values were present in the visible text."
+                : "Sign in inside this page if needed. Stay on the official usage page, then preview."
+        case .parsing:
+            return "MOMO is reading only the visible text on this page via the local model."
+        case .offline:
+            return "The usage page or local parser is offline. MOMO will not invent a value."
+        case .malformed:
+            return "No explicit usage values were found in the visible text."
+        case .cancelled:
+            return "Capture was cancelled."
+        case .failed:
+            return status == "USAGE PAGE UNAVAILABLE"
+                ? "No allowlisted official usage page is available for this provider yet."
+                : "Capture could not continue on this page."
+        }
     }
 
-    static func isAllowedNavigation(_ url: URL, for provider: AIProvider) -> Bool {
+    nonisolated static func isAllowedCapture(_ url: URL, for provider: AIProvider) -> Bool {
+        isSecure(url) && UsageCaptureHostAllowlist.providerPageHosts[provider, default: []].contains(url.host?.lowercased() ?? "")
+    }
+
+    nonisolated static func isAllowedNavigation(_ url: URL, for provider: AIProvider) -> Bool {
         guard isSecure(url) else { return false }
         let host = url.host?.lowercased() ?? ""
-        return providerPageHosts[provider, default: []].contains(host)
-            || authenticationHosts[provider, default: []].contains(host)
+        return UsageCaptureHostAllowlist.providerPageHosts[provider, default: []].contains(host)
+            || UsageCaptureHostAllowlist.authenticationHosts[provider, default: []].contains(host)
     }
 
-    private static func isSecure(_ url: URL) -> Bool {
+    nonisolated private static func isSecure(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https",
               url.user == nil, url.password == nil,
               url.port == nil || url.port == 443,
@@ -211,22 +281,6 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
         }
     }
 
-    private static let providerPageHosts: [AIProvider: Set<String>] = [
-        .codex: ["chatgpt.com"],
-        .claude: ["claude.ai"],
-        .gemini: ["aistudio.google.com"],
-        .cursor: ["cursor.com"],
-        .grok: ["grok.com"]
-    ]
-
-    private static let authenticationHosts: [AIProvider: Set<String>] = [
-        .codex: ["auth.openai.com"],
-        .claude: [],
-        .gemini: ["accounts.google.com"],
-        .cursor: ["authenticator.cursor.sh"],
-        .grok: ["x.com"]
-    ]
-
     private static func interpretationPrompt(provider: AIProvider, visibleText: String) -> String {
         """
         Extract only usage values explicitly present in the visible text from \(provider.name)'s official usage page.
@@ -237,6 +291,14 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
         VISIBLE TEXT:
         \(visibleText)
         """
+    }
+}
+
+extension AIProvider {
+    /// True when MOMO has an official HTTPS usage URL on an allowlisted host.
+    var supportsUsageCapture: Bool {
+        guard let url = usageURL else { return false }
+        return UsageCaptureService.isAllowedCapture(url, for: self)
     }
 }
 
