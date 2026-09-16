@@ -46,12 +46,17 @@ struct TrackingDashboardView: View {
 
     private var sessions: [AgentSession] {
         let all = snapshots.flatMap(\.sessions).sorted { $0.updatedAt > $1.updatedAt }
-        guard !debouncedSearch.isEmpty else { return all }
-        return all.filter {
+        let limited = SessionPresentation.topChatsPerProvider(all, limit: SessionPresentation.maxChatsPerProvider)
+        guard !debouncedSearch.isEmpty else { return limited }
+        return limited.filter {
             $0.title.localizedCaseInsensitiveContains(debouncedSearch) ||
             $0.project.localizedCaseInsensitiveContains(debouncedSearch) ||
             $0.provider.name.localizedCaseInsensitiveContains(debouncedSearch)
         }
+    }
+
+    private var switcherProviders: [AIProvider] {
+        preferences.trackingStripProviders()
     }
 
     var body: some View {
@@ -62,6 +67,10 @@ struct TrackingDashboardView: View {
                     .zIndex(2)
                 providerRail
                     .zIndex(2)
+                if !switcherProviders.isEmpty, switcherProviders.count <= DesktopAppCatalog.freeProviderLimit || !TalkService.shared.quota.momoPlusEntitled {
+                    freeProviderSwitcher
+                        .zIndex(2)
+                }
                 Divider().opacity(0.55)
                 if surface.route == .dashboard {
                     tabBar
@@ -356,7 +365,57 @@ struct TrackingDashboardView: View {
         }
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: surface.usesExpandedSize || showsOverview ? 91 : 68)
+        .frame(height: surface.usesExpandedSize || showsOverview ? 118 : 96)
+    }
+
+    /// One-click switch between Free (≤2) connected providers — icons + names.
+    private var freeProviderSwitcher: some View {
+        HStack(spacing: 6) {
+            ForEach(switcherProviders, id: \.self) { provider in
+                let selected = surface.selectedProvider == provider
+                Button {
+                    surface.selectProvider(provider)
+                    if surface.route == .dashboard { surface.trackerTab = .activity }
+                } label: {
+                    HStack(spacing: 6) {
+                        ProviderMark(provider: provider, size: 16, active: selected || (monitor.snapshot(for: provider).activeCount > 0))
+                        Text(provider.name.uppercased())
+                            .font(BarBoyStyle.microLabel)
+                            .lineLimit(1)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(selected ? BarBoyStyle.inverseInk : Color.primary)
+                    .background(selected ? Color.primary : BarBoyStyle.surface)
+                    .overlay(Rectangle().stroke(selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))
+                }
+                .buttonStyle(.plain)
+                .help("Show \(provider.name) activity")
+            }
+            if switcherProviders.count == 1 {
+                Text("Free · \(DesktopAppCatalog.freeProviderLimit - 1) slot left")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 4)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.bottom, 8)
+        .onAppear {
+            if surface.selectedProvider == nil, let first = switcherProviders.first {
+                surface.selectProvider(first)
+            } else if let selected = surface.selectedProvider, !switcherProviders.contains(selected) {
+                surface.selectProvider(switcherProviders.first)
+            }
+        }
+        .onChange(of: preferences.allowedTrackingProviders) { _, _ in
+            if let selected = surface.selectedProvider, !switcherProviders.contains(selected) {
+                surface.selectProvider(switcherProviders.first)
+            } else if surface.selectedProvider == nil {
+                surface.selectProvider(switcherProviders.first)
+            }
+        }
     }
 
     private var tabBar: some View {
@@ -448,13 +507,18 @@ struct TrackingDashboardView: View {
                 if !search.isEmpty { Button { search = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain) }
             }.padding(9).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
             LazyVStack(spacing: 6) {
-                ForEach(Array(sessions.filter { surface.selectedProvider == nil || $0.provider == surface.selectedProvider }.prefix(surface.usesExpandedSize || showsOverview ? pageSize : 3))) { session in
+                let visible = sessions.filter { surface.selectedProvider == nil || $0.provider == surface.selectedProvider }
+                ForEach(visible) { session in
                     Button { surface.openSession(session) } label: { TrackingSessionRow(session: session) }
                         .buttonStyle(.plain)
                 }
-                if sessions.isEmpty { Text("No recorded activity yet.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary).padding(.vertical, 20) }
-                if (surface.usesExpandedSize || showsOverview) && sessions.count > pageSize {
-                    Button("LOAD 10 MORE") { pageSize += 10 }.barBoyButton()
+                if visible.isEmpty {
+                    Text(surface.selectedProvider == nil
+                         ? "No recorded activity yet."
+                         : "No recent chats for \(surface.selectedProvider!.name) (showing up to \(SessionPresentation.maxChatsPerProvider)).")
+                        .font(BarBoyStyle.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 20)
                 }
             }
         }.padding(12)
@@ -547,17 +611,13 @@ private struct ProviderCard: View {
     let width: CGFloat?
     let action: () -> Void
 
-    private var usagePercent: Int? {
-        if let percent = snapshot.primaryUsagePercent { return percent }
-        return observations.compactMap(\.percentage).first
+    private var windows: (fiveHour: UsagePeekMetric, weekly: UsagePeekMetric) {
+        UsagePeekMapping.map(observations: observations, snapshot: snapshot)
     }
 
     private var statusLine: String {
         if let urgent = snapshot.sessions.first(where: { $0.attention.isUrgent }) {
             return "ISSUE · \(urgent.title)"
-        }
-        if let percent = usagePercent {
-            return "USAGE · \(percent)%"
         }
         if snapshot.activeCount > 0 { return "LIVE · \(snapshot.activeCount)" }
         if snapshot.isInstalled { return snapshot.sessions.isEmpty ? "IDLE" : snapshot.statusLabel }
@@ -578,20 +638,11 @@ private struct ProviderCard: View {
                 Text(statusLine)
                     .font(BarBoyStyle.bodySmall)
                     .lineLimit(1)
-                if expanded {
-                    Text(usagePercent.map { "\($0)% · \(snapshot.resetLabel(now: .now))" } ?? "USAGE — · \(snapshot.resetLabel(now: .now))")
-                        .font(BarBoyStyle.microLabel)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                HStack(spacing: 2) {
-                    ForEach(0..<4, id: \.self) { index in
-                        let filled = usagePercent.map { index < Int(ceil(Double($0) / 25.0)) } ?? false
-                        Rectangle()
-                            .fill(filled ? ((usagePercent ?? 0) >= 90 ? BarBoyStyle.coral : BarBoyStyle.amber) : BarBoyStyle.hairline.opacity(0.45))
-                            .frame(height: 3)
-                    }
-                }
+                DualUsageMeters(
+                    fiveHour: windows.fiveHour,
+                    weekly: windows.weekly,
+                    compact: !expanded
+                )
             }
             .padding(ProviderStripLayout.cardPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)

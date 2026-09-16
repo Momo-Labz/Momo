@@ -22,7 +22,7 @@ final class OnboardingAndTalkTests: XCTestCase {
         preferences.markTrackingOnboardingSeen()
         XCTAssertFalse(preferences.needsTrackingOnboarding)
         XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
-        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v3"))
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v4"))
     }
 
     func testFreeProviderSoftLockAndDesktopConnect() {
