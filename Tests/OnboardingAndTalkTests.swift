@@ -4,6 +4,25 @@ import XCTest
 
 @MainActor
 final class OnboardingAndTalkTests: XCTestCase {
+    func testLegacyOnboardingSeenWithoutSchemaForcesRerun() {
+        let suite = UserDefaults(suiteName: "MomoOnboardingMigrate.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        suite.set(true, forKey: "trackingOnboardingSeen.v1")
+        suite.set([AIProvider.codex.rawValue, AIProvider.claude.rawValue], forKey: "allowedTrackingProviders.v1")
+        XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), 0)
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertFalse(preferences.trackingOnboardingSeen)
+        XCTAssertEqual(preferences.allowedTrackingProviders, [.codex, .claude])
+
+        preferences.markTrackingOnboardingSeen()
+        XCTAssertFalse(preferences.needsTrackingOnboarding)
+        XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v2"))
+    }
+
     func testFirstRunOnboardingGateAndReplay() {
         let suite = UserDefaults(suiteName: "MomoOnboardingGate.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }

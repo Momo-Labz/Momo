@@ -34,32 +34,38 @@ final class VoiceInput: ObservableObject {
     func start() async {
         guard !isActive else { return }
         let token = UUID(); generation = token
-        let micStatus = AVCaptureDevice.authorizationStatus(for: .audio)
-        let mic: Bool
-        if micStatus == .authorized {
-            mic = true
-        } else if micStatus == .notDetermined {
-            state = .permission
-            mic = await AVCaptureDevice.requestAccess(for: .audio)
-        } else {
-            mic = false
+        if let micBlock = VoicePermission.microphoneBlockReason() {
+            fail(VoicePermission.settingsGuidance(for: micBlock))
+            return
         }
+        let needsMicPrompt = !VoicePermission.microphoneAuthorized()
+        if needsMicPrompt { state = .permission }
+        let mic = await VoicePermission.requestMicrophoneIfNeeded()
         guard generation == token else { return }
-        guard mic else { fail("Allow Microphone access in macOS System Settings → Privacy & Security."); return }
-        let speechStatus = SFSpeechRecognizer.authorizationStatus()
-        let speech: SFSpeechRecognizerAuthorizationStatus
-        if speechStatus == .authorized {
-            speech = .authorized
-        } else if speechStatus == .notDetermined {
-            state = .permission
-            speech = await withCheckedContinuation { continuation in
-                SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
-            }
-        } else {
-            speech = speechStatus
+        if let micBlock = VoicePermission.microphoneBlockReason() {
+            fail(VoicePermission.settingsGuidance(for: micBlock))
+            return
         }
+        guard mic else {
+            fail(VoicePermission.settingsGuidance(for: .microphoneDenied))
+            return
+        }
+        if let speechBlock = VoicePermission.speechBlockReason() {
+            fail(VoicePermission.settingsGuidance(for: speechBlock))
+            return
+        }
+        let needsSpeechPrompt = SFSpeechRecognizer.authorizationStatus() == .notDetermined
+        if needsSpeechPrompt { state = .permission }
+        let speech = await VoicePermission.requestSpeechIfNeeded()
         guard generation == token else { return }
-        guard speech == .authorized else { fail("Allow Speech Recognition in macOS System Settings → Privacy & Security."); return }
+        if let speechBlock = VoicePermission.speechBlockReason() {
+            fail(VoicePermission.settingsGuidance(for: speechBlock))
+            return
+        }
+        guard speech == .authorized else {
+            fail(VoicePermission.settingsGuidance(for: .speechDenied))
+            return
+        }
         guard let recognizer = SFSpeechRecognizer(locale: .current), recognizer.isAvailable, recognizer.supportsOnDeviceRecognition else {
             fail("On-device speech is unavailable for this Mac or language. Use typed input; no cloud fallback is used."); return
         }
@@ -101,8 +107,8 @@ final class VoiceInput: ObservableObject {
         }
         do { engine.prepare(); try engine.start() } catch { fail("The microphone could not start. Check your audio input."); return }
         state = .listening; started = .now; lastSpeech = .now
-        message = mode == .handsFree ? "Say “MOMO stop” to finish or “MOMO use draft” to open your draft. Up to 55 seconds." : mode == .talk ? "Speak naturally. A pause finishes your draft." : "Press Stop or your shortcut again to finish."
-        MomoFeedback.perform()
+        message = mode == .handsFree ? "Say “MOMO stop” to finish or “MOMO use draft” to open your draft. Up to 55 seconds." : mode == .talk ? "Speak naturally. Silence sends your question to MOMO." : "Press Stop or your shortcut again to finish."
+        MomoFeedback.listenStart()
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, self.state == .listening else { return }
@@ -116,7 +122,11 @@ final class VoiceInput: ObservableObject {
         engine.stop()
         if tapped { engine.inputNode.removeTap(onBus: 0); tapped = false }
         request?.endAudio(); recognition?.cancel(); recognition = nil; request = nil; level = 0
-        if wasActive { state = text.isEmpty ? .ready : .finished; message = text.isEmpty ? "No speech captured. Try again or type." : "Review your words, then use them in your draft."; MomoFeedback.perform() }
+        if wasActive {
+            state = text.isEmpty ? .ready : .finished
+            message = text.isEmpty ? "No speech captured. Try again or type." : (mode == .talk ? "Sending to MOMO…" : "Review your words, then use them in your draft.")
+            MomoFeedback.listenEnd()
+        }
     }
     private func fail(_ reason: String) { stop(); state = .unavailable; message = reason }
     func useDraft() {
@@ -139,6 +149,32 @@ enum MomoFeedback {
     static func perform() {
         guard UserDefaults.standard.object(forKey: "hapticFeedback") as? Bool ?? true else { return }
         NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
+    }
+
+    static func shortcutPressed() {
+        perform()
+        guard soundEnabled else { return }
+        NSSound(named: "Tink")?.play()
+    }
+
+    static func listenStart() {
+        perform()
+        guard soundEnabled else { return }
+        NSSound(named: "Pop")?.play()
+    }
+
+    static func listenEnd() {
+        guard soundEnabled else { return }
+        NSSound(named: "Purr")?.play()
+    }
+
+    static func thinkStart() {
+        guard soundEnabled else { return }
+        NSSound(named: "Submarine")?.play()
+    }
+
+    private static var soundEnabled: Bool {
+        UserDefaults.standard.object(forKey: "momoAlertSoundEnabled.v1") as? Bool ?? true
     }
 }
 

@@ -42,8 +42,11 @@ final class PreferencesStore: ObservableObject {
     /// First-run intents that emphasize Usage vs Brain tips without inventing features.
     @Published private(set) var onboardingIntents: Set<OnboardingIntent>
     @Published private(set) var localProviderRoots: [AIProvider: [String]]
-    /// True after Welcome→intent→allow finishes (or Replay resets it).
+    /// True until the current onboarding schema finishes (Welcome → prefs → Talk trial).
     var needsTrackingOnboarding: Bool { !trackingOnboardingSeen }
+
+    /// Bump when the required onboarding steps change so legacy installs re-run once.
+    static let currentOnboardingSchemaVersion = 2
 
     private let defaults: UserDefaults
 
@@ -56,6 +59,8 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
+        static let trackingOnboardingComplete = "trackingOnboardingComplete.v2"
+        static let trackingOnboardingSchemaVersion = "trackingOnboardingSchemaVersion.v1"
         static let onboardingIntents = "onboardingIntents.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
@@ -85,7 +90,16 @@ final class PreferencesStore: ObservableObject {
         enabledProviders = saved.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         let savedAllowed = defaults.stringArray(forKey: Keys.allowedTrackingProviders)
         allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
-        trackingOnboardingSeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
+        let savedSchema = defaults.integer(forKey: Keys.trackingOnboardingSchemaVersion)
+        let legacySeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
+        let completeV2 = defaults.bool(forKey: Keys.trackingOnboardingComplete)
+        if savedSchema < Self.currentOnboardingSchemaVersion {
+            // Legacy `trackingOnboardingSeen.v1` without prefs/Talk steps — force one full re-run.
+            trackingOnboardingSeen = false
+            defaults.set(false, forKey: Keys.trackingOnboardingComplete)
+        } else {
+            trackingOnboardingSeen = completeV2 || legacySeen
+        }
         let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
         onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
     }
@@ -144,12 +158,19 @@ final class PreferencesStore: ObservableObject {
     func markTrackingOnboardingSeen() {
         trackingOnboardingSeen = true
         defaults.set(true, forKey: Keys.trackingOnboardingSeen)
+        defaults.set(true, forKey: Keys.trackingOnboardingComplete)
+        defaults.set(Self.currentOnboardingSchemaVersion, forKey: Keys.trackingOnboardingSchemaVersion)
+    }
+
+    func syncRefreshIntervalFromDefaults() {
+        refreshIntervalSeconds = Self.normalizedRefreshInterval(defaults.integer(forKey: Keys.refreshIntervalSeconds))
     }
 
     /// Tester/Settings path: clear the first-run gate so Welcome shows again.
     func reopenTrackingOnboarding() {
         trackingOnboardingSeen = false
         defaults.set(false, forKey: Keys.trackingOnboardingSeen)
+        defaults.set(false, forKey: Keys.trackingOnboardingComplete)
         NotificationCenter.default.post(
             name: .momoShowProviderChooser,
             object: nil,

@@ -97,6 +97,7 @@ struct TrackingDashboardView: View {
                         .clipped()
                 }
             }
+            .disabled(needsOnboarding)
 
             if needsOnboarding {
                 Color.black.opacity(0.55)
@@ -170,18 +171,30 @@ struct TrackingDashboardView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .momoShortcut)) { note in
             guard let action = note.object as? ShortcutAction, action == .talk else { return }
-            if voiceInput.isActive {
-                voiceInput.stop()
-            } else {
-                surface.openTalk()
-                voiceInput.prepare(.talk)
-                Task { await voiceInput.start() }
-            }
+            MomoFeedback.shortcutPressed()
+            toggleTalk(fromKeyboard: true)
+        }
+    }
+
+    private func toggleTalk(fromKeyboard: Bool = false) {
+        if preferences.needsTrackingOnboarding {
+            showOnboarding = true
+            onboardingStartStep = .welcome
+            surface.expanded = true
+            return
+        }
+        if voiceInput.isActive {
+            voiceInput.stop()
+        } else {
+            surface.openTalk(fromKeyboard: fromKeyboard)
+            voiceInput.prepare(.talk)
+            Task { await voiceInput.start() }
         }
     }
 
     private func finishOnboarding(intents: Set<OnboardingIntent>, allowed: Set<AIProvider>) {
         preferences.setOnboardingIntents(intents)
+        preferences.syncRefreshIntervalFromDefaults()
         preferences.setAllowedTrackingProviders(allowed, markOnboardingSeen: true)
         showOnboarding = false
         showTalkTrial = false
@@ -243,6 +256,12 @@ struct TrackingDashboardView: View {
                 .barBoyIconButton()
                 .help(surface.expanded ? "Contract" : "Expand")
             }
+            Button(action: { toggleTalk() }) {
+                Image(systemName: voiceInput.isActive ? "mic.fill" : "mic")
+            }
+            .barBoyIconButton()
+            .foregroundStyle(voiceInput.isActive ? BarBoyStyle.coral : Color.primary)
+            .help("Talk (\(GlobalShortcutService.shared.bindings[.talk]?.label ?? "⌃⌥ T"))")
             Button {
                 surface.openSettings()
             } label: {
@@ -279,15 +298,7 @@ struct TrackingDashboardView: View {
     }
 
     private var talkShortcutAffordance: some View {
-        Button {
-            if voiceInput.isActive {
-                voiceInput.stop()
-            } else {
-                surface.openTalk()
-                voiceInput.prepare(.talk)
-                Task { await voiceInput.start() }
-            }
-        } label: {
+        Button(action: { toggleTalk() }) {
             HStack(spacing: 5) {
                 Image(systemName: voiceInput.isActive ? "mic.fill" : "waveform")
                 Text("TALK \(GlobalShortcutService.shared.bindings[.talk]?.label ?? "⌃⌥ T")")

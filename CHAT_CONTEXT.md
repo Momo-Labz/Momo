@@ -1,6 +1,6 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-16 (mic-loop fix + forced onboarding prefs + TRACKR header lock)
+Updated: 2026-09-16 (onboarding schema v2 + mic permission hardening + Talk UX states)
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
 
@@ -35,11 +35,39 @@ Manual: fresh defaults → Welcome auto-opens → intent → browser allow → T
 
 ## September 16 — PR #2 blocker fixes (same branch/PR)
 
-- **Mic permission loop:** `VoiceInput.start()` now checks `AVCaptureDevice.authorizationStatus(for: .audio)` and `SFSpeechRecognizer.authorizationStatus()` first, and only requests when status is `.notDetermined` (no repeated request prompt loop on every Talk invocation).
-- **Forced onboarding sequence lock:** Welcome → intents → provider browser allow + local permission → onboarding preferences (Talk shortcut, notification toggles incl. sound, refresh interval 1/5/10/30) → Talk trial.
-- **Refresh interval wiring:** persisted to `refreshIntervalSeconds.v1`; monitor auto-refresh uses configured interval while menu is visible (closed state still bounded to at least 5 minutes).
-- **Header chrome lock:** `TRACKING` renamed to `TRACKR`; removed center duplicate MOMO mark; added Talk shortcut affordance between title block and legend; legend `FAILED` renamed to `ERROR` with distinct orange.
-- **Shortcut feedback lock:** Talk shortcut now toggles listening start/stop and status-item enters visible pulsing mic state while listening/permission is active.
+### Onboarding schema v2 (P0 — force incomplete / legacy re-run)
+- Current schema version: **`trackingOnboardingSchemaVersion.v1` = 2** (`PreferencesStore.currentOnboardingSchemaVersion`)
+- Completion flag: **`trackingOnboardingComplete.v2`** (legacy `trackingOnboardingSeen.v1` alone no longer sufficient)
+- On launch, if saved schema **< 2**, onboarding is forced even when legacy seen=true (prefs + Talk trial steps were added after v1)
+- Main TRACKR chrome is **disabled** under the Welcome overlay until completion
+- Settings → **Replay onboarding** clears complete + seen flags and reopens Welcome at current schema
+
+**QA reset (Terminal):**
+```sh
+defaults delete com.momolabz.barboy trackingOnboardingComplete.v2
+defaults delete com.momolabz.barboy trackingOnboardingSeen.v1
+defaults delete com.momolabz.barboy trackingOnboardingSchemaVersion.v1
+# optional: clear allow-list / intents for a fully fresh run
+defaults delete com.momolabz.barboy allowedTrackingProviders.v1
+defaults delete com.momolabz.barboy onboardingIntents.v1
+```
+
+### Mic permission (P0)
+- `VoicePermission` checks **AVAudioApplication** (macOS 14+) / `AVCaptureDevice` + `SFSpeechRecognizer` before every start
+- **Denied/restricted:** in-app System Settings guidance only — never calls `request*` again
+- Separate guidance strings for Microphone vs Speech Recognition
+
+### Talk UX (P1)
+- **Header:** fifth control — mic icon beside expand/settings/power/refresh; `TALK ⌃⌥ T` affordance retained
+- **Silence → think → respond:** 2s pause after speech ends listening and auto-submits via `TalkSessionCoordinator` (no second keypress)
+- **Menu bar states:** idle / listening (🎙 pulse) / thinking (amber ··) / speaking (🔊 pulse)
+- **Sounds:** Pop (listen start), Purr (listen end), Submarine (think start); Tink + haptic on Talk shortcut
+- Talk blocked while onboarding incomplete (shortcut opens Welcome)
+
+### Prior PR #2 items (still true)
+- Forced onboarding sequence: Welcome → intents → provider browser allow + local permission → prefs (notify + refresh 1/5/10/30 + Talk shortcut) → Talk trial
+- Refresh interval wired to `refreshIntervalSeconds.v1`
+- Header: `TRACKR`, alert legend ERROR/NEEDS YOU/USAGE
 
 ## September 16 — PR #1 onboarding redesign + UX fixes
 

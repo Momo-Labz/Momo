@@ -65,9 +65,6 @@ struct TalkPanelView: View {
                     Button(voice.isActive ? "Stop mic" : "Speak") {
                         if voice.isActive {
                             voice.stop()
-                            if !voice.text.isEmpty {
-                                talk.typedAsk = voice.text
-                            }
                         } else {
                             voice.prepare(.talk)
                             Task { await voice.start() }
