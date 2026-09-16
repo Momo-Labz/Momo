@@ -70,12 +70,30 @@ enum UsagePeekMapping {
     ) -> (fiveHour: UsagePeekMetric, weekly: UsagePeekMetric) {
         let fresh = observations.filter { $0.isFresh(at: now) }
         let fiveHour = pick(fresh, kind: .fiveHour)
+            ?? windowMetric(from: snapshot, kind: .fiveHour)
             ?? snapshotMetric(percent: snapshot?.shortWindowPercent, resetsAt: shortReset(from: snapshot))
             ?? .empty
         let weekly = pick(fresh, kind: .weekly)
+            ?? windowMetric(from: snapshot, kind: .weekly)
             ?? snapshotMetric(percent: snapshot?.weekWindowPercent, resetsAt: weekReset(from: snapshot))
             ?? .empty
         return (fiveHour, weekly)
+    }
+
+    /// Prefer recorded quota windows by duration (5h / week) when observation labels are absent.
+    private static func windowMetric(from snapshot: ProviderSnapshot?, kind: LimitKind) -> UsagePeekMetric? {
+        let windows = recordedWindows(snapshot)
+        let match: RecordedQuotaWindow?
+        switch kind {
+        case .fiveHour:
+            match = windows.filter { $0.minutes < 10080 }.sorted { $0.minutes < $1.minutes }.first
+        case .weekly:
+            match = windows.filter { $0.minutes >= 10080 }.sorted { $0.minutes > $1.minutes }.first
+        }
+        guard let match else { return nil }
+        let percent = Int(match.percent.rounded())
+        guard (0...100).contains(percent) else { return nil }
+        return UsagePeekMetric(percentage: percent, resetsAt: match.resetsAt)
     }
 
     private static func pick(_ observations: [ProviderUsageObservation], kind: LimitKind) -> UsagePeekMetric? {
@@ -159,8 +177,8 @@ struct UsagePeekView: View {
                     .font(BarBoyStyle.microLabel)
                 Spacer(minLength: 0)
             }
-            limitRow(title: "5-hour", metric: row.fiveHour)
-            limitRow(title: "Weekly", metric: row.weekly)
+            limitRow(title: "5HR", metric: row.fiveHour)
+            limitRow(title: "W", metric: row.weekly)
         }
         .padding(.vertical, 4)
     }
@@ -168,7 +186,7 @@ struct UsagePeekView: View {
     private func limitRow(title: String, metric: UsagePeekMetric) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("\(title) limit")
+                Text(title)
                     .font(BarBoyStyle.bodySmall)
                 Spacer(minLength: 8)
                 Text(metric.valueLabel(now: now))
@@ -176,18 +194,7 @@ struct UsagePeekView: View {
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(BarBoyStyle.hairline.opacity(0.55))
-                    if let percentage = metric.percentage {
-                        Rectangle()
-                            .fill(percentage >= 100 ? BarBoyStyle.coral : Color(red: 0.35, green: 0.55, blue: 0.95))
-                            .frame(width: max(2, geo.size.width * CGFloat(percentage) / 100))
-                    }
-                }
-            }
-            .frame(height: 4)
+            UsageMeter(percent: metric.percentage, alert: (metric.percentage ?? 0) >= 100, height: 6)
         }
     }
 }

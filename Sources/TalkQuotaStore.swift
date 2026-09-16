@@ -6,12 +6,17 @@ import Foundation
 final class TalkQuotaStore: ObservableObject {
     static let freeUsesLimit = 3
 
-    /// CMO upsell copy — keep verbatim.
+    /// Upgrade / Talk gate copy — Plus framing: unlimited Talk, >2 providers, analytics.
     enum UpsellCopy {
-        static let inline = "You’ve used your free Talk asks. MOMO+ keeps answering about your usage and activity on this Mac — still local, still no invented quotas."
+        static let inline = "You’ve used your free Talk asks. MOMO+ unlocks unlimited Talk, more than 2 providers, and analytics — still local, still no invented quotas."
         static let primaryButton = "Continue with MOMO+"
         static let secondaryButton = "Not now"
-        static let optionalOneLiner = "Plus also unlocks scheduled refresh, all providers, and “tell me before you hit the wall” alerts."
+        static let optionalOneLiner = "Free includes 1 guided Talk trial + 3 asks and up to 2 desktop providers."
+        static let upgradeHeadline = "MOMO+"
+        static let upgradePitch = "Track more of the AI apps you already run on this Mac. Unlimited Talk, more than 2 providers, and analytics — local-first, no invented quotas."
+        static let benefitTalk = "Unlimited Talk (beyond 1 trial + 3 free asks)"
+        static let benefitProviders = "More than 2 desktop providers"
+        static let benefitAnalytics = "Analytics across connected apps"
     }
 
     enum Access: Equatable {

@@ -39,6 +39,7 @@ struct ContentView: View {
                     case .activity: activity
                     case .usage: usage
                     case .brain: brain
+                    case .upgrade: upgrade
                     }
                 }.padding(16)
             }
@@ -70,12 +71,17 @@ struct ContentView: View {
     private var usage: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("USAGE").font(.system(size: 11, weight: .black, design: .monospaced))
-            Text("Only provider-recorded values are shown.").font(.caption).foregroundStyle(.secondary)
-            ForEach(status.providers) { provider in
-                HStack { Text(provider.name.uppercased()).font(.system(size: 12, weight: .black, design: .monospaced)); Spacer(); Text(provider.usage.uppercased()).font(.system(size: 10, weight: .bold, design: .monospaced)) }
-                    .padding(12).background(Color.primary.opacity(0.05)).overlay(Rectangle().stroke(Color.primary.opacity(0.2)))
-            }
-        }
+            Text("Usage meters live on the Mac app from desktop-local data only. Empty means unknown — never invented.")
+                .font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var upgrade: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("UPGRADE").font(.system(size: 11, weight: .black, design: .monospaced))
+            Text("MOMO+ unlocks unlimited Talk, more than 2 providers, and analytics on the Mac app.")
+                .font(.caption).foregroundStyle(.secondary)
+        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var brain: some View {

@@ -24,6 +24,7 @@ final class TalkService: ObservableObject {
     let quota: TalkQuotaStore
     private let ollama: OllamaService
     private let synthesizer = NSSpeechSynthesizer()
+    private let speechDelegate = TalkSpeechDelegate()
     private var isOnboardingTrial = false
 
     /// Defaults are built in the MainActor init body — not as default-arg expressions —
@@ -31,6 +32,13 @@ final class TalkService: ObservableObject {
     init(quota: TalkQuotaStore? = nil, ollama: OllamaService? = nil) {
         self.quota = quota ?? TalkQuotaStore()
         self.ollama = ollama ?? .shared
+        speechDelegate.onFinish = { [weak self] in
+            Task { @MainActor in
+                guard let self, self.phase == .speaking else { return }
+                self.phase = .idle
+            }
+        }
+        synthesizer.delegate = speechDelegate
     }
 
     func begin(isOnboardingTrial: Bool = false) {
@@ -51,6 +59,15 @@ final class TalkService: ObservableObject {
         ollama.cancel()
         synthesizer.stopSpeaking()
         phase = .idle
+    }
+
+    func noteListeningStarted() {
+        guard phase != .thinking, phase != .speaking else { return }
+        phase = .listening
+    }
+
+    func noteListeningEnded() {
+        if phase == .listening { phase = .idle }
     }
 
     /// Build an honest facts block from observed snapshots — percentages only when recorded.
@@ -121,6 +138,7 @@ final class TalkService: ObservableObject {
         isOnboardingTrial = false
         transcript = trimmed
         phase = .thinking
+        MomoFeedback.thinkStart()
         await ollama.refresh(force: false)
         guard ollama.isAvailable else {
             phase = .offline
@@ -158,5 +176,12 @@ final class TalkService: ObservableObject {
 
     func dismissUpsell() {
         phase = .idle
+    }
+}
+
+private final class TalkSpeechDelegate: NSObject, NSSpeechSynthesizerDelegate {
+    var onFinish: (() -> Void)?
+    func speechSynthesizer(_ sender: NSSpeechSynthesizer, didFinishSpeaking finishedSpeaking: Bool) {
+        onFinish?()
     }
 }

@@ -13,6 +13,15 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
         var metadata = ClaudeSessionMetadata()
         forEachJSONLine(in: handle) { object in
             metadata.consume(object)
+            // Claude Code may embed statusline-shaped rate_limits; never invent when absent.
+            if let windows = RecordedQuotaWindow.parseFlexible(object, observedAt: file.modifiedAt),
+               !windows.isEmpty {
+                metadata.quotaWindows = windows
+            } else if let message = object["message"] as? [String: Any],
+                      let windows = RecordedQuotaWindow.parseFlexible(message, observedAt: file.modifiedAt),
+                      !windows.isEmpty {
+                metadata.quotaWindows = windows
+            }
         }
 
         let fallbackName = humanized(file.url.deletingPathExtension().lastPathComponent)
@@ -35,6 +44,7 @@ struct ClaudeSessionAdapter: ProviderSessionAdapter {
             plugins: [],
             sourceURL: file.url,
             conversationID: metadata.sessionID,
+            recordedQuotaWindows: metadata.quotaWindows,
             limitReached: metadata.limitReached
         )
     }
@@ -99,6 +109,7 @@ private struct ClaudeSessionMetadata {
     var skills: Set<String> = []
     /// Tool calls with no matching tool_result yet, newest last.
     var openToolCalls: [(id: String, name: String)] = []
+    var quotaWindows: [RecordedQuotaWindow] = []
     var limitReached = false
 
     mutating func consume(_ event: [String: Any]) {

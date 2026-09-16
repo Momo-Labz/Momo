@@ -62,13 +62,10 @@ struct TalkPanelView: View {
                 }
 
                 HStack(spacing: 8) {
-                    Button(voice.isActive ? "Stop mic" : "Speak") {
+                    Button(voice.isActive ? (voice.state == .listening ? "Stop mic" : "Cancel") : "Speak") {
                         if voice.isActive {
                             voice.stop()
-                            if !voice.text.isEmpty {
-                                talk.typedAsk = voice.text
-                            }
-                        } else {
+                        } else if !voice.isPendingStart {
                             voice.prepare(.talk)
                             Task { await voice.start() }
                         }
@@ -79,7 +76,7 @@ struct TalkPanelView: View {
                         Task { await submit() }
                     }
                     .barBoyButton()
-                    .disabled(talk.phase == .thinking)
+                    .disabled(talk.phase == .thinking || voice.isPendingStart)
 
                     Spacer(minLength: 0)
 
@@ -126,7 +123,14 @@ struct TalkPanelView: View {
 
     private var statusLine: String {
         switch talk.phase {
-        case .idle: return voice.isActive ? "Listening…" : "Usage + activity only · local Ollama"
+        case .idle:
+            switch voice.state {
+            case .permission: return voice.message
+            case .starting: return voice.message
+            case .listening: return "Listening…"
+            case .unavailable: return voice.message
+            default: return voice.isActive ? "Listening…" : "Usage + activity only · local Ollama"
+            }
         case .listening: return "Listening…"
         case .thinking: return "MOMO THINKING"
         case .speaking: return "Speaking"

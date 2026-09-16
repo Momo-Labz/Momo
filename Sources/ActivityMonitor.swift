@@ -245,29 +245,43 @@ actor LocalActivityScanner {
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
                 }
+            let processLive = !providerProcesses.isEmpty
             var snapshot = ProviderSnapshot(
                 provider: provider,
                 sessions: merged,
-                activeCount: merged.filter(\.isRunning).count,
+                activeCount: max(merged.filter(\.isRunning).count, processLive ? max(1, providerProcesses.count) : 0),
                 localTokensToday: diskSessions
                     .filter { Calendar.current.isDateInToday($0.updatedAt) }
                     .compactMap(\.tokens)
                     .reduce(0, +),
                 updatedAt: now,
-                isInstalled: !providerProcesses.isEmpty || hasSessionRoot(for: provider)
+                isInstalled: processLive || hasSessionRoot(for: provider) || DesktopAppCatalog.isPresentOnDisk(provider)
             )
-            let freshWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
+            let sessionWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
                 now >= $0.observedAt
                     && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
             }
-            snapshot.recordedQuota = freshWindows.sorted {
+            // Artifact caches (Claude statusline / OAuth) stay useful until reset — not 15m only.
+            let artifactWindows = LocalUsageArtifactReader.quotaWindows(
+                for: provider,
+                home: home,
+                now: now,
+                fileManager: fileManager
+            ).filter { LocalUsageArtifactReader.isFresh($0, now: now) }
+            let freshWindows = sessionWindows + artifactWindows
+            // Prefer newest observation; when timestamps tie, keep both 5HR and W by minutes.
+            let ranked = freshWindows.sorted {
                 if $0.observedAt != $1.observedAt { return $0.observedAt > $1.observedAt }
                 return $0.minutes < $1.minutes
-            }.first
+            }
+            snapshot.recordedQuota = ranked.first
             if let latest = snapshot.recordedQuota?.observedAt {
                 var durations = Set<Int>()
-                snapshot.recordedQuotas = freshWindows
-                    .filter { $0.observedAt == latest && durations.insert($0.minutes).inserted }
+                // Accept same-batch windows within 2s of the newest observation (session + artifact).
+                snapshot.recordedQuotas = ranked.filter {
+                    abs($0.observedAt.timeIntervalSince(latest)) <= 2
+                        && durations.insert($0.minutes).inserted
+                }
             }
             snapshots.append(snapshot)
         }

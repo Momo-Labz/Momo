@@ -24,6 +24,7 @@ final class MomoRuntime: ObservableObject {
         syncDeskDisplay()
 
         preferences.$enabledProviders.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
+        preferences.$allowedTrackingProviders.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
         preferences.$localProviderRoots.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
         Publishers.CombineLatest(preferences.$deskDisplayEnabled, preferences.$showDeskDisplayTitles)
             .dropFirst().sink { [weak self] _ in self?.syncDeskDisplay() }.store(in: &cancellables)
@@ -42,6 +43,7 @@ final class MomoRuntime: ObservableObject {
         }.store(in: &cancellables)
 
         // First-run: open the panel so Welcome is visible without hunting the status item.
+        TalkSessionCoordinator.shared.install(monitor: monitor, preferences: preferences)
         if preferences.needsTrackingOnboarding {
             MomoSurface.shared.expanded = true
             DispatchQueue.main.async { [weak self] in
@@ -55,7 +57,8 @@ final class MomoRuntime: ObservableObject {
             (provider, paths.map { URL(fileURLWithPath: $0, isDirectory: true) })
         })
         monitor.setAuthorizedRoots(roots)
-        monitor.setAuthorizedProviders(preferences.enabledProviders)
+        let authorized = preferences.enabledProviders.union(preferences.allowedTrackingProviders)
+        monitor.setAuthorizedProviders(authorized)
     }
 
     private func syncDeskDisplay() {
@@ -92,10 +95,13 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
     private weak var runtime: MomoRuntime?
     private var surfaceObservation: AnyCancellable?
     private var voiceObservation: AnyCancellable?
+    private var talkObservation: AnyCancellable?
     private var lastUsageSegment: Int?
     private var singleClickWorkItem: DispatchWorkItem?
-    private var listeningPulseTimer: Timer?
-    private var listeningPulseVisible = false
+    private var activityPulseTimer: Timer?
+    private var activityPulseVisible = false
+    private enum MenuBarTalkState { case idle, listening, thinking, speaking }
+    private var menuBarTalkState: MenuBarTalkState = .idle
 
     func install(runtime: MomoRuntime) {
         guard item == nil else { return }
@@ -111,8 +117,11 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         surfaceObservation = MomoSurface.shared.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async { self?.resizeForSurface() }
         }
-        voiceObservation = VoiceInput.shared.$state.sink { [weak self] state in
-            self?.updateListeningIndicator(state == .listening || state == .permission)
+        voiceObservation = VoiceInput.shared.$state.sink { [weak self] _ in
+            self?.refreshTalkMenuBarState()
+        }
+        talkObservation = TalkService.shared.$phase.sink { [weak self] _ in
+            self?.refreshTalkMenuBarState()
         }
         update(snapshots: runtime.monitor.snapshots)
     }
@@ -157,26 +166,75 @@ final class MomoStatusItemController: NSObject, ObservableObject, NSWindowDelega
         }
     }
 
-    private func updateListeningIndicator(_ active: Bool) {
+    private func refreshTalkMenuBarState() {
+        let voice = VoiceInput.shared
+        let talk = TalkService.shared
+        let next: MenuBarTalkState
+        switch talk.phase {
+        case .speaking: next = .speaking
+        case .thinking: next = .thinking
+        case .listening: next = .listening
+        default:
+            if voice.mode == .talk, voice.state == .listening || voice.state == .permission || voice.state == .starting {
+                next = .listening
+            } else {
+                next = .idle
+            }
+        }
+        guard next != menuBarTalkState else { return }
+        menuBarTalkState = next
+        updateTalkMenuBarIndicator(next)
+    }
+
+    private func updateTalkMenuBarIndicator(_ state: MenuBarTalkState) {
         guard let button = item?.button else { return }
-        listeningPulseTimer?.invalidate()
-        listeningPulseTimer = nil
-        listeningPulseVisible = false
-        if active {
-            listeningPulseVisible = true
+        activityPulseTimer?.invalidate()
+        activityPulseTimer = nil
+        activityPulseVisible = false
+        switch state {
+        case .idle:
+            button.alphaValue = 1
+            runtime.map { update(snapshots: $0.monitor.snapshots) }
+        case .listening:
+            activityPulseVisible = true
             button.attributedTitle = NSAttributedString(
                 string: " 🎙",
                 attributes: [.foregroundColor: NSColor(BarBoyStyle.coral)]
             )
-            listeningPulseTimer = Timer.scheduledTimer(withTimeInterval: 0.38, repeats: true) { [weak self] _ in
+            activityPulseTimer = Timer.scheduledTimer(withTimeInterval: 0.38, repeats: true) { [weak self] _ in
                 guard let self, let button = self.item?.button else { return }
-                self.listeningPulseVisible.toggle()
-                button.alphaValue = self.listeningPulseVisible ? 1 : 0.45
+                self.activityPulseVisible.toggle()
+                button.alphaValue = self.activityPulseVisible ? 1 : 0.45
             }
-            button.toolTip = "Talk listening… press shortcut again or stop in panel"
-        } else {
-            button.alphaValue = 1
-            runtime.map { update(snapshots: $0.monitor.snapshots) }
+            button.toolTip = "Talk · listening"
+        case .thinking:
+            activityPulseVisible = true
+            button.attributedTitle = NSAttributedString(
+                string: " …",
+                attributes: [.foregroundColor: NSColor(BarBoyStyle.amber)]
+            )
+            activityPulseTimer = Timer.scheduledTimer(withTimeInterval: 0.55, repeats: true) { [weak self] _ in
+                guard let self, let button = self.item?.button else { return }
+                self.activityPulseVisible.toggle()
+                let glyph = self.activityPulseVisible ? " …" : " ··"
+                button.attributedTitle = NSAttributedString(
+                    string: glyph,
+                    attributes: [.foregroundColor: NSColor(BarBoyStyle.amber)]
+                )
+            }
+            button.toolTip = "Talk · MOMO thinking"
+        case .speaking:
+            activityPulseVisible = true
+            button.attributedTitle = NSAttributedString(
+                string: " 🔊",
+                attributes: [.foregroundColor: NSColor(BarBoyStyle.coral)]
+            )
+            activityPulseTimer = Timer.scheduledTimer(withTimeInterval: 0.42, repeats: true) { [weak self] _ in
+                guard let self, let button = self.item?.button else { return }
+                self.activityPulseVisible.toggle()
+                button.alphaValue = self.activityPulseVisible ? 1 : 0.55
+            }
+            button.toolTip = "Talk · speaking"
         }
     }
 

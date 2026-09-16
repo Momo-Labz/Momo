@@ -562,7 +562,8 @@ private struct ReturnContextRow: View {
 
 enum CodexDesktopConnection {
     static var applicationURL: URL? {
-        NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex")
+        DesktopAppCatalog.locate(.codex)
+            ?? NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.openai.codex")
     }
 
     static func taskURL(source: URL?) -> URL? {
