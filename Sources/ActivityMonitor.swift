@@ -245,16 +245,17 @@ actor LocalActivityScanner {
                     if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
                     return lhs.updatedAt > rhs.updatedAt
                 }
+            let processLive = !providerProcesses.isEmpty
             var snapshot = ProviderSnapshot(
                 provider: provider,
                 sessions: merged,
-                activeCount: merged.filter(\.isRunning).count,
+                activeCount: max(merged.filter(\.isRunning).count, processLive ? max(1, providerProcesses.count) : 0),
                 localTokensToday: diskSessions
                     .filter { Calendar.current.isDateInToday($0.updatedAt) }
                     .compactMap(\.tokens)
                     .reduce(0, +),
                 updatedAt: now,
-                isInstalled: !providerProcesses.isEmpty || hasSessionRoot(for: provider)
+                isInstalled: processLive || hasSessionRoot(for: provider) || DesktopAppCatalog.isPresentOnDisk(provider)
             )
             let freshWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
                 now >= $0.observedAt

@@ -24,6 +24,7 @@ final class MomoRuntime: ObservableObject {
         syncDeskDisplay()
 
         preferences.$enabledProviders.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
+        preferences.$allowedTrackingProviders.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
         preferences.$localProviderRoots.dropFirst().sink { [weak self] _ in self?.applyProviderAuthorization() }.store(in: &cancellables)
         Publishers.CombineLatest(preferences.$deskDisplayEnabled, preferences.$showDeskDisplayTitles)
             .dropFirst().sink { [weak self] _ in self?.syncDeskDisplay() }.store(in: &cancellables)
@@ -56,7 +57,8 @@ final class MomoRuntime: ObservableObject {
             (provider, paths.map { URL(fileURLWithPath: $0, isDirectory: true) })
         })
         monitor.setAuthorizedRoots(roots)
-        monitor.setAuthorizedProviders(preferences.enabledProviders)
+        let authorized = preferences.enabledProviders.union(preferences.allowedTrackingProviders)
+        monitor.setAuthorizedProviders(authorized)
     }
 
     private func syncDeskDisplay() {

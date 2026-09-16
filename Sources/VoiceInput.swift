@@ -27,6 +27,8 @@ final class VoiceInput: ObservableObject {
     var isActive: Bool { state == .listening || state == .permission }
 
     func prepare(_ mode: ShortcutAction) {
+        // Do not cancel an in-flight system permission dialog — that causes re-prompts.
+        if state == .permission { return }
         stop(); self.mode = mode; text = ""; state = .ready
         destination = QuickAskContext.shared.session; provider = QuickAskContext.shared.provider
         message = "Audio stays on this Mac. Nothing is sent to a provider."

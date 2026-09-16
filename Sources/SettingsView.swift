@@ -209,7 +209,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Providers").font(.title2.bold())
-                Text("Allow-list controls the sticky strip and usage peek. Folder authorization below is separate. Connect opens the official login in your default browser — MOMO never imports cookies.")
+                Text("Allow-list controls the sticky strip and usage peek. Folder authorization below is separate. Connect opens the desktop app when installed — MOMO never imports cookies or scrapes usage pages.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -219,7 +219,7 @@ struct SettingsView: View {
                     preferences.reopenTrackingOnboarding()
                 }
                 .barBoyButton()
-                Button("Connect providers") {
+                Button("Connect desktop apps") {
                     NotificationCenter.default.post(
                         name: .momoShowProviderChooser,
                         object: nil,
@@ -234,7 +234,7 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary)
 
             if preferences.allowedTrackingProviders.isEmpty {
-                Text("None yet — use Connect providers or Replay onboarding.")
+                Text("None yet — use Connect desktop apps or Replay onboarding.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
@@ -248,7 +248,7 @@ struct SettingsView: View {
                 }
             }
             Spacer()
-            Text("Consumer plan quotas are shown through each provider’s official usage page because they do not all expose a supported API.")
+            Text("Desktop apps are connected from onboarding or Connect desktop apps. Session folders below authorize local prompt/activity reads. Consumer account % only appears when a desktop app records it locally — MOMO never invents quotas.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -272,8 +272,8 @@ struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            if let url = provider.usageURL {
-                Button("Usage") { NSWorkspace.shared.open(url) }
+            if DesktopAppCatalog.locate(provider) != nil {
+                Button("Open app") { _ = DesktopAppConnect.openDesktopApp(for: provider) }
                     .barBoyButton()
             }
             Toggle("", isOn: Binding(

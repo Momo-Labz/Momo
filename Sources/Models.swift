@@ -39,17 +39,17 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
 
     var applicationBundleIdentifiers: [String] {
         switch self {
-        case .codex: return ["com.openai.codex"]
+        case .codex: return ["com.openai.chat", "com.openai.codex"]
         case .claude: return ["com.anthropic.claudefordesktop"]
-        case .gemini: return []
+        case .gemini: return ["com.google.gemini", "com.google.GoogleGemini"]
         case .cursor: return ["com.todesktop.230313mzl4w4u92"]
-        case .grok: return []
+        case .grok: return ["ai.x.grok", "com.x.grok"]
         }
     }
 
     var processTerms: [String] {
         switch self {
-        case .codex: return ["codex"]
+        case .codex: return ["codex", "chatgpt"]
         case .claude: return ["claude"]
         case .gemini: return ["gemini"]
         case .cursor: return ["cursor", "cursor-agent"]
@@ -100,14 +100,14 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         }
     }
 
-    /// Button label for Higgsfield-style connect rows (Codex pairs with ChatGPT login).
+    /// Button label for desktop-app connect rows (opens the installed app when present).
     var connectButtonTitle: String {
         switch self {
-        case .codex: return "Continue with Codex / ChatGPT"
-        case .claude: return "Continue with Claude"
-        case .gemini: return "Continue with Gemini"
-        case .cursor: return "Continue with Cursor"
-        case .grok: return "Continue with Grok"
+        case .codex: return "Connect ChatGPT / Codex"
+        case .claude: return "Connect Claude"
+        case .gemini: return "Connect Gemini"
+        case .cursor: return "Connect Cursor"
+        case .grok: return "Connect Grok"
         }
     }
 
@@ -400,11 +400,24 @@ struct ProviderSnapshot: Identifiable {
         if let urgent = sessions.first(where: { $0.attention.isUrgent }) {
             return "ISSUE · \(urgent.title)"
         }
+        if let percent = primaryUsagePercent {
+            return "USAGE · \(percent)%"
+        }
         if sessions.contains(where: { $0.attention == .working }) { return "WORKING" }
         if sessions.contains(where: { $0.attention == .completed }) { return "DONE" }
         if activeCount > 0 { return "LIVE · \(activeCount)" }
         if sessions.isEmpty { return "STATUS —" }
         return "STATUS · UNKNOWN"
+    }
+
+    /// Best local/desktop-derived usage percent when known; never invents a value.
+    var primaryUsagePercent: Int? {
+        if let percent = recordedQuota?.percent ?? recordedQuotas.first?.percent, (0...100).contains(percent) {
+            return percent
+        }
+        if let percent = shortWindowPercent, (0...100).contains(percent) { return percent }
+        if let percent = weekWindowPercent, (0...100).contains(percent) { return percent }
+        return nil
     }
 
     var tokenLabel: String {

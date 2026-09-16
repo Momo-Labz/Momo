@@ -3,16 +3,16 @@ import Foundation
 
 enum TrackerTab: String, CaseIterable, Codable, Identifiable {
     case activity
-    case usage
     case brain
+    case upgrade
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .activity: return "Activity"
-        case .usage: return "Usage"
         case .brain: return "Brain"
+        case .upgrade: return "Upgrade"
         }
     }
 }
@@ -37,14 +37,16 @@ enum OnboardingIntent: String, CaseIterable, Codable, Identifiable {
 /// Pure layout helpers for the sticky provider strip (equal flexible widths).
 enum ProviderStripLayout {
     static let spacing: CGFloat = 7
+    static let cardPadding: CGFloat = 8
 
-    /// Providers shown after onboarding: only allowed ones. Empty → empty/CTA strip.
-    static func visibleProviders(allowed: Set<AIProvider>, onboardingSeen: Bool) -> [AIProvider] {
-        guard onboardingSeen else { return [] }
+    /// Allowed providers only — empty until each desktop connect succeeds (including mid-onboarding).
+    static func visibleProviders(allowed: Set<AIProvider>, onboardingSeen: Bool = true) -> [AIProvider] {
+        _ = onboardingSeen
         return AIProvider.allCases.filter(allowed.contains)
     }
 
     /// Equal share of horizontal space when fewer than five cards are shown.
+    /// Returned width is the outer card slot (padding is drawn inside).
     static func equalCardWidth(availableWidth: CGFloat, count: Int, spacing: CGFloat = spacing) -> CGFloat? {
         guard count > 0, availableWidth > 0 else { return nil }
         let gaps = CGFloat(max(0, count - 1)) * spacing

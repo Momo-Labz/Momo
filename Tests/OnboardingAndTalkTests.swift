@@ -10,17 +10,33 @@ final class OnboardingAndTalkTests: XCTestCase {
 
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
         suite.set([AIProvider.codex.rawValue, AIProvider.claude.rawValue], forKey: "allowedTrackingProviders.v1")
-        XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), 0)
+        suite.set(2, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v2")
+        XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), 2)
 
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertFalse(preferences.trackingOnboardingSeen)
-        XCTAssertEqual(preferences.allowedTrackingProviders, [.codex, .claude])
+        XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
 
         preferences.markTrackingOnboardingSeen()
         XCTAssertFalse(preferences.needsTrackingOnboarding)
         XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
-        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v2"))
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v3"))
+    }
+
+    func testFreeProviderSoftLockAndDesktopConnect() {
+        let suite = UserDefaults(suiteName: "MomoProviderLock.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertTrue(preferences.connectDesktopProvider(.codex, trackUsage: true, trackRecentPrompts: true, momoPlus: false))
+        XCTAssertTrue(preferences.connectDesktopProvider(.claude, trackUsage: true, trackRecentPrompts: false, momoPlus: false))
+        XCTAssertFalse(preferences.connectDesktopProvider(.cursor, trackUsage: true, trackRecentPrompts: true, momoPlus: false))
+        XCTAssertEqual(preferences.allowedTrackingProviders, [.codex, .claude])
+        XCTAssertTrue(preferences.isEnabled(.codex))
+        XCTAssertTrue(preferences.connectDesktopProvider(.cursor, trackUsage: true, trackRecentPrompts: true, momoPlus: true))
+        XCTAssertEqual(DesktopAppCatalog.freeProviderLimit, 2)
     }
 
     func testFirstRunOnboardingGateAndReplay() {
@@ -40,8 +56,8 @@ final class OnboardingAndTalkTests: XCTestCase {
         preferences.reopenTrackingOnboarding()
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertFalse(preferences.trackingOnboardingSeen)
-        // Allow-list retained for Replay chooser; strip stays empty until Welcome finishes again.
-        XCTAssertEqual(preferences.allowedTrackingProviders, [.codex, .claude])
+        // Replay clears allow-list so connect starts empty again.
+        XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
         XCTAssertEqual(preferences.trackingStripProviders(), [])
     }
 
@@ -75,12 +91,12 @@ final class OnboardingAndTalkTests: XCTestCase {
             XCTAssertEqual(remaining, expectedRemaining)
         }
         XCTAssertEqual(quota.access(), .requiresPlus)
-        XCTAssertEqual(TalkQuotaStore.UpsellCopy.inline, "You’ve used your free Talk asks. MOMO+ keeps answering about your usage and activity on this Mac — still local, still no invented quotas.")
+        XCTAssertEqual(TalkQuotaStore.UpsellCopy.inline, "You’ve used your free Talk asks. MOMO+ unlocks unlimited Talk, more than 2 providers, and analytics — still local, still no invented quotas.")
         XCTAssertEqual(TalkQuotaStore.UpsellCopy.primaryButton, "Continue with MOMO+")
         XCTAssertEqual(TalkQuotaStore.UpsellCopy.secondaryButton, "Not now")
         XCTAssertEqual(
             TalkQuotaStore.UpsellCopy.optionalOneLiner,
-            "Plus also unlocks scheduled refresh, all providers, and “tell me before you hit the wall” alerts."
+            "Free includes 1 guided Talk trial + 3 asks and up to 2 desktop providers."
         )
 
         quota.setMomoPlusEntitled(true)

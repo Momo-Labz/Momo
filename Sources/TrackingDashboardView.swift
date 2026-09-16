@@ -3,7 +3,11 @@ import SwiftUI
 
 private extension TrackerTab {
     var symbol: String {
-        switch self { case .activity: "waveform.path.ecg"; case .usage: "chart.bar.xaxis"; case .brain: "circle.hexagongrid.fill" }
+        switch self {
+        case .activity: "waveform.path.ecg"
+        case .brain: "circle.hexagongrid.fill"
+        case .upgrade: "sparkles"
+        }
     }
 }
 
@@ -40,12 +44,6 @@ struct TrackingDashboardView: View {
         return snapshots.filter { allowed.contains($0.provider) }
     }
 
-    private var usageSnapshots: [ProviderSnapshot] {
-        preferences.trackingOnboardingSeen
-            ? snapshots.filter { preferences.isTrackingAllowed($0.provider) }
-            : []
-    }
-
     private var sessions: [AgentSession] {
         let all = snapshots.flatMap(\.sessions).sorted { $0.updatedAt > $1.updatedAt }
         guard !debouncedSearch.isEmpty else { return all }
@@ -66,10 +64,6 @@ struct TrackingDashboardView: View {
                     .zIndex(2)
                 Divider().opacity(0.55)
                 if surface.route == .dashboard {
-                    if !surface.pendingUsageReturn.isEmpty {
-                        usageReturnBanner
-                        Divider().opacity(0.55)
-                    }
                     tabBar
                     Divider().opacity(0.55)
                     Group {
@@ -77,8 +71,8 @@ struct TrackingDashboardView: View {
                         else {
                             switch surface.trackerTab {
                             case .activity: activity
-                            case .usage: usage
                             case .brain: brain
+                            case .upgrade: upgrade
                             }
                         }
                     }
@@ -108,10 +102,22 @@ struct TrackingDashboardView: View {
                     TrackingOnboardingView(
                         initialStep: preferences.needsTrackingOnboarding ? .welcome : onboardingStartStep,
                         initialIntents: preferences.onboardingIntents,
-                        initialAllowed: preferences.allowedTrackingProviders,
+                        initialAllowed: [],
                         onFinish: finishOnboarding,
                         onDismiss: preferences.needsTrackingOnboarding ? nil : { showOnboarding = false },
-                        onTalkTrial: { showTalkTrial = true }
+                        onTalkTrial: { showTalkTrial = true },
+                        onProviderConnected: { allowed in
+                            for provider in allowed {
+                                _ = preferences.connectDesktopProvider(
+                                    provider,
+                                    trackUsage: true,
+                                    trackRecentPrompts: true,
+                                    momoPlus: TalkService.shared.quota.momoPlusEntitled
+                                )
+                            }
+                            monitor.setAuthorizedProviders(preferences.enabledProviders)
+                            monitor.refresh()
+                        }
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -195,45 +201,25 @@ struct TrackingDashboardView: View {
     private func finishOnboarding(intents: Set<OnboardingIntent>, allowed: Set<AIProvider>) {
         preferences.setOnboardingIntents(intents)
         preferences.syncRefreshIntervalFromDefaults()
+        for provider in allowed {
+            _ = preferences.connectDesktopProvider(
+                provider,
+                trackUsage: true,
+                trackRecentPrompts: true,
+                momoPlus: TalkService.shared.quota.momoPlusEntitled
+            )
+        }
         preferences.setAllowedTrackingProviders(allowed, markOnboardingSeen: true)
+        monitor.setAuthorizedProviders(preferences.enabledProviders)
+        monitor.refresh()
         showOnboarding = false
         showTalkTrial = false
         onboardingStartStep = .welcome
-        let connectable = AIProvider.allCases.filter { allowed.contains($0) && $0.supportsUsageCapture }
-        // Soft return only — do not auto-open isolated WebKit after browser connect.
-        surface.offerUsageReturn(connectable)
-        if intents.contains(.usageTracking), !connectable.isEmpty {
-            surface.trackerTab = .usage
-        } else if preferences.prefersBrainTips() {
+        if preferences.prefersBrainTips() {
             surface.trackerTab = .brain
+        } else {
+            surface.trackerTab = .activity
         }
-    }
-
-    private var usageReturnBanner: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Button("Confirm usage snapshot") { surface.beginPendingUsageReturn() }
-                    .barBoyButton()
-                Text("Verified % unlock after you preview and accept. Timed refresh is MOMO+.")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 8)
-            Button {
-                surface.dismissUsageReturn()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 10, weight: .bold))
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .help("Dismiss")
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(BarBoyStyle.surface)
     }
 
     private var header: some View {
@@ -328,13 +314,13 @@ struct TrackingDashboardView: View {
         Group {
             if railSnapshots.isEmpty {
                 HStack(spacing: 10) {
-                    Text(preferences.trackingOnboardingSeen
-                          ? "No providers allowed yet."
-                          : "Finish onboarding to populate this strip.")
+                    Text(preferences.allowedTrackingProviders.isEmpty
+                          ? "No desktop apps connected yet."
+                          : "Finish onboarding to keep these apps on the strip.")
                         .font(BarBoyStyle.microLabel)
                         .foregroundStyle(.secondary)
                     Spacer(minLength: 0)
-                    Button(preferences.trackingOnboardingSeen ? "CONNECT PROVIDERS" : "START ONBOARDING") {
+                    Button(preferences.trackingOnboardingSeen ? "CONNECT APPS" : "START ONBOARDING") {
                         onboardingStartStep = preferences.trackingOnboardingSeen ? .connectProviders : .welcome
                         showOnboarding = true
                         surface.expanded = true
@@ -352,6 +338,7 @@ struct TrackingDashboardView: View {
                         ForEach(railSnapshots) { snapshot in
                             ProviderCard(
                                 snapshot: snapshot,
+                                observations: monitor.usageObservations.filter { $0.provider == snapshot.provider },
                                 expanded: surface.usesExpandedSize || showsOverview,
                                 selected: surface.selectedProvider == snapshot.provider,
                                 width: widths
@@ -360,6 +347,7 @@ struct TrackingDashboardView: View {
                                 if surface.route == .dashboard { surface.trackerTab = .activity }
                             }
                             .frame(width: widths)
+                            .clipped()
                         }
                     }
                     .padding(.horizontal, 12)
@@ -415,7 +403,6 @@ struct TrackingDashboardView: View {
         case .dashboard: "TRACKR"
         case .settings: "SETTINGS"
         case .session: "SESSION DETAILS"
-        case let .usage(provider): "\(provider.name.uppercased()) USAGE"
         case .talk: "TALK"
         }
     }
@@ -433,8 +420,6 @@ struct TrackingDashboardView: View {
                     .foregroundStyle(.secondary)
                     .padding(18)
             }
-		case let .usage(provider):
-            UsageCaptureView(provider: provider)
         case .talk:
             ScrollView {
                 TalkPanelView(onDismiss: { surface.goBack() })
@@ -476,35 +461,62 @@ struct TrackingDashboardView: View {
         }
     }
 
-    private var usage: some View {
+    private var upgrade: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("USAGE").font(BarBoyStyle.sectionLabel)
-                Text(preferences.prefersUsageTips()
-                     ? "Connect allowed providers, then Confirm usage from the official page when ready. A dash means MOMO has no verified value."
-                     : "Connect any allowed provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
+            VStack(alignment: .leading, spacing: 14) {
+                Text(TalkQuotaStore.UpsellCopy.upgradeHeadline)
+                    .font(BarBoyStyle.display)
+                Text(TalkQuotaStore.UpsellCopy.upgradePitch)
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(.secondary)
-                if usageSnapshots.isEmpty {
-                    Text("No providers allowed yet. Connect providers in Settings or finish onboarding.")
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    upgradeRow(TalkQuotaStore.UpsellCopy.benefitTalk, unlocked: TalkService.shared.quota.momoPlusEntitled)
+                    upgradeRow(TalkQuotaStore.UpsellCopy.benefitProviders, unlocked: TalkService.shared.quota.momoPlusEntitled)
+                    upgradeRow(TalkQuotaStore.UpsellCopy.benefitAnalytics, unlocked: TalkService.shared.quota.momoPlusEntitled)
+                }
+                .padding(12)
+                .background(BarBoyStyle.surface)
+                .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+
+                if TalkService.shared.quota.momoPlusEntitled {
+                    Text("MOMO+ is on for this Mac (soft unlock).")
                         .font(BarBoyStyle.bodySmall)
                         .foregroundStyle(.secondary)
-                        .padding(.vertical, 12)
-                    Button("CONNECT PROVIDERS") {
-                        onboardingStartStep = .connectProviders
-                        showOnboarding = true
+                    Button("Turn off MOMO+ (testing)") {
+                        TalkService.shared.quota.setMomoPlusEntitled(false)
+                    }
+                    .barBoyButton()
+                } else {
+                    Text(TalkQuotaStore.UpsellCopy.optionalOneLiner)
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                    Button(TalkQuotaStore.UpsellCopy.primaryButton) {
+                        TalkService.shared.quota.setMomoPlusEntitled(true)
                     }
                     .barBoyButton()
                 }
-                ForEach(usageSnapshots) { snapshot in
-                    UsageCard(
-                        snapshot: snapshot,
-                        observations: monitor.usageObservations.filter { $0.provider == snapshot.provider }
-                    ) {
-                        surface.openUsage(snapshot.provider)
-                    }
-                }
-            }.padding(12)
+
+                Text("Connected apps: \(preferences.allowedTrackingProviders.count)"
+                     + (TalkService.shared.quota.momoPlusEntitled
+                        ? " · unlimited"
+                        : " / \(DesktopAppCatalog.freeProviderLimit) free"))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+        }
+    }
+
+    private func upgradeRow(_ title: String, unlocked: Bool) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: unlocked ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(unlocked ? Color.primary : .secondary)
+            Text(title)
+                .font(BarBoyStyle.rowTitle)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
     }
 
@@ -529,31 +541,66 @@ struct TrackingDashboardView: View {
 
 private struct ProviderCard: View {
     let snapshot: ProviderSnapshot
+    let observations: [ProviderUsageObservation]
     let expanded: Bool
     let selected: Bool
     let width: CGFloat?
     let action: () -> Void
 
+    private var usagePercent: Int? {
+        if let percent = snapshot.primaryUsagePercent { return percent }
+        return observations.compactMap(\.percentage).first
+    }
+
+    private var statusLine: String {
+        if let urgent = snapshot.sessions.first(where: { $0.attention.isUrgent }) {
+            return "ISSUE · \(urgent.title)"
+        }
+        if let percent = usagePercent {
+            return "USAGE · \(percent)%"
+        }
+        if snapshot.activeCount > 0 { return "LIVE · \(snapshot.activeCount)" }
+        if snapshot.isInstalled { return snapshot.sessions.isEmpty ? "IDLE" : snapshot.statusLabel }
+        return "NOT INSTALLED"
+    }
+
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: expanded ? 5 : 3) {
-                HStack { ProviderMark(provider: snapshot.provider, size: expanded ? 22 : 17, active: snapshot.activeCount > 0); Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel); Spacer(minLength: 0); Text(snapshot.isInstalled ? (snapshot.activeCount > 0 ? "LIVE" : "IDLE") : "UNAVAILABLE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary) }
-                Text(snapshot.statusLabel).font(BarBoyStyle.bodySmall).lineLimit(1)
-                if expanded { Text("\(snapshot.tokenLabel) · \(snapshot.resetLabel(now: .now))").font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1) }
-                if let percent = snapshot.recordedQuota?.percent ?? snapshot.recordedQuotas.first?.percent {
-                    HStack(spacing: 2) {
-                        ForEach(0..<4, id: \.self) { index in
-                            Rectangle().fill(index < Int(ceil(Double(percent) / 25.0)) ? (percent >= 90 ? BarBoyStyle.coral : BarBoyStyle.amber) : BarBoyStyle.hairline.opacity(0.45)).frame(height: 3)
-                        }
+                HStack(spacing: 4) {
+                    ProviderMark(provider: snapshot.provider, size: expanded ? 22 : 17, active: snapshot.activeCount > 0)
+                    Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel).lineLimit(1)
+                    Spacer(minLength: 0)
+                    Text(snapshot.activeCount > 0 ? "LIVE" : (snapshot.isInstalled ? "IDLE" : "—"))
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                }
+                Text(statusLine)
+                    .font(BarBoyStyle.bodySmall)
+                    .lineLimit(1)
+                if expanded {
+                    Text(usagePercent.map { "\($0)% · \(snapshot.resetLabel(now: .now))" } ?? "USAGE — · \(snapshot.resetLabel(now: .now))")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 2) {
+                    ForEach(0..<4, id: \.self) { index in
+                        let filled = usagePercent.map { index < Int(ceil(Double($0) / 25.0)) } ?? false
+                        Rectangle()
+                            .fill(filled ? ((usagePercent ?? 0) >= 90 ? BarBoyStyle.coral : BarBoyStyle.amber) : BarBoyStyle.hairline.opacity(0.45))
+                            .frame(height: 3)
                     }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(width: width, alignment: .leading)
-            .padding(8)
+            .padding(ProviderStripLayout.cardPadding)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .background(selected ? BarBoyStyle.surface.opacity(1.8) : BarBoyStyle.surface)
             .overlay(Rectangle().stroke(snapshot.hasErrorOrApproval ? BarBoyStyle.coral : selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))
-        }.buttonStyle(.plain).accessibilityLabel("\(snapshot.provider.name), \(snapshot.statusLabel)")
+        }
+        .buttonStyle(.plain)
+        .frame(width: width)
+        .accessibilityLabel("\(snapshot.provider.name), \(statusLine)")
     }
 }
 
@@ -571,56 +618,6 @@ private struct TrackingSessionRow: View {
     }
 }
 
-private struct UsageCard: View {
-    let snapshot: ProviderSnapshot
-    let observations: [ProviderUsageObservation]
-    let onConnect: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack {
-                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle)
-                Spacer()
-                Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel)
-            }
-            HStack {
-                Text(snapshot.quotaLabels.joined(separator: "  ·  "))
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(snapshot.resetLabel(now: .now))
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-            }
-            if !observations.isEmpty {
-                ForEach(observations) { observation in
-                    HStack(spacing: 8) {
-                        Text(observation.metric.uppercased())
-                            .font(BarBoyStyle.microLabel)
-                            .lineLimit(1)
-                        Spacer()
-                        Text(observation.percentage.map { "\($0)%" } ?? "—")
-                            .font(BarBoyStyle.microLabel)
-                        Text(observation.provenance.label)
-                            .font(BarBoyStyle.microLabel)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            if snapshot.provider.supportsUsageCapture {
-                Button("CONNECT USAGE", action: onConnect).barBoyButton()
-            } else {
-                Text("No official usage page connected yet.")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(11)
-        .background(BarBoyStyle.surface)
-        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-    }
-}
-
 private struct LoadingSkeleton: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -633,7 +630,14 @@ private struct SessionDetailView: View {
     let session: AgentSession
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack { ProviderMark(provider: session.provider, size: 34, active: session.isRunning); VStack(alignment: .leading) { Text(session.provider.name.uppercased()).font(BarBoyStyle.microLabel); Text(SessionPresentation.title(for: session)).font(BarBoyStyle.display) }; Spacer() }
+            HStack {
+                ProviderMark(provider: session.provider, size: 34, active: session.isRunning)
+                VStack(alignment: .leading) {
+                    Text(session.provider.name.uppercased()).font(BarBoyStyle.microLabel)
+                    Text(SessionPresentation.title(for: session)).font(BarBoyStyle.display)
+                }
+                Spacer()
+            }
             Divider()
             Text(session.attentionReason ?? session.attention.label).font(BarBoyStyle.bodySmall)
             Text("PROJECT  \(session.project)\nMODEL  \(session.model ?? "Unavailable")\nUPDATED  \(session.updatedAt.formatted(date: .abbreviated, time: .shortened))").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)

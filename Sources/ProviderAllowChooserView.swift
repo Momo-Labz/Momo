@@ -9,10 +9,11 @@ enum TrackingOnboardingStep: Int, CaseIterable {
     case talkTrial
 }
 
-/// Welcome → intent → browser + local-permission → Talk trial onboarding for MOMO Trackr.
-/// First connect tap opens the default system browser; it does not start WebKit capture.
+/// Welcome → intent → desktop-app allow → prefs → Talk trial.
+/// Providers start empty; each click opens the desktop app and grants local tracking.
 struct TrackingOnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @ObservedObject private var talkQuota = TalkService.shared.quota
 
     @State private var step: TrackingOnboardingStep
     @State private var intents: Set<OnboardingIntent>
@@ -20,6 +21,7 @@ struct TrackingOnboardingView: View {
     @State private var permissionProvider: AIProvider?
     @State private var allowUsage = true
     @State private var allowRecentPrompts = true
+    @State private var plusGateMessage: String?
     @State private var selectedRefreshInterval = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
     @State private var recordingTalkShortcut = false
     @AppStorage("notifyFailure") private var notifyFailure = true
@@ -31,6 +33,8 @@ struct TrackingOnboardingView: View {
     var onFinish: (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void
     var onDismiss: (() -> Void)?
     var onTalkTrial: (() -> Void)?
+    /// Called when a provider is successfully connected so the strip can fill immediately.
+    var onProviderConnected: ((_ allowed: Set<AIProvider>) -> Void)?
 
     init(
         initialStep: TrackingOnboardingStep = .welcome,
@@ -38,15 +42,18 @@ struct TrackingOnboardingView: View {
         initialAllowed: Set<AIProvider> = [],
         onFinish: @escaping (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void,
         onDismiss: (() -> Void)? = nil,
-        onTalkTrial: (() -> Void)? = nil
+        onTalkTrial: (() -> Void)? = nil,
+        onProviderConnected: ((_ allowed: Set<AIProvider>) -> Void)? = nil
     ) {
         self.initialStep = initialStep
         _step = State(initialValue: initialStep)
         _intents = State(initialValue: initialIntents)
-        _allowed = State(initialValue: initialAllowed)
+        // Connect UI always starts empty; strip fills only after each successful allow.
+        _allowed = State(initialValue: [])
         self.onFinish = onFinish
         self.onDismiss = onDismiss
         self.onTalkTrial = onTalkTrial
+        self.onProviderConnected = onProviderConnected
     }
 
     var body: some View {
@@ -57,6 +64,7 @@ struct TrackingOnboardingView: View {
                         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) {
                             step = TrackingOnboardingStep(rawValue: max(0, step.rawValue - 1)) ?? .welcome
                             permissionProvider = nil
+                            plusGateMessage = nil
                         }
                     } label: {
                         Label("BACK", systemImage: "chevron.left")
@@ -104,13 +112,14 @@ struct TrackingOnboardingView: View {
             Text("Welcome to MOMO Trackr")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("Local tracking for the AI tools you already use. On-device only — we don’t scrape browser cookies or invent usage %.")
+            Text("Local tracking for the AI desktop apps you already use. On-device only — we don’t scrape browser cookies or invent usage %.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
             primaryButton("Continue") {
+                allowed = []
                 step = .intents
             }
         }
@@ -172,14 +181,22 @@ struct TrackingOnboardingView: View {
 
     private var connectStep: some View {
         VStack(spacing: 12) {
-            Text("Allow the providers you use")
+            Text("Connect the desktop apps you use")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("Tap to sign in on their official site in your browser. When you’re back, MOMO can use on-device usage and recent prompts — you still confirm a snapshot before any verified numbers show.")
+            Text("Start empty. Click a provider to open its Mac app, then allow local tracking for usage and recent prompts. Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+
+            if let plusGateMessage {
+                Text(plusGateMessage)
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(BarBoyStyle.coral)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if let permissionProvider {
                 permissionPanel(for: permissionProvider)
@@ -191,11 +208,7 @@ struct TrackingOnboardingView: View {
                 }
 
                 primaryButton("Continue") {
-                    if onDismiss == nil {
-                        step = .preferences
-                    } else {
-                        onFinish(intents, allowed)
-                    }
+                    step = .preferences
                 }
             }
         }
@@ -305,24 +318,40 @@ struct TrackingOnboardingView: View {
 
     private func providerConnectButton(_ provider: AIProvider) -> some View {
         let isAllowed = allowed.contains(provider)
+        let match = DesktopAppCatalog.match(for: provider)
         return Button {
-            _ = ProviderAccountOpen.openLogin(for: provider)
+            plusGateMessage = nil
+            if isAllowed { return }
+            let already = allowed.contains(provider)
+            guard MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already)
+                    || talkQuota.momoPlusEntitled else {
+                plusGateMessage = "Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers. Unlock more on the Upgrade tab with MOMO+."
+                return
+            }
+            if match.isInstalled {
+                _ = DesktopAppConnect.openDesktopApp(for: provider)
+            }
             allowUsage = true
             allowRecentPrompts = true
             permissionProvider = provider
         } label: {
             HStack(spacing: 12) {
                 ProviderMark(provider: provider, size: 28, active: isAllowed)
-                Text(isAllowed ? "\(provider.connectButtonTitle) · Allowed" : provider.connectButtonTitle)
-                    .font(BarBoyStyle.rowTitle)
-                    .foregroundStyle(Color.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: isAllowed ? "checkmark" : "arrow.up.right")
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(isAllowed ? "\(provider.connectButtonTitle) · Connected" : provider.connectButtonTitle)
+                        .font(BarBoyStyle.rowTitle)
+                        .foregroundStyle(Color.primary)
+                    Text(match.isInstalled ? match.displayName : "Not installed in Applications")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: isAllowed ? "checkmark" : (match.isInstalled ? "arrow.up.forward.app" : "plus"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 48)
+            .frame(maxWidth: .infinity, minHeight: 52)
             .background(BarBoyStyle.surface)
             .overlay(Rectangle().stroke(isAllowed ? Color.primary : BarBoyStyle.hairline, lineWidth: isAllowed ? 1.5 : 1))
             .contentShape(Rectangle())
@@ -332,9 +361,16 @@ struct TrackingOnboardingView: View {
     }
 
     private func permissionPanel(for provider: AIProvider) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let match = DesktopAppCatalog.match(for: provider)
+        return VStack(alignment: .leading, spacing: 12) {
             Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
+            Text(match.isInstalled
+                 ? "Allow MOMO to read local usage and recent prompts from \(match.displayName) on this Mac."
+                 : "\(match.displayName) isn’t in Applications yet. You can still allow local tracking for when it is installed and open.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             Toggle(isOn: $allowUsage) {
                 Text("Track usage").font(BarBoyStyle.rowTitle)
@@ -357,10 +393,18 @@ struct TrackingOnboardingView: View {
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                 .buttonStyle(.plain)
 
-                Button("Continue") {
+                Button("Allow") {
                     guard allowUsage || allowRecentPrompts else { return }
+                    let already = allowed.contains(provider)
+                    guard talkQuota.momoPlusEntitled
+                            || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already) else {
+                        plusGateMessage = "Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers. Unlock more on the Upgrade tab with MOMO+."
+                        permissionProvider = nil
+                        return
+                    }
                     allowed.insert(provider)
                     permissionProvider = nil
+                    onProviderConnected?(allowed)
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)

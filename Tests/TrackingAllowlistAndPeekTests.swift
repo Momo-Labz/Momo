@@ -62,7 +62,9 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
             ProviderStripLayout.visibleProviders(allowed: [.codex, .claude], onboardingSeen: true),
             [.codex, .claude]
         )
-        XCTAssertEqual(ProviderStripLayout.visibleProviders(allowed: [.codex], onboardingSeen: false), [])
+        // Strip fills as soon as providers are allowed — including mid-onboarding.
+        XCTAssertEqual(ProviderStripLayout.visibleProviders(allowed: [.codex], onboardingSeen: false), [.codex])
+        XCTAssertEqual(ProviderStripLayout.visibleProviders(allowed: [], onboardingSeen: false), [])
         XCTAssertNil(ProviderStripLayout.equalCardWidth(availableWidth: 400, count: 0))
 
         let two = try XCTUnwrap(ProviderStripLayout.equalCardWidth(availableWidth: 400, count: 2, spacing: 7))
@@ -72,7 +74,7 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         XCTAssertGreaterThan(two, three)
     }
 
-    func testProviderConnectOpensAccountLoginWithoutUsageCaptureURL() {
+    func testProviderConnectOpensDesktopAppWhenPresent() {
         let original = ProviderAccountOpen.openURL
         defer { ProviderAccountOpen.openURL = original }
 
@@ -82,22 +84,17 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
             return true
         }
 
-        XCTAssertTrue(ProviderAccountOpen.openLogin(for: .codex))
-        XCTAssertEqual(opened.count, 1)
-        XCTAssertEqual(opened.first, AIProvider.codex.accountLoginURL)
-        XCTAssertNotEqual(opened.first, AIProvider.codex.usageURL)
-        XCTAssertEqual(AIProvider.codex.connectButtonTitle, "Continue with Codex / ChatGPT")
-    }
-
-    func testUsageReturnOfferDoesNotAutoOpenCaptureRoute() {
-        let surface = MomoSurface.shared
-        surface.dismissUsageReturn()
-        let routeBefore = surface.route
-        surface.offerUsageReturn([.claude, .cursor])
-        XCTAssertEqual(surface.pendingUsageReturn, [.claude, .cursor])
-        XCTAssertEqual(surface.route, routeBefore)
-        surface.dismissUsageReturn()
-        XCTAssertTrue(surface.pendingUsageReturn.isEmpty)
+        // Without a real app on this Linux CI host, openLogin returns false and opens nothing.
+        let openedLogin = ProviderAccountOpen.openLogin(for: .codex)
+        if DesktopAppCatalog.isPresentOnDisk(.codex) {
+            XCTAssertTrue(openedLogin)
+            XCTAssertEqual(opened.count, 1)
+        } else {
+            XCTAssertFalse(openedLogin)
+            XCTAssertTrue(opened.isEmpty)
+        }
+        XCTAssertEqual(AIProvider.codex.connectButtonTitle, "Connect ChatGPT / Codex")
+        XCTAssertEqual(DesktopAppCatalog.applicationFileNames(for: .codex), ["ChatGPT.app", "Codex.app"])
     }
 
     func testPeekMappingUsesFiveHourAndWeeklyWhenPresent() {
