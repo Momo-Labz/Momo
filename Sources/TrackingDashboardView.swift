@@ -190,8 +190,8 @@ struct TrackingDashboardView: View {
                     .foregroundStyle(.secondary)
                     .padding(18)
             }
-        case let .usage(provider):
-            UsageCaptureView(provider: provider) { surface.goBack() }
+		case let .usage(provider):
+            UsageCaptureView(provider: provider)
         }
     }
 
@@ -226,9 +226,16 @@ struct TrackingDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Text("USAGE").font(BarBoyStyle.sectionLabel)
-                Text("Only provider-recorded windows are shown. A dash means MOMO has no verified value.").font(BarBoyStyle.bodySmall).foregroundStyle(.secondary)
+                Text("Connect any provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(.secondary)
                 ForEach(snapshots) { snapshot in
-                    UsageCard(snapshot: snapshot) { surface.openUsage(snapshot.provider) }
+                    UsageCard(
+                        snapshot: snapshot,
+                        observations: monitor.usageObservations.filter { $0.provider == snapshot.provider }
+                    ) {
+                        surface.openUsage(snapshot.provider)
+                    }
                 }
             }.padding(12)
         }
@@ -280,15 +287,51 @@ private struct TrackingSessionRow: View {
 
 private struct UsageCard: View {
     let snapshot: ProviderSnapshot
+    let observations: [ProviderUsageObservation]
     let onConnect: () -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack { Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle); Spacer(); Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel) }
-            HStack { Text(snapshot.quotaLabels.joined(separator: "  ·  ")).font(BarBoyStyle.microLabel).foregroundStyle(.secondary); Spacer(); Text(snapshot.resetLabel(now: .now)).font(BarBoyStyle.microLabel).foregroundStyle(.secondary) }
-            if snapshot.provider == .claude || snapshot.provider == .cursor {
-                Button("CONNECT USAGE", action: onConnect).barBoyButton()
+            HStack {
+                Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.rowTitle)
+                Spacer()
+                Text(snapshot.usageText.uppercased()).font(BarBoyStyle.microLabel)
             }
-        }.padding(11).background(BarBoyStyle.surface).overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            HStack {
+                Text(snapshot.quotaLabels.joined(separator: "  ·  "))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text(snapshot.resetLabel(now: .now))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+            if !observations.isEmpty {
+                ForEach(observations) { observation in
+                    HStack(spacing: 8) {
+                        Text(observation.metric.uppercased())
+                            .font(BarBoyStyle.microLabel)
+                            .lineLimit(1)
+                        Spacer()
+                        Text(observation.percentage.map { "\($0)%" } ?? "—")
+                            .font(BarBoyStyle.microLabel)
+                        Text(observation.provenance.label)
+                            .font(BarBoyStyle.microLabel)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            if snapshot.provider.supportsUsageCapture {
+                Button("CONNECT USAGE", action: onConnect).barBoyButton()
+            } else {
+                Text("No official usage page connected yet.")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(11)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
     }
 }
 

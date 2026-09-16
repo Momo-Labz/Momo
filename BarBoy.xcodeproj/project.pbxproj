@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		009909D80F56BE20EC7E27D3 /* RelayContract.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3A0DA1D499E0A4AB4BF6AF6 /* RelayContract.swift */; };
 		03DF24FEEFAB26F4DFDAC1AC /* BrainBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0DDBB3BDDDD86AD85C2D204 /* BrainBackendTests.swift */; };
+		A41F8C2E91B64D0E9C7A15D1 /* UsageCaptureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B52E9D3F02C75E1F0D8B26E2 /* UsageCaptureTests.swift */; };
 		0802C41ACA287566BC7D56FE /* momo-index-frames.json in Resources */ = {isa = PBXBuildFile; fileRef = 6F8BBDBA397DACEB28BE4C94 /* momo-index-frames.json */; };
 		09B6316A680342B10C5D86BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CB2244A22CE29B93DD607E1 /* SettingsView.swift */; };
 		0D419E0E351889FB0914BCC4 /* TrackingDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FEA8C070E526C8C4625F3AB /* TrackingDashboardView.swift */; };
@@ -96,6 +97,7 @@
 		366BD6C17C93726199B514C0 /* TrackingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingCache.swift; sourceTree = "<group>"; };
 		374ADEF3C434DD455D7E28E3 /* known_marketplaces.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = known_marketplaces.json; sourceTree = "<group>"; };
 		39DF5923C083CA52AA8C57BE /* BrainVisualTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrainVisualTests.swift; sourceTree = "<group>"; };
+		B52E9D3F02C75E1F0D8B26E2 /* UsageCaptureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageCaptureTests.swift; sourceTree = "<group>"; };
 		41688AC811F225C650766F04 /* BarBoyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BarBoyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		426A4EB85FA61F9E5197EED0 /* BarBoyMobile.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BarBoyMobile.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		479945A2B783FEEB67F51BD8 /* RelayModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RelayModels.swift; sourceTree = "<group>"; };
@@ -286,6 +288,7 @@
 				B0DDBB3BDDDD86AD85C2D204 /* BrainBackendTests.swift */,
 				39DF5923C083CA52AA8C57BE /* BrainVisualTests.swift */,
 				DA84A3252D5B404FA9997089 /* SessionBackendTests.swift */,
+				B52E9D3F02C75E1F0D8B26E2 /* UsageCaptureTests.swift */,
 				18C3506B51651F4E05EC6AB7 /* Fixtures */,
 			);
 			path = Tests;
@@ -607,6 +610,7 @@
 				03DF24FEEFAB26F4DFDAC1AC /* BrainBackendTests.swift in Sources */,
 				83A76A2F000E44F112C888F7 /* BrainVisualTests.swift in Sources */,
 				E1CFD1914907ED6EA2AD02F9 /* SessionBackendTests.swift in Sources */,
+				A41F8C2E91B64D0E9C7A15D1 /* UsageCaptureTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

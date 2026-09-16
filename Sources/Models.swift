@@ -73,7 +73,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .claude: return URL(string: "https://claude.ai/settings/usage")
         case .gemini: return URL(string: "https://aistudio.google.com/app/usage")
         case .cursor: return URL(string: "https://cursor.com/dashboard/usage")
-        case .grok: return URL(string: "https://grok.com/")
+        // xAI documents Settings → Usage on grok.com; `?_s=usage` opens that panel when signed in.
+        case .grok: return URL(string: "https://grok.com/?_s=usage")
         }
     }
 
