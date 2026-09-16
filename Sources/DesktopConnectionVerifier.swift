@@ -2,11 +2,14 @@ import AppKit
 import Foundation
 
 /// Live connect/verification progress for onboarding — never leave a blank static panel.
+/// Connected is reserved for readable usage meters only (never Launch Services alone).
 enum DesktopConnectProgress: Equatable {
     case openingApp
     case waitingForSignIn
-    case readingLocalUsage
+    case searchingUsage
     case connected(ConnectUsageHonesty)
+    /// App may be open / sessions may exist, but no usage % meters yet.
+    case notReady(String)
     case needsPermission
     case failed(String)
     case timedOut
@@ -15,8 +18,9 @@ enum DesktopConnectProgress: Equatable {
         switch self {
         case .openingApp: return "Opening app…"
         case .waitingForSignIn: return "Waiting for sign-in…"
-        case .readingLocalUsage: return "Reading local usage…"
+        case .searchingUsage: return "Searching…"
         case .connected: return "Connected"
+        case .notReady: return "Not ready"
         case .needsPermission: return "Needs permission"
         case .failed: return "Failed"
         case .timedOut: return "Timed out"
@@ -25,30 +29,31 @@ enum DesktopConnectProgress: Equatable {
 
     var showsSpinner: Bool {
         switch self {
-        case .openingApp, .waitingForSignIn, .readingLocalUsage: return true
-        case .connected, .needsPermission, .failed, .timedOut: return false
+        case .openingApp, .waitingForSignIn, .searchingUsage: return true
+        case .connected, .notReady, .needsPermission, .failed, .timedOut: return false
         }
     }
 
     var isTerminal: Bool {
         switch self {
-        case .connected, .needsPermission, .failed, .timedOut: return true
-        case .openingApp, .waitingForSignIn, .readingLocalUsage: return false
+        case .connected, .notReady, .needsPermission, .failed, .timedOut: return true
+        case .openingApp, .waitingForSignIn, .searchingUsage: return false
         }
     }
 
+    /// True only when usage meters were found — Allow may advance.
     var isVerified: Bool {
         if case .connected = self { return true }
         return false
     }
 }
 
-/// Honest local-usage outcome after a successful desktop connect check.
+/// Honest local-usage outcome. Never pairs “Connected” with missing meters.
 struct ConnectUsageHonesty: Equatable {
     enum Outcome: Equatable {
         /// Parsed session/week % from a real local cache — values are optional when only one window exists.
         case usageFound(sessionPercent: Int?, weekPercent: Int?)
-        /// App/session readable but no usage-cache / statusline artifact yet.
+        /// No usage-cache / rate_limits / CLI meters yet (exact next step in `summary`).
         case noReadableCache
         /// Session root exists but listing/reading is blocked (FDA / App Management).
         case privacyBlocked
@@ -57,6 +62,14 @@ struct ConnectUsageHonesty: Equatable {
     let outcome: Outcome
     /// Absolute path of the cache file when usage was found.
     let sourcePath: String?
+    /// Optional provider-specific next step (CLI / cache / run once).
+    let nextStep: String?
+
+    init(outcome: Outcome, sourcePath: String?, nextStep: String? = nil) {
+        self.outcome = outcome
+        self.sourcePath = sourcePath
+        self.nextStep = nextStep
+    }
 
     var summary: String {
         switch outcome {
@@ -69,7 +82,8 @@ struct ConnectUsageHonesty: Equatable {
             }
             return parts.joined(separator: " ")
         case .noReadableCache:
-            return "Connected — no readable usage % yet. Claude/Codex need a local CLI cache or session rate_limits file; see the Usage tab for the exact next step."
+            return nextStep
+                ?? "Not ready — no readable usage % yet. Open the app, run one chat (or Claude Code / `ccusage` / Codex once), then Retry."
         case .privacyBlocked:
             return "macOS blocked reading local provider files. Open System Settings → Privacy & Security → Full Disk Access, allow MOMO, then Retry."
         }
@@ -77,6 +91,7 @@ struct ConnectUsageHonesty: Equatable {
 }
 
 /// Honest desktop-app connection check — never treats “process running” alone as verified.
+/// Verified / Connected requires readable usage meters for every provider.
 enum DesktopConnectionVerifier {
     /// Overall wall-clock budget for one connect attempt (open + scan).
     static let connectTimeout: Duration = .seconds(20)
@@ -88,8 +103,11 @@ enum DesktopConnectionVerifier {
         case notRunning
         /// App is open but MOMO cannot yet read local session/usage data (often mid sign-in).
         case awaitingSignIn
+        /// Local files may exist, but no usage % meters yet — Not ready, not Connected.
+        case awaitingUsage
         /// Session root exists but listing/reading is blocked by macOS TCC / Full Disk Access.
         case privacyBlocked
+        /// Usage meters found.
         case verified
         case failed(String)
 
@@ -105,11 +123,13 @@ enum DesktopConnectionVerifier {
             case .notRunning:
                 return "Open the app, finish any login prompts, then Retry."
             case .awaitingSignIn:
-                return "Finish signing in in the app, then Retry. MOMO only marks connected when local session or usage data is readable."
+                return "Finish signing in in the app, then Retry. MOMO only marks Connected when local usage % is readable."
+            case .awaitingUsage:
+                return "Not ready — no readable usage % yet. Run one chat in the app (or its CLI) so a local usage cache or rate_limits file exists, then Retry."
             case .privacyBlocked:
                 return "macOS blocked reading this app’s local files. Open System Settings → Privacy & Security → Full Disk Access, allow MOMO, then Retry. MOMO never writes into other apps."
             case .verified:
-                return "Connected — local session or usage data is readable."
+                return "Connected — local usage % is readable."
             case .failed(let reason):
                 return reason
             }
@@ -128,17 +148,20 @@ enum DesktopConnectionVerifier {
     static let sessionSuffixes = ["jsonl", "json"]
 
     /// Pure check for tests — inject filesystem / running state.
+    /// `hasUsageMeters` is required for `.verified`; session-only data is `.awaitingUsage`.
     static func evaluate(
         provider: AIProvider,
         isInstalled: Bool,
         isRunning: Bool,
         hasReadableSessionSource: Bool,
-        privacyBlocked: Bool = false
+        privacyBlocked: Bool = false,
+        hasUsageMeters: Bool = false
     ) -> Status {
         guard isInstalled else { return .notInstalled }
         guard isRunning else { return .notRunning }
-        if hasReadableSessionSource { return .verified }
+        if hasUsageMeters { return .verified }
         if privacyBlocked { return .privacyBlocked }
+        if hasReadableSessionSource { return .awaitingUsage }
         return .awaitingSignIn
     }
 
@@ -146,14 +169,16 @@ enum DesktopConnectionVerifier {
     static func verify(_ provider: AIProvider, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> Status {
         let installed = DesktopAppCatalog.locate(provider) != nil
         let running = isApplicationRunning(provider)
-        let readable = hasReadableLocalData(provider, home: home)
+        let meters = hasReadableUsageMeters(provider, home: home)
+        let readable = hasReadableSessionSource(provider, home: home)
         let blocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(provider, home: home)
         return evaluate(
             provider: provider,
             isInstalled: installed,
             isRunning: running,
             hasReadableSessionSource: readable,
-            privacyBlocked: blocked
+            privacyBlocked: blocked,
+            hasUsageMeters: meters
         )
     }
 
@@ -185,7 +210,7 @@ enum DesktopConnectionVerifier {
         guard !Task.isCancelled else {
             return ConnectResult(status: .failed("Cancelled"), honesty: nil, progress: .failed("Cancelled"))
         }
-        await onProgress(.readingLocalUsage)
+        await onProgress(.searchingUsage)
 
         let verifyTask = Task { await verifyOffMain(provider) }
         let result: ConnectResult = await withTaskGroup(of: ConnectResult.self) { group in
@@ -224,7 +249,7 @@ enum DesktopConnectionVerifier {
         switch status {
         case .privacyBlocked:
             return ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
-        case .verified:
+        case .verified, .awaitingUsage, .awaitingSignIn:
             let probed = LocalUsageArtifactReader.probeDetail(
                 for: provider,
                 home: home,
@@ -241,9 +266,10 @@ enum DesktopConnectionVerifier {
                     sourcePath: detail.sourceDescription
                 )
             }
-            // Verified via sessions (or non-% artifacts) but no quota meters.
-            return ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil)
-        case .notInstalled, .notRunning, .awaitingSignIn, .failed:
+            let next = probed.emptyReason?.message
+                ?? Status.awaitingUsage.guidance
+            return ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil, nextStep: next)
+        case .notInstalled, .notRunning, .failed:
             return nil
         }
     }
@@ -251,15 +277,19 @@ enum DesktopConnectionVerifier {
     static func progress(from status: Status, honesty: ConnectUsageHonesty?) -> DesktopConnectProgress {
         switch status {
         case .verified:
-            return .connected(honesty ?? ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil))
+            if let honesty, case .usageFound = honesty.outcome {
+                return .connected(honesty)
+            }
+            // Defensive: never show Connected without meters.
+            return .notReady(honesty?.summary ?? Status.awaitingUsage.guidance)
+        case .awaitingUsage, .awaitingSignIn:
+            return .notReady(honesty?.summary ?? status.guidance)
         case .privacyBlocked:
             return .needsPermission
         case .notInstalled:
             return .failed(Status.notInstalled.guidance)
         case .notRunning:
             return .failed(Status.notRunning.guidance)
-        case .awaitingSignIn:
-            return .failed(Status.awaitingSignIn.guidance)
         case .failed(let reason):
             return .failed(reason)
         }
@@ -300,22 +330,34 @@ enum DesktopConnectionVerifier {
         }
     }
 
-    /// Readable session file **or** honest local usage artifact (Claude statusline cache, etc.).
+    /// True when local/CLI usage meters (5h and/or week %) are readable — required for Connected.
+    static func hasReadableUsageMeters(
+        _ provider: AIProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        fileManager: FileManager = .default,
+        now: Date = .now
+    ) -> Bool {
+        let probed = LocalUsageArtifactReader.probeDetail(
+            for: provider,
+            home: home,
+            now: now,
+            fileManager: fileManager,
+            timeout: 3
+        )
+        return probed.detail.hasQuotaMeters
+    }
+
+    /// Readable session file **or** usage artifact (legacy helper — prefer `hasReadableUsageMeters` for Connected).
     static func hasReadableLocalData(
         _ provider: AIProvider,
         home: URL = FileManager.default.homeDirectoryForCurrentUser,
         fileManager: FileManager = .default,
         now: Date = .now
     ) -> Bool {
-        if hasReadableSessionSource(provider, home: home, fileManager: fileManager) {
+        if hasReadableUsageMeters(provider, home: home, fileManager: fileManager, now: now) {
             return true
         }
-        return !LocalUsageArtifactReader.quotaWindows(
-            for: provider,
-            home: home,
-            now: now,
-            fileManager: fileManager
-        ).isEmpty
+        return hasReadableSessionSource(provider, home: home, fileManager: fileManager)
     }
 
     /// True when a default session root exists and at least one session file can be opened for reading.

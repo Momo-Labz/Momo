@@ -124,7 +124,13 @@ struct TalkPanelView: View {
         .frame(maxWidth: 440)
         .background(BarBoyStyle.panel)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-        .onAppear { talk.begin(isOnboardingTrial: isOnboardingTrial) }
+        .onAppear {
+            talk.begin(isOnboardingTrial: isOnboardingTrial)
+            // If System Settings already granted mic, clear a stale “access is off” Talk state.
+            if VoicePermission.microphoneAuthorized(), voice.state == .unavailable {
+                voice.stop()
+            }
+        }
         .onDisappear { talk.cancel(); voice.stop() }
         .sheet(isPresented: $recordingShortcut) {
             VStack(spacing: 16) {

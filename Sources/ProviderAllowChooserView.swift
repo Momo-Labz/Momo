@@ -431,7 +431,7 @@ struct TrackingOnboardingView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
-            Text("MOMO opens \(match.displayName) via Launch Services (never writes into the other app). Connected only after a readable local session or usage artifact is found.")
+            Text("MOMO opens \(match.displayName) (never writes into it). Answer the questions below — Allow saves this provider only when usage % is readable.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -483,11 +483,15 @@ struct TrackingOnboardingView: View {
                 .background(canCommit(provider) ? Color.primary : Color.primary.opacity(0.35))
                 .buttonStyle(.plain)
                 .disabled(!canCommit(provider))
+                .help(canCommit(provider)
+                      ? "Save this provider — usage % is readable."
+                      : "Allow stays off until Retry finds readable usage %.")
             }
         }
         .padding(14)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: connectProgress?.title)
     }
 
     @ViewBuilder
@@ -499,7 +503,7 @@ struct TrackingOnboardingView: View {
                         .controlSize(.small)
                         .frame(width: 16, height: 16)
                 } else {
-                    Image(systemName: connectProgress.isVerified ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    Image(systemName: connectStatusSymbol(connectProgress))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(connectProgress.isVerified ? Color.primary : BarBoyStyle.coral)
                         .frame(width: 16, height: 16)
@@ -549,22 +553,33 @@ struct TrackingOnboardingView: View {
         }
     }
 
+    private func connectStatusSymbol(_ progress: DesktopConnectProgress) -> String {
+        switch progress {
+        case .connected: return "checkmark.circle.fill"
+        case .notReady, .timedOut, .failed: return "circle.dashed"
+        case .needsPermission: return "exclamationmark.triangle.fill"
+        default: return "circle"
+        }
+    }
+
     private func connectStatusDetail(_ progress: DesktopConnectProgress, provider: AIProvider) -> String {
         switch progress {
         case .openingApp:
-            return "Launching \(DesktopAppCatalog.displayName(for: provider))…"
+            return "Opening \(DesktopAppCatalog.displayName(for: provider))…"
         case .waitingForSignIn:
-            return "Finish any sign-in prompts in the app. MOMO does not invent connection status."
-        case .readingLocalUsage:
-            return "Scanning local session files and usage caches off the UI thread…"
+            return "Finish any sign-in prompts in the app if it asks."
+        case .searchingUsage:
+            return "Looking for local usage % (caches, CLI, rate_limits)…"
         case .connected(let honesty):
             return honesty.summary
+        case .notReady(let detail):
+            return detail
         case .needsPermission:
             return LocalUsageArtifactReader.privacyGuidance(for: provider)
         case .failed(let reason):
             return reason
         case .timedOut:
-            return "Check timed out. Tap Retry — the UI stays responsive while MOMO scans again."
+            return "Check timed out. Tap Retry when you’ve run a chat once so usage can appear."
         }
     }
 

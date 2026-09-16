@@ -4,6 +4,14 @@ Updated: 2026-09-16 (schema v7 forces Welcome again + usage/CLI + Settings deep-
 
 Branch `cursor/usage-cli-onboarding-resume-02e3` / PR #6 off `main` after PR #5 (`6d816e9`).
 
+## P0 — Connected honesty (usage meters only)
+
+**Connected** requires readable usage % meters (cache / CLI / rate_limits). Opening the desktop app or finding a session file alone is **Not ready** / Searching… — never “Connected — no readable usage %”. Allow stays disabled until meters exist. Same rule for Claude, Codex/ChatGPT, Cursor, Grok.
+
+## P0 — Mic false-off
+
+Do not treat `undetermined` + prompted latch as denied. Prefer `AVCaptureDevice` (matches System Settings) and accept `AVAudioApplication` when granted. Open Microphone Settings remains for real denied/restricted.
+
 ## P0 — Onboarding skip regression (schema v7)
 
 **Cause:** PR #5 wrote `trackingOnboardingSchemaVersion=6` + `onboardingMigration.v6=true`. A broken/skipped grok9–10 run could also leave `trackingOnboardingComplete.v6` + a non-empty allow-list. This branch’s gate treated that as finished (`needsTrackingOnboarding == false`) and opened the main UI with no Welcome.

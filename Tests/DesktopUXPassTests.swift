@@ -45,13 +45,14 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(limited.filter { $0.provider == .codex }.first?.title, "Codex chat 0")
     }
 
-    func testConnectionVerifierRequiresReadableSourceNotJustRunning() {
+    func testConnectionVerifierRequiresUsageMetersNotJustRunningOrSessions() {
         XCTAssertEqual(
             DesktopConnectionVerifier.evaluate(
                 provider: .claude,
                 isInstalled: true,
                 isRunning: true,
-                hasReadableSessionSource: false
+                hasReadableSessionSource: false,
+                hasUsageMeters: false
             ),
             .awaitingSignIn
         )
@@ -59,8 +60,19 @@ final class DesktopUXPassTests: XCTestCase {
             DesktopConnectionVerifier.evaluate(
                 provider: .claude,
                 isInstalled: true,
+                isRunning: true,
+                hasReadableSessionSource: true,
+                hasUsageMeters: false
+            ),
+            .awaitingUsage
+        )
+        XCTAssertEqual(
+            DesktopConnectionVerifier.evaluate(
+                provider: .claude,
+                isInstalled: true,
                 isRunning: false,
-                hasReadableSessionSource: true
+                hasReadableSessionSource: true,
+                hasUsageMeters: true
             ),
             .notRunning
         )
@@ -78,7 +90,18 @@ final class DesktopUXPassTests: XCTestCase {
                 provider: .claude,
                 isInstalled: true,
                 isRunning: true,
-                hasReadableSessionSource: true
+                hasReadableSessionSource: true,
+                hasUsageMeters: true
+            ).isVerified
+        )
+        // Session alone is never Connected.
+        XCTAssertFalse(
+            DesktopConnectionVerifier.evaluate(
+                provider: .codex,
+                isInstalled: true,
+                isRunning: true,
+                hasReadableSessionSource: true,
+                hasUsageMeters: false
             ).isVerified
         )
         XCTAssertTrue(
@@ -90,7 +113,8 @@ final class DesktopUXPassTests: XCTestCase {
                 isInstalled: true,
                 isRunning: true,
                 hasReadableSessionSource: false,
-                privacyBlocked: true
+                privacyBlocked: true,
+                hasUsageMeters: false
             ),
             .privacyBlocked
         )
@@ -147,10 +171,17 @@ final class DesktopUXPassTests: XCTestCase {
         )
         XCTAssertTrue(found.summary.contains("27%"))
         XCTAssertTrue(found.summary.contains("100%"))
+        XCTAssertTrue(found.summary.contains("Connected"))
         XCTAssertFalse(found.summary.contains("invent"))
 
-        let missing = ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil)
-        XCTAssertTrue(missing.summary.contains("no readable usage cache"))
+        let missing = ConnectUsageHonesty(
+            outcome: .noReadableCache,
+            sourcePath: nil,
+            nextStep: "Not ready — run Claude Code once, then Retry."
+        )
+        XCTAssertTrue(missing.summary.contains("Not ready"))
+        XCTAssertFalse(missing.summary.hasPrefix("Connected"))
+        XCTAssertFalse(missing.summary.contains("Connected — no readable"))
 
         let blocked = ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
         XCTAssertTrue(blocked.summary.contains("Full Disk Access"))
@@ -162,11 +193,27 @@ final class DesktopUXPassTests: XCTestCase {
             ),
             .connected(found)
         )
+        // Verified without meters must not become Connected.
+        let fakeVerified = DesktopConnectionVerifier.progress(
+            from: .verified,
+            honesty: missing
+        )
+        if case .notReady(let detail) = fakeVerified {
+            XCTAssertTrue(detail.contains("Not ready"))
+        } else {
+            XCTFail("Expected notReady, got \(fakeVerified)")
+        }
+        XCTAssertEqual(
+            DesktopConnectionVerifier.progress(from: .awaitingUsage, honesty: missing),
+            .notReady(missing.summary)
+        )
         XCTAssertEqual(
             DesktopConnectionVerifier.progress(from: .privacyBlocked, honesty: blocked),
             .needsPermission
         )
-        XCTAssertTrue(DesktopConnectProgress.openingApp.showsSpinner)
+        XCTAssertTrue(DesktopConnectProgress.searchingUsage.showsSpinner)
+        XCTAssertEqual(DesktopConnectProgress.searchingUsage.title, "Searching…")
+        XCTAssertEqual(DesktopConnectProgress.notReady("x").title, "Not ready")
         XCTAssertFalse(DesktopConnectProgress.timedOut.showsSpinner)
     }
 
@@ -177,10 +224,11 @@ final class DesktopUXPassTests: XCTestCase {
 
         let withoutCache = DesktopConnectionVerifier.usageHonesty(
             for: .claude,
-            status: .verified,
+            status: .awaitingUsage,
             home: tmp
         )
         XCTAssertEqual(withoutCache?.outcome, .noReadableCache)
+        XCTAssertFalse(withoutCache?.summary.contains("Connected —") == true)
 
         let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
