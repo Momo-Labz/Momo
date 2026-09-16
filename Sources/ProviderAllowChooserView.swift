@@ -4,7 +4,6 @@ import SwiftUI
 /// Selecting providers only marks local tracking/usage-peek permission and queues Connect Usage —
 /// it does not create a MOMO account or a cloud OAuth scraper.
 struct ProviderAllowChooserView: View {
-    @EnvironmentObject private var preferences: PreferencesStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var selection: Set<AIProvider>
