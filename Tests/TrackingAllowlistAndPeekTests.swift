@@ -11,7 +11,7 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertFalse(preferences.trackingOnboardingSeen)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
-        XCTAssertEqual(preferences.trackingStripProviders(), AIProvider.allCases)
+        XCTAssertEqual(preferences.trackingStripProviders(), [])
 
         preferences.setAllowedTrackingProviders([.claude, .cursor])
         XCTAssertTrue(preferences.trackingOnboardingSeen)
@@ -25,6 +25,24 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         XCTAssertFalse(reloaded.isTrackingAllowed(.codex))
     }
 
+    func testOnboardingIntentsPersistAndGateTips() {
+        let suite = UserDefaults(suiteName: "MomoOnboardingIntents.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertTrue(preferences.onboardingIntents.isEmpty)
+        XCTAssertFalse(preferences.prefersUsageTips())
+        XCTAssertFalse(preferences.prefersBrainTips())
+
+        preferences.setOnboardingIntents([.usageTracking, .projectFolders])
+        XCTAssertTrue(preferences.prefersUsageTips())
+        XCTAssertTrue(preferences.prefersBrainTips())
+        XCTAssertEqual(OnboardingIntent.projectFolders.title, "Project folders")
+
+        let reloaded = PreferencesStore(defaults: suite)
+        XCTAssertEqual(reloaded.onboardingIntents, [.usageTracking, .projectFolders])
+    }
+
     func testTrackingAllowListIsSeparateFromFolderAuthorization() {
         let suite = UserDefaults(suiteName: "MomoTrackingAllowSeparate.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
@@ -35,6 +53,49 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         preferences.setEnabled(true, for: .codex)
         XCTAssertEqual(preferences.enabledProviders, [.codex])
         XCTAssertEqual(preferences.allowedTrackingProviders, [.gemini, .grok])
+    }
+
+    func testProviderStripLayoutFillsProportionally() {
+        XCTAssertEqual(
+            ProviderStripLayout.visibleProviders(allowed: [.codex, .claude], onboardingSeen: true),
+            [.codex, .claude]
+        )
+        XCTAssertEqual(ProviderStripLayout.visibleProviders(allowed: [.codex], onboardingSeen: false), [])
+        XCTAssertNil(ProviderStripLayout.equalCardWidth(availableWidth: 400, count: 0))
+
+        let two = try XCTUnwrap(ProviderStripLayout.equalCardWidth(availableWidth: 400, count: 2, spacing: 7))
+        let three = try XCTUnwrap(ProviderStripLayout.equalCardWidth(availableWidth: 400, count: 3, spacing: 7))
+        XCTAssertEqual(two, (400 - 7) / 2, accuracy: 0.001)
+        XCTAssertEqual(three, (400 - 14) / 3, accuracy: 0.001)
+        XCTAssertGreaterThan(two, three)
+    }
+
+    func testProviderConnectOpensAccountLoginWithoutUsageCaptureURL() {
+        let original = ProviderAccountOpen.openURL
+        defer { ProviderAccountOpen.openURL = original }
+
+        var opened: [URL] = []
+        ProviderAccountOpen.openURL = { url in
+            opened.append(url)
+            return true
+        }
+
+        XCTAssertTrue(ProviderAccountOpen.openLogin(for: .codex))
+        XCTAssertEqual(opened.count, 1)
+        XCTAssertEqual(opened.first, AIProvider.codex.accountLoginURL)
+        XCTAssertNotEqual(opened.first, AIProvider.codex.usageURL)
+        XCTAssertEqual(AIProvider.codex.connectButtonTitle, "Continue with Codex / ChatGPT")
+    }
+
+    func testUsageReturnOfferDoesNotAutoOpenCaptureRoute() {
+        let surface = MomoSurface.shared
+        surface.dismissUsageReturn()
+        let routeBefore = surface.route
+        surface.offerUsageReturn([.claude, .cursor])
+        XCTAssertEqual(surface.pendingUsageReturn, [.claude, .cursor])
+        XCTAssertEqual(surface.route, routeBefore)
+        surface.dismissUsageReturn()
+        XCTAssertTrue(surface.pendingUsageReturn.isEmpty)
     }
 
     func testPeekMappingUsesFiveHourAndWeeklyWhenPresent() {

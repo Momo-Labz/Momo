@@ -35,7 +35,7 @@ enum OllamaState: String, Equatable, Sendable {
 final class OllamaService: ObservableObject {
     static let shared = OllamaService(persistSelection: true)
 
-    @Published private(set) var statusText = "CHECKING LOCAL OLLAMA"
+    @Published private(set) var statusText = "CHECKING LOCAL MODEL"
     @Published private(set) var state: OllamaState = .checking
     @Published private(set) var models: [String] = []
     @Published var selectedModel: String? {
@@ -105,7 +105,7 @@ final class OllamaService: ObservableObject {
         guard force || lastCheck.map({ checkDate.timeIntervalSince($0) >= refreshInterval }) ?? true else { return }
         checking = true
         state = .checking
-        statusText = "CHECKING LOCAL OLLAMA"
+        statusText = "CHECKING LOCAL MODEL"
         defer {
             checking = false
             lastCheck = checkDate
@@ -132,7 +132,7 @@ final class OllamaService: ObservableObject {
                 statusText = "NO LOCAL MODEL"
             } else {
                 state = .ready
-                statusText = "OLLAMA · \(models.count) MODEL\(models.count == 1 ? "" : "S")"
+                statusText = "LOCAL MODEL READY · \(models.count)"
             }
         } catch {
             markOffline()
@@ -164,7 +164,7 @@ final class OllamaService: ObservableObject {
         let body = GenerateRequest(model: chosen, prompt: boundedPrompt, stream: false)
         guard let data = try? JSONEncoder().encode(body) else {
             state = .failed
-            statusText = "OLLAMA REQUEST ERROR"
+            statusText = "MOMO REQUEST ERROR"
             return nil
         }
         var request = URLRequest(url: baseURL.appendingPathComponent("api/generate"))
@@ -175,7 +175,7 @@ final class OllamaService: ObservableObject {
 
         isGenerating = true
         state = .loading
-        statusText = "OLLAMA THINKING"
+        statusText = "MOMO THINKING"
         selectedModel = chosen
         let requestID = UUID()
         generationID = requestID
@@ -209,15 +209,15 @@ final class OllamaService: ObservableObject {
         switch outcome {
         case .cancelled:
             state = .cancelled
-            statusText = "OLLAMA CANCELLED"
+            statusText = "MOMO CANCELLED"
             return nil
         case .timedOut:
             state = .timedOut
-            statusText = "OLLAMA TIMED OUT"
+            statusText = "MOMO TIMED OUT"
             return nil
         case .failed:
             state = .failed
-            statusText = "OLLAMA RESPONSE ERROR"
+            statusText = "MOMO RESPONSE ERROR"
             return nil
         case .success(let answer):
             let date = now()
@@ -236,7 +236,7 @@ final class OllamaService: ObservableObject {
         generationID = nil
         isGenerating = false
         state = .cancelled
-        statusText = "OLLAMA CANCELLED"
+        statusText = "MOMO CANCELLED"
     }
 
     func clearAnswerCache() {
@@ -247,7 +247,7 @@ final class OllamaService: ObservableObject {
         models = []
         selectedModel = nil
         state = .offline
-        statusText = "OLLAMA OFFLINE"
+        statusText = "LOCAL MODEL OFFLINE"
     }
 
     private func pruneCache() {

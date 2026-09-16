@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 enum TrackerTab: String, CaseIterable, Codable, Identifiable {
@@ -13,6 +14,49 @@ enum TrackerTab: String, CaseIterable, Codable, Identifiable {
         case .usage: return "Usage"
         case .brain: return "Brain"
         }
+    }
+}
+
+/// First-run intents that gate later tips/UI emphasis (no invented features).
+enum OnboardingIntent: String, CaseIterable, Codable, Identifiable {
+    case usageTracking
+    case organizingPrompts
+    case projectFolders
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .usageTracking: return "Usage tracking"
+        case .organizingPrompts: return "Organizing prompts"
+        case .projectFolders: return "Project folders"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .usageTracking: return "Connect providers and confirm usage from their official pages."
+        case .organizingPrompts: return "Use Brain and local notes to keep prompts findable."
+        case .projectFolders: return "Link vault notes and project folders you already keep on this Mac."
+        }
+    }
+}
+
+/// Pure layout helpers for the sticky provider strip (equal flexible widths).
+enum ProviderStripLayout {
+    static let spacing: CGFloat = 7
+
+    /// Providers shown after onboarding: only allowed ones. Empty → empty/CTA strip.
+    static func visibleProviders(allowed: Set<AIProvider>, onboardingSeen: Bool) -> [AIProvider] {
+        guard onboardingSeen else { return [] }
+        return AIProvider.allCases.filter(allowed.contains)
+    }
+
+    /// Equal share of horizontal space when fewer than five cards are shown.
+    static func equalCardWidth(availableWidth: CGFloat, count: Int, spacing: CGFloat = spacing) -> CGFloat? {
+        guard count > 0, availableWidth > 0 else { return nil }
+        let gaps = CGFloat(max(0, count - 1)) * spacing
+        return max(0, (availableWidth - gaps) / CGFloat(count))
     }
 }
 
@@ -46,7 +90,7 @@ enum UsageProvenance: String, Codable, CaseIterable {
         switch self {
         case .providerEvent: return "PROVIDER EVENT"
         case .officialWeb: return "OFFICIAL WEB"
-        case .localOllama: return "LOCAL OLLAMA"
+        case .localOllama: return "LOCAL MODEL"
         }
     }
 }

@@ -1,17 +1,37 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-16 (sticky strip + provider allow chooser + usage peek)
+Updated: 2026-09-16 (Welcome→intent→browser onboarding + sticky Settings + MOMO thinking)
 
 This file records the product direction, implementation decisions, verification, and remaining work from the MOMO conversation so the next session can continue without reconstructing the history.
 
-## September 16 — PR #1 continuation (A/B/C + MainActor fix)
+## September 16 — PR #1 onboarding redesign + UX fixes
 
-Landed on `cursor/wire-usage-capture-4177` (same PR #1):
+Landed on `cursor/wire-usage-capture-4177` (same PR #1; do not open a second PR):
 
-- **A Sticky chrome:** `TrackingDashboardView` keeps header + provider strip + tab bar outside the scrolling tab body. Brain is wrapped in a `ScrollView` so the graph/notes scroll under the strip.
-- **B Provider allow chooser:** First-run overlay (`ProviderAllowChooserView`) lists Codex/Claude/Gemini/Cursor/Grok with toggles. Persist via `PreferencesStore.allowedTrackingProviders` (`allowedTrackingProviders.v1`), separate from folder auth. Continue queues existing Connect Usage (`MomoSurface.queueUsageConnect`). Revisit from Settings → Providers → “Choose providers to track”.
-- **C Usage peek:** Status item **double-click** opens compact `UsagePeekView` (icon + 5-hour + Weekly bars for allowed providers only). Single-click still toggles the full Tracking panel. Mapping is `UsagePeekMapping` from accepted observations / explicit snapshot windows; unknown stays `—`.
-- **Compile fix:** `UsageCaptureHostAllowlist` + `nonisolated` `isAllowedCapture` / `isAllowedNavigation` / `isSecure` so `AIProvider.supportsUsageCapture` compiles off MainActor.
+### Onboarding (replaces plugins-style toggles)
+- **Welcome → What were you looking for? → Connect providers**
+- Brand in onboarding copy: **MOMO Trackr** (app display name stays MOMO)
+- Intents (multi-select): Usage tracking / Organizing prompts / **Project folders** — persisted as `onboardingIntents.v1`
+- Connect: stacked provider buttons open official login via `NSWorkspace` (`ProviderAccountOpen`); local permission panel for usage + recent prompts; browser open does **not** grant cookies
+- Soft return banner: “Return to MOMO → Confirm usage when ready” uses existing Manual Preview→Confirm WebKit path (not auto-opened on first connect tap)
+- Timed 15/30/60 stays NEXT / unscheduled
+- Settings revisit: onboarding, intents, connect providers + existing Connect Usage
+
+### Proportional strip
+- Only allowed providers after onboarding; empty strip shows CONNECT PROVIDERS CTA
+- Equal flexible widths via `ProviderStripLayout.equalCardWidth`
+
+### UX fixes
+- User-facing thinking/status: **MOMO THINKING** / **CHECKING LOCAL MODEL** (Ollama remains engine; model picker still shows e.g. `llama3:latest`)
+- Settings: sticky Tracking header + provider strip stay above Settings; embedded custom tabs + Back (no overlapping BACK/SETTINGS over system TabView)
+- Full-box hit targets: `MomoBoxedButtonStyle` for `barBoyButton` / `barBoyIconButton`; Brain ASK / SUGGEST LINKS / SAVE use bordered buttons
+
+## September 16 — prior PR #1 slice (A/B/C + MainActor fix)
+
+- **A Sticky chrome:** header + provider strip + tab bar outside scrolling tab body
+- **B** (superseded by Welcome→intent→connect above): earlier plugins-style allow chooser
+- **C Usage peek:** double-click status item → peek for allowed providers
+- **Compile fix:** `UsageCaptureHostAllowlist` + `nonisolated` capture helpers
 
 Mac verify (Linux cannot `xcodebuild`):
 
@@ -20,7 +40,7 @@ xcodegen generate   # or use committed BarBoy.xcodeproj
 xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' test CODE_SIGNING_ALLOWED=NO
 ```
 
-Manual: Brain tab scroll keeps strip; first-run chooser → Connect Usage; Settings revisit; double-click status item peek.
+Manual: first-run Welcome→intents→browser+permission; Confirm usage banner; proportional strip; Settings under sticky chrome; Brain shows MOMO THINKING; header boxes click full area.
 
 ## Overall project handoff
 

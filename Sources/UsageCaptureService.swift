@@ -205,7 +205,7 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
                 ? "The page loaded, but no explicit usage values were present in the visible text."
                 : "Sign in inside this page if needed. Stay on the official usage page, then preview."
         case .parsing:
-            return "Local Ollama is reading only the visible text on this page."
+            return "MOMO is reading only the visible text on this page via the local model."
         case .offline:
             return "The usage page or local parser is offline. MOMO will not invent a value."
         case .malformed:

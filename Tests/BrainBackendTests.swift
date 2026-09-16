@@ -219,6 +219,21 @@ final class BrainBackendTests: XCTestCase {
         XCTAssertEqual(missingService.state, .missingModel)
     }
 
+    func testOllamaUsesMomoBrandedThinkingCopy() async {
+        let client = MockOllamaClient(behavior: .delayed)
+        let service = OllamaService(client: client, refreshInterval: 0)
+        XCTAssertEqual(service.statusText, "CHECKING LOCAL MODEL")
+        await service.refresh(force: true)
+        XCTAssertEqual(service.statusText, "LOCAL MODEL READY · 1")
+        let task = Task { await service.complete(prompt: "first") }
+        while !service.isGenerating { await Task.yield() }
+        XCTAssertEqual(service.statusText, "MOMO THINKING")
+        service.cancel()
+        _ = await task.value
+        XCTAssertEqual(service.statusText, "MOMO CANCELLED")
+        XCTAssertFalse(service.statusText.localizedCaseInsensitiveContains("ollama"))
+    }
+
     func testOllamaAllowsOneGenerationAndCanCancelIt() async {
         let client = MockOllamaClient(behavior: .delayed)
         let service = OllamaService(client: client, refreshInterval: 0)

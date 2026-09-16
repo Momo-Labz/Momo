@@ -20,7 +20,8 @@ struct TrackingDashboardView: View {
     @State private var debouncedSearch = ""
     @State private var pageSize = 10
     @State private var loading = true
-    @State private var showProviderChooser = false
+    @State private var showOnboarding = false
+    @State private var onboardingStartStep: TrackingOnboardingStep = .welcome
 
     private var snapshots: [ProviderSnapshot] {
         AIProvider.allCases.map { provider in
@@ -38,7 +39,7 @@ struct TrackingDashboardView: View {
     private var usageSnapshots: [ProviderSnapshot] {
         preferences.trackingOnboardingSeen
             ? snapshots.filter { preferences.isTrackingAllowed($0.provider) }
-            : snapshots
+            : []
     }
 
     private var sessions: [AgentSession] {
@@ -56,9 +57,15 @@ struct TrackingDashboardView: View {
             // Sticky chrome: header + provider strip + tabs stay put; only the tab body scrolls.
             VStack(spacing: 0) {
                 header
+                    .zIndex(2)
                 providerRail
+                    .zIndex(2)
                 Divider().opacity(0.55)
                 if surface.route == .dashboard {
+                    if !surface.pendingUsageReturn.isEmpty {
+                        usageReturnBanner
+                        Divider().opacity(0.55)
+                    }
                     tabBar
                     Divider().opacity(0.55)
                     Group {
@@ -73,6 +80,11 @@ struct TrackingDashboardView: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .clipped()
+                } else if case .settings = surface.route {
+                    // Settings owns its Back + tabs below sticky Tracking chrome (no overlapping route strip).
+                    SettingsView(embedded: true, onBack: { surface.goBack() })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .clipped()
                 } else {
                     routeHeader
                     Divider().opacity(0.55)
@@ -82,16 +94,16 @@ struct TrackingDashboardView: View {
                 }
             }
 
-            if showProviderChooser || !preferences.trackingOnboardingSeen {
+            if showOnboarding || !preferences.trackingOnboardingSeen {
                 Color.black.opacity(0.55)
                     .ignoresSafeArea()
                 ScrollView {
-                    ProviderAllowChooserView(
-                        initial: preferences.trackingOnboardingSeen
-                            ? preferences.allowedTrackingProviders
-                            : Set(AIProvider.allCases),
-                        onContinue: finishProviderChooser,
-                        onDismiss: preferences.trackingOnboardingSeen ? { showProviderChooser = false } : nil
+                    TrackingOnboardingView(
+                        initialStep: preferences.trackingOnboardingSeen ? onboardingStartStep : .welcome,
+                        initialIntents: preferences.onboardingIntents,
+                        initialAllowed: preferences.allowedTrackingProviders,
+                        onFinish: finishOnboarding,
+                        onDismiss: preferences.trackingOnboardingSeen ? { showOnboarding = false } : nil
                     )
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
@@ -120,19 +132,58 @@ struct TrackingDashboardView: View {
                 pageSize = 10
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: .momoShowProviderChooser)) { _ in
+        .onReceive(NotificationCenter.default.publisher(for: .momoShowProviderChooser)) { note in
             surface.expanded = true
-            showProviderChooser = true
+            if let raw = note.userInfo?["step"] as? Int,
+               let step = TrackingOnboardingStep(rawValue: raw) {
+                onboardingStartStep = step
+            } else {
+                onboardingStartStep = .welcome
+            }
+            showOnboarding = true
         }
     }
 
-    private func finishProviderChooser(_ selected: Set<AIProvider>) {
-        preferences.setAllowedTrackingProviders(selected)
-        showProviderChooser = false
-        let connectable = AIProvider.allCases.filter { selected.contains($0) && $0.supportsUsageCapture }
-        if !connectable.isEmpty {
-            surface.queueUsageConnect(connectable)
+    private func finishOnboarding(intents: Set<OnboardingIntent>, allowed: Set<AIProvider>) {
+        preferences.setOnboardingIntents(intents)
+        preferences.setAllowedTrackingProviders(allowed, markOnboardingSeen: true)
+        showOnboarding = false
+        onboardingStartStep = .welcome
+        let connectable = AIProvider.allCases.filter { allowed.contains($0) && $0.supportsUsageCapture }
+        // Soft return only — do not auto-open isolated WebKit after browser connect.
+        surface.offerUsageReturn(connectable)
+        if intents.contains(.usageTracking), !connectable.isEmpty {
+            surface.trackerTab = .usage
+        } else if preferences.prefersBrainTips() {
+            surface.trackerTab = .brain
         }
+    }
+
+    private var usageReturnBanner: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("RETURN TO MOMO").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                Text("Confirm usage when ready — Manual preview on the official page. Browser login did not share cookies with MOMO.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(Color.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 8)
+            Button("CONFIRM USAGE") { surface.beginPendingUsageReturn() }
+                .barBoyButton()
+            Button {
+                surface.dismissUsageReturn()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(BarBoyStyle.surface)
     }
 
     private var header: some View {
@@ -145,14 +196,35 @@ struct TrackingDashboardView: View {
             Spacer()
             Text(statusText).font(BarBoyStyle.microLabel).foregroundStyle(statusColor)
             if surface.route == .dashboard {
-                Button { surface.expanded.toggle() } label: { Image(systemName: surface.expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right") }
-                    .barBoyIconButton().help(surface.expanded ? "Contract" : "Expand")
+                Button {
+                    surface.expanded.toggle()
+                } label: {
+                    Image(systemName: surface.expanded ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
+                .barBoyIconButton()
+                .help(surface.expanded ? "Contract" : "Expand")
             }
-            Button { surface.openSettings() } label: { Image(systemName: "gearshape.fill") }
-                .barBoyIconButton().help("Settings")
-            Button { NSApplication.shared.terminate(nil) } label: { Image(systemName: "power") }.barBoyIconButton().help("Quit MOMO")
-            Button { monitor.refresh() } label: { Image(systemName: "arrow.clockwise") }
-                .barBoyIconButton().help("Refresh observed activity")
+            Button {
+                surface.openSettings()
+            } label: {
+                Image(systemName: "gearshape.fill")
+            }
+            .barBoyIconButton()
+            .help("Settings")
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+            }
+            .barBoyIconButton()
+            .help("Quit MOMO")
+            Button {
+                monitor.refresh()
+            } label: {
+                Image(systemName: "arrow.clockwise")
+            }
+            .barBoyIconButton()
+            .help("Refresh observed activity")
         }
         .padding(.horizontal, 14).frame(height: 55)
     }
@@ -167,23 +239,42 @@ struct TrackingDashboardView: View {
     private var providerRail: some View {
         Group {
             if railSnapshots.isEmpty {
-                Text(preferences.trackingOnboardingSeen
-                      ? "No providers allowed yet. Open Settings → Choose providers."
-                      : "Choose providers to populate this strip.")
-                    .font(BarBoyStyle.microLabel)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
-            } else {
-                HStack(spacing: 7) {
-                    ForEach(railSnapshots) { snapshot in
-                        ProviderCard(snapshot: snapshot, expanded: surface.usesExpandedSize || showsOverview, selected: surface.selectedProvider == snapshot.provider) {
-                            surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
-                            if surface.route == .dashboard { surface.trackerTab = .activity }
-                        }
+                HStack(spacing: 10) {
+                    Text(preferences.trackingOnboardingSeen
+                          ? "No providers allowed yet."
+                          : "Finish onboarding to populate this strip.")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                    Button(preferences.trackingOnboardingSeen ? "CONNECT PROVIDERS" : "START ONBOARDING") {
+                        onboardingStartStep = preferences.trackingOnboardingSeen ? .connectProviders : .welcome
+                        showOnboarding = true
+                        surface.expanded = true
                     }
+                    .barBoyButton()
                 }
                 .padding(.horizontal, 12)
+            } else {
+                GeometryReader { geo in
+                    let widths = ProviderStripLayout.equalCardWidth(
+                        availableWidth: geo.size.width - 24,
+                        count: railSnapshots.count
+                    )
+                    HStack(spacing: ProviderStripLayout.spacing) {
+                        ForEach(railSnapshots) { snapshot in
+                            ProviderCard(
+                                snapshot: snapshot,
+                                expanded: surface.usesExpandedSize || showsOverview,
+                                selected: surface.selectedProvider == snapshot.provider,
+                                width: widths
+                            ) {
+                                surface.selectProvider(surface.selectedProvider == snapshot.provider ? nil : snapshot.provider)
+                                if surface.route == .dashboard { surface.trackerTab = .activity }
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                }
             }
         }
         .padding(.vertical, 9)
@@ -216,12 +307,13 @@ struct TrackingDashboardView: View {
             Button { surface.goBack() } label: {
                 Label("BACK", systemImage: "chevron.left")
                     .font(BarBoyStyle.navLabel)
-                    .frame(minWidth: 90, minHeight: 36)
+                    .frame(width: 100, height: 36)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .background(BarBoyStyle.surface)
             .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            .contentShape(Rectangle())
             Text(routeTitle).font(BarBoyStyle.sectionLabel)
             Spacer()
         }
@@ -240,10 +332,8 @@ struct TrackingDashboardView: View {
 
     @ViewBuilder private var routedContent: some View {
         switch surface.route {
-        case .dashboard:
+        case .dashboard, .settings:
             EmptyView()
-        case .settings:
-            SettingsView(embedded: true)
         case let .session(id):
             if let session = sessions.first(where: { $0.id == id }) {
                 SessionDetailView(session: session)
@@ -265,6 +355,11 @@ struct TrackingDashboardView: View {
                 Text("ACTIVITY").font(BarBoyStyle.sectionLabel)
                 Spacer()
                 Text("READ ONLY").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            }
+            if preferences.prefersBrainTips() {
+                Text("Tip: Brain keeps prompts and project folders on-device — open the Brain tab when you want vault links.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(.secondary)
             }
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -289,14 +384,21 @@ struct TrackingDashboardView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Text("USAGE").font(BarBoyStyle.sectionLabel)
-                Text("Connect any allowed provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
+                Text(preferences.prefersUsageTips()
+                     ? "Connect allowed providers, then Confirm usage from the official page when ready. A dash means MOMO has no verified value."
+                     : "Connect any allowed provider with an official usage page. Preview before save. A dash means MOMO has no verified value.")
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(.secondary)
                 if usageSnapshots.isEmpty {
-                    Text("No providers allowed yet. Choose providers in Settings.")
+                    Text("No providers allowed yet. Connect providers in Settings or finish onboarding.")
                         .font(BarBoyStyle.bodySmall)
                         .foregroundStyle(.secondary)
                         .padding(.vertical, 12)
+                    Button("CONNECT PROVIDERS") {
+                        onboardingStartStep = .connectProviders
+                        showOnboarding = true
+                    }
+                    .barBoyButton()
                 }
                 ForEach(usageSnapshots) { snapshot in
                     UsageCard(
@@ -313,7 +415,18 @@ struct TrackingDashboardView: View {
     private var brain: some View {
         // Brain content can exceed the panel; keep chrome sticky by scrolling only this body.
         ScrollView(.vertical) {
-            BrainWorkspaceView(refreshOnAppear: false)
+            VStack(alignment: .leading, spacing: 8) {
+                if preferences.prefersBrainTips() {
+                    Text(preferences.onboardingIntents.contains(.projectFolders)
+                         ? "Project folders and prompts stay local — connect a vault and link folders you already use."
+                         : "Organizing prompts stays on-device in Brain. Ask only when you choose; nothing runs idle.")
+                        .font(BarBoyStyle.bodySmall)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                }
+                BrainWorkspaceView(refreshOnAppear: false)
+            }
         }
     }
 }
@@ -322,11 +435,13 @@ private struct ProviderCard: View {
     let snapshot: ProviderSnapshot
     let expanded: Bool
     let selected: Bool
+    let width: CGFloat?
     let action: () -> Void
+
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: expanded ? 5 : 3) {
-                HStack { ProviderMark(provider: snapshot.provider, size: expanded ? 22 : 17, active: snapshot.activeCount > 0); Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel); Spacer(); Text(snapshot.isInstalled ? (snapshot.activeCount > 0 ? "LIVE" : "IDLE") : "UNAVAILABLE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary) }
+                HStack { ProviderMark(provider: snapshot.provider, size: expanded ? 22 : 17, active: snapshot.activeCount > 0); Text(snapshot.provider.name.uppercased()).font(BarBoyStyle.microLabel); Spacer(minLength: 0); Text(snapshot.isInstalled ? (snapshot.activeCount > 0 ? "LIVE" : "IDLE") : "UNAVAILABLE").font(BarBoyStyle.microLabel).foregroundStyle(.secondary) }
                 Text(snapshot.statusLabel).font(BarBoyStyle.bodySmall).lineLimit(1)
                 if expanded { Text("\(snapshot.tokenLabel) · \(snapshot.resetLabel(now: .now))").font(BarBoyStyle.microLabel).foregroundStyle(.secondary).lineLimit(1) }
                 if let percent = snapshot.recordedQuota?.percent ?? snapshot.recordedQuotas.first?.percent {
@@ -336,9 +451,12 @@ private struct ProviderCard: View {
                         }
                     }
                 }
-            }.frame(width: expanded ? 162 : 118, alignment: .leading).padding(8)
-                .background(selected ? BarBoyStyle.surface.opacity(1.8) : BarBoyStyle.surface)
-                .overlay(Rectangle().stroke(snapshot.hasErrorOrApproval ? BarBoyStyle.coral : selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(width: width, alignment: .leading)
+            .padding(8)
+            .background(selected ? BarBoyStyle.surface.opacity(1.8) : BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(snapshot.hasErrorOrApproval ? BarBoyStyle.coral : selected ? Color.primary : BarBoyStyle.hairline, lineWidth: selected ? 1.5 : 1))
         }.buttonStyle(.plain).accessibilityLabel("\(snapshot.provider.name), \(snapshot.statusLabel)")
     }
 }

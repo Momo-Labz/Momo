@@ -52,6 +52,7 @@
 		B0AACF60083AC3E5004B6BB3 /* gemini-public-conversation.json in Resources */ = {isa = PBXBuildFile; fileRef = BCAC7F7450275946880E2540 /* gemini-public-conversation.json */; };
 		B40C0EA598C641131901D6B3 /* UsageCaptureView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6235DDAD89B9262458146285 /* UsageCaptureView.swift */; };
 		A1B2C3D4E5F60718293A4B5C /* ProviderAllowChooserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2C3D4E5F60718293A4B5C6D /* ProviderAllowChooserView.swift */; };
+		A7B8C9D0E1F20314253647 /* ProviderAccountOpen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B8C9D0E1F2031425364758 /* ProviderAccountOpen.swift */; };
 		C3D4E5F60718293A4B5C6D7E /* UsagePeekView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4E5F60718293A4B5C6D7E8F /* UsagePeekView.swift */; };
 		E5F60718293A4B5C6D7E8F90 /* TrackingAllowlistAndPeekTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */; };
 		BE9B23B67F1F7EA3D1319095 /* RelayKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FDF7A266E7845659FB3C179 /* RelayKeychain.swift */; };
@@ -117,6 +118,7 @@
 		5E26B99CC750DF5173CBCE57 /* TrackingContracts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingContracts.swift; sourceTree = "<group>"; };
 		6235DDAD89B9262458146285 /* UsageCaptureView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageCaptureView.swift; sourceTree = "<group>"; };
 		B2C3D4E5F60718293A4B5C6D /* ProviderAllowChooserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAllowChooserView.swift; sourceTree = "<group>"; };
+		B8C9D0E1F2031425364758 /* ProviderAccountOpen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderAccountOpen.swift; sourceTree = "<group>"; };
 		D4E5F60718293A4B5C6D7E8F /* UsagePeekView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsagePeekView.swift; sourceTree = "<group>"; };
 		F60718293A4B5C6D7E8F901A /* TrackingAllowlistAndPeekTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingAllowlistAndPeekTests.swift; sourceTree = "<group>"; };
 		67F0E5092EBEFA9BFB97D069 /* DesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignSystem.swift; sourceTree = "<group>"; };
@@ -256,6 +258,7 @@
 				7186CCEFF286C3FE6572CFF1 /* OllamaService.swift */,
 				C0A38A0A420474CBFCEDF34A /* PreferencesStore.swift */,
 				B2C3D4E5F60718293A4B5C6D /* ProviderAllowChooserView.swift */,
+				B8C9D0E1F2031425364758 /* ProviderAccountOpen.swift */,
 				E8C2F6F8C2B42ED87CD1D13D /* RuntimeBridgeView.swift */,
 				5A8BC4F1E26B6C225CABDDD2 /* SessionPresentation.swift */,
 				1CB2244A22CE29B93DD607E1 /* SettingsView.swift */,
@@ -652,6 +655,7 @@
 				28D384AEEE6CA04FA5562F01 /* OllamaService.swift in Sources */,
 				AF4398294E437B2EE4F20D0E /* PreferencesStore.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* ProviderAllowChooserView.swift in Sources */,
+				A7B8C9D0E1F20314253647 /* ProviderAccountOpen.swift in Sources */,
 				5F0F2D999AA09D95B2C98B2B /* ProviderSessionAdapter.swift in Sources */,
 				17307F56295C41FC490603CC /* RelayContract.swift in Sources */,
 				7166C4CF84AF5AAF764BF17E /* RuntimeBridgeView.swift in Sources */,

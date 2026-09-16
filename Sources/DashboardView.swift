@@ -417,7 +417,7 @@ struct DashboardView: View {
                     }
                     .buttonStyle(.plain)
                     .help("Check the local Ollama service")
-                    Button(ollama.isGenerating ? "THINKING…" : "ASK LOCAL AGENT") {
+                    Button(ollama.isGenerating ? "MOMO THINKING…" : "ASK LOCAL AGENT") {
                         Task {
                             let prompt = "Summarize the MOMO local graph in three concise bullets. Providers: \(enabledSnapshots.map { $0.provider.name }.joined(separator: ", ")). Projects: \(Set(allSessions.map(\.project)).joined(separator: ", ")). Chats: \(allSessions.prefix(8).map(\.title).joined(separator: " | ")). Only use these recorded names and say when data is missing."
                             ollamaInsight = await ollama.complete(prompt: prompt) ?? "Start Ollama and load a local model to ask the Brain agent."

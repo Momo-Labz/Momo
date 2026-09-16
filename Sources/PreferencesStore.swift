@@ -36,6 +36,8 @@ final class PreferencesStore: ObservableObject {
     /// Separate from `enabledProviders` (local session-folder authorization).
     @Published private(set) var allowedTrackingProviders: Set<AIProvider>
     @Published private(set) var trackingOnboardingSeen: Bool
+    /// First-run intents that emphasize Usage vs Brain tips without inventing features.
+    @Published private(set) var onboardingIntents: Set<OnboardingIntent>
     @Published private(set) var localProviderRoots: [AIProvider: [String]]
 
     private let defaults: UserDefaults
@@ -49,6 +51,7 @@ final class PreferencesStore: ObservableObject {
         static let enabledProviders = "authorizedLocalProviders.v1"
         static let allowedTrackingProviders = "allowedTrackingProviders.v1"
         static let trackingOnboardingSeen = "trackingOnboardingSeen.v1"
+        static let onboardingIntents = "onboardingIntents.v1"
         static let deskDisplayEnabled = "deskDisplayEnabled"
         static let showDeskDisplayTitles = "showDeskDisplayTitles"
         static let attentionAlertsEnabled = "attentionAlertsEnabled"
@@ -76,6 +79,8 @@ final class PreferencesStore: ObservableObject {
         let savedAllowed = defaults.stringArray(forKey: Keys.allowedTrackingProviders)
         allowedTrackingProviders = savedAllowed.map { Set($0.compactMap(AIProvider.init(rawValue:))) } ?? []
         trackingOnboardingSeen = defaults.bool(forKey: Keys.trackingOnboardingSeen)
+        let savedIntents = defaults.stringArray(forKey: Keys.onboardingIntents) ?? []
+        onboardingIntents = Set(savedIntents.compactMap(OnboardingIntent.init(rawValue:)))
     }
 
     func setLabel(name: String, folder: String, for session: AgentSession) {
@@ -99,8 +104,21 @@ final class PreferencesStore: ObservableObject {
 
     /// Providers shown in the sticky strip and menu-bar usage peek after onboarding.
     func trackingStripProviders() -> [AIProvider] {
-        guard trackingOnboardingSeen else { return AIProvider.allCases }
-        return AIProvider.allCases.filter(allowedTrackingProviders.contains)
+        ProviderStripLayout.visibleProviders(
+            allowed: allowedTrackingProviders,
+            onboardingSeen: trackingOnboardingSeen
+        )
+    }
+
+    func prefersUsageTips() -> Bool { onboardingIntents.contains(.usageTracking) }
+
+    func prefersBrainTips() -> Bool {
+        onboardingIntents.contains(.organizingPrompts) || onboardingIntents.contains(.projectFolders)
+    }
+
+    func setOnboardingIntents(_ intents: Set<OnboardingIntent>) {
+        onboardingIntents = intents
+        defaults.set(intents.map(\.rawValue).sorted(), forKey: Keys.onboardingIntents)
     }
 
     func setTrackingAllowed(_ allowed: Bool, for provider: AIProvider) {
@@ -112,9 +130,13 @@ final class PreferencesStore: ObservableObject {
         allowedTrackingProviders = providers
         defaults.set(providers.map(\.rawValue).sorted(), forKey: Keys.allowedTrackingProviders)
         if markOnboardingSeen {
-            trackingOnboardingSeen = true
-            defaults.set(true, forKey: Keys.trackingOnboardingSeen)
+            markTrackingOnboardingSeen()
         }
+    }
+
+    func markTrackingOnboardingSeen() {
+        trackingOnboardingSeen = true
+        defaults.set(true, forKey: Keys.trackingOnboardingSeen)
     }
 
     func reopenTrackingOnboarding() {
