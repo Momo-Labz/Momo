@@ -276,4 +276,78 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertTrue(invalid?.isEmpty == true)
         XCTAssertTrue(LocalUsageDetail.parse(["hello": "world"], observedAt: .now).isEmpty)
     }
+
+    func testRemainingPercentConvertsToUsed() {
+        let windows = RecordedQuotaWindow.parseFlexible(
+            [
+                "five_hour": ["remaining_percent": 100.0, "resets_at": 2_000_000_000],
+                "seven_day": ["remaining_percentage": 52.0, "resets_at": 2_000_086_400]
+            ],
+            observedAt: .now
+        )
+        XCTAssertEqual(windows?.first { $0.minutes == 300 }?.percent, 0)
+        XCTAssertEqual(windows?.first { $0.minutes == 10_080 }?.percent, 48)
+    }
+
+    func testCodexSessionRateLimitsReadUntilReset() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-codex-usage-\(UUID().uuidString)", isDirectory: true)
+        let day = tmp.appendingPathComponent(".codex/sessions/2026/09/16", isDirectory: true)
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let resets = Int(Date().addingTimeInterval(3_600).timeIntervalSince1970)
+        let line: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3_600)),
+            "payload": [
+                "type": "token_count",
+                "rate_limits": [
+                    "primary": ["used_percent": 12.0, "window_minutes": 300, "resets_at": resets],
+                    "secondary": ["used_percent": 48.0, "window_minutes": 10_080, "resets_at": resets + 86_400]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: line)
+        var body = data
+        body.append(contentsOf: [0x0A])
+        try body.write(to: day.appendingPathComponent("rollout-old.jsonl"))
+
+        let detail = LocalUsageArtifactReader.detail(for: .codex, home: tmp, now: .now)
+        XCTAssertEqual(Int(detail.fiveHour?.percent ?? -1), 12)
+        XCTAssertEqual(Int(detail.weekly?.percent ?? -1), 48)
+        XCTAssertTrue(detail.sourceDescription?.contains("rollout-old.jsonl") == true)
+
+        let probed = LocalUsageArtifactReader.probeDetail(for: .codex, home: tmp, now: .now, timeout: 1)
+        XCTAssertNil(probed.emptyReason)
+        XCTAssertEqual(Int(probed.detail.weekly?.percent ?? -1), 48)
+    }
+
+    func testUsageEmptyReasonsAreSpecific() {
+        XCTAssertTrue(UsageEmptyReason.claudeAppOnlyNoLocalFile.message.contains("Claude.app"))
+        XCTAssertTrue(UsageEmptyReason.chatgptAppOnlyNoLocalFile.message.contains("ChatGPT.app"))
+        XCTAssertTrue(UsageEmptyReason.codexNoSessionRateLimits.message.contains("~/.codex/sessions"))
+        XCTAssertTrue(UsageEmptyReason.cursorNoLocalUsageCache.message.contains("usage-cache.json"))
+        XCTAssertTrue(UsageEmptyReason.grokNoLocalUsage.message.contains("Grok"))
+    }
+
+    func testUsageLimitsJsonAndLimitsArrayParse() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-usage-limits-\(UUID().uuidString)", isDirectory: true)
+        let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let payload: [String: Any] = [
+            "limits": [
+                ["kind": "session", "percent": 0.0, "resets_at": "2026-09-20T20:00:00Z"],
+                ["kind": "weekly_all", "percent": 100.0, "resets_at": "2026-09-19T18:59:00Z"],
+                ["kind": "weekly_scoped", "percent": 40.0, "scope": ["model": ["display_name": "Fable"]], "resets_at": "2026-09-18T12:00:00Z"]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: payload)
+            .write(to: cacheDir.appendingPathComponent("usage-limits.json"))
+
+        let detail = LocalUsageArtifactReader.detail(for: .claude, home: tmp, now: .now)
+        XCTAssertEqual(Int(detail.fiveHour?.percent ?? -1), 0)
+        XCTAssertEqual(Int(detail.weekly?.percent ?? -1), 100)
+    }
 }

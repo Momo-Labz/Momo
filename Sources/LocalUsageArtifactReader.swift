@@ -70,9 +70,28 @@ enum LocalUsageArtifactReader {
             return claudeDetail(home: home, now: now, fileManager: fileManager)
         case .cursor:
             return cursorDetail(home: home, now: now, fileManager: fileManager)
-        case .codex, .gemini, .grok:
+        case .codex:
+            return codexDetail(home: home, now: now, fileManager: fileManager)
+        case .gemini, .grok:
             return LocalUsageDetail()
         }
+    }
+
+    /// Probe caches first, then optional read-only CLI helpers. Always returns a concrete empty reason when empty.
+    static func probeDetail(
+        for provider: AIProvider,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser,
+        now: Date = .now,
+        fileManager: FileManager = .default,
+        timeout: TimeInterval = ProviderCLIUsageProbe.defaultTimeout
+    ) -> ProviderUsageProbeResult {
+        ProviderCLIUsageProbe.probe(
+            provider: provider,
+            home: home,
+            fileManager: fileManager,
+            now: now,
+            timeout: timeout
+        )
     }
 
     static func isFresh(_ window: RecordedQuotaWindow, now: Date = .now) -> Bool {
@@ -165,8 +184,8 @@ enum LocalUsageArtifactReader {
 
     private static func claudeCandidateURLs(home: URL, fileManager: FileManager) -> [URL] {
         var urls: [URL] = []
-        let claude = home.appendingPathComponent(".claude", isDirectory: true)
         let names = [
+            "usage-limits.json",
             "usage-cache.json",
             "usage_cache.json",
             "rate-limits.json",
@@ -174,20 +193,111 @@ enum LocalUsageArtifactReader {
             "stats-cache.json",
             "oauth-usage-cache.json"
         ]
-        for name in names {
-            urls.append(claude.appendingPathComponent(name))
+        let roots = [
+            home.appendingPathComponent(".claude", isDirectory: true),
+            home.appendingPathComponent("Library/Application Support/Claude", isDirectory: true),
+            home.appendingPathComponent("Library/Application Support/Claude-3p", isDirectory: true),
+            home.appendingPathComponent(".cache/ccstatusline", isDirectory: true)
+        ]
+        for root in roots {
+            for name in names {
+                urls.append(root.appendingPathComponent(name))
+            }
+            // ccstatusline stores usage.json
+            urls.append(root.appendingPathComponent("usage.json"))
         }
-        let support = home.appendingPathComponent("Library/Application Support/Claude", isDirectory: true)
-        for name in names {
-            urls.append(support.appendingPathComponent(name))
-        }
-        let tmp = URL(fileURLWithPath: "/tmp/claude", isDirectory: true)
-        if let kids = try? fileManager.contentsOfDirectory(at: tmp, includingPropertiesForKeys: nil) {
-            urls.append(contentsOf: kids.filter {
-                $0.lastPathComponent.hasPrefix("statusline-usage-cache") && $0.pathExtension == "json"
-            }.sorted { $0.lastPathComponent > $1.lastPathComponent })
+        let tmpRoots = [
+            URL(fileURLWithPath: "/tmp/claude", isDirectory: true),
+            home.appendingPathComponent("Library/Caches/claude", isDirectory: true)
+        ]
+        for tmp in tmpRoots {
+            guard let kids = try? fileManager.contentsOfDirectory(at: tmp, includingPropertiesForKeys: [.contentModificationDateKey]) else {
+                continue
+            }
+            let caches = kids.filter {
+                let name = $0.lastPathComponent.lowercased()
+                return $0.pathExtension == "json"
+                    && (name.hasPrefix("statusline-usage-cache")
+                        || name.contains("usage")
+                        || name.contains("rate"))
+            }.sorted {
+                let lhs = (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                let rhs = (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                return lhs > rhs
+            }
+            urls.append(contentsOf: caches)
         }
         return urls
+    }
+
+    // MARK: - Codex / ChatGPT
+
+    /// Newest Codex session rate_limits stay valid until reset (not a 15-minute activity TTL).
+    private static func codexDetail(home: URL, now: Date, fileManager: FileManager) -> LocalUsageDetail {
+        let sessionsRoot = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+        guard fileManager.fileExists(atPath: sessionsRoot.path) else { return LocalUsageDetail() }
+
+        // Prefer newest rollout JSONL files (Codex Gauge / OpenUsage path).
+        let files = newestCodexSessionFiles(under: sessionsRoot, fileManager: fileManager, limit: 12)
+        for file in files {
+            guard let windows = latestCodexRateLimits(in: file, fileManager: fileManager), !windows.isEmpty else {
+                continue
+            }
+            let fresh = windows.filter { isFresh($0, now: now) }
+            guard !fresh.isEmpty else { continue }
+            var detail = LocalUsageDetail(windows: fresh, observedAt: fresh.map(\.observedAt).max() ?? now)
+            detail.sourceDescription = file.path
+            return detail
+        }
+        return LocalUsageDetail()
+    }
+
+    private static func newestCodexSessionFiles(under root: URL, fileManager: FileManager, limit: Int) -> [URL] {
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var scored: [(URL, Date)] = []
+        var visited = 0
+        while let item = enumerator.nextObject() as? URL {
+            visited += 1
+            if visited > 4_000 { break }
+            guard item.pathExtension == "jsonl" else { continue }
+            let name = item.lastPathComponent
+            guard name.hasPrefix("rollout-") || name.contains("session") || name.hasSuffix(".jsonl") else { continue }
+            let values = try? item.resourceValues(forKeys: [.isRegularFileKey, .contentModificationDateKey])
+            guard values?.isRegularFile == true else { continue }
+            scored.append((item, values?.contentModificationDate ?? .distantPast))
+        }
+        return scored.sorted { $0.1 > $1.1 }.prefix(limit).map(\.0)
+    }
+
+    /// Walks a Codex JSONL from the end for the latest token_count rate_limits block.
+    private static func latestCodexRateLimits(in url: URL, fileManager: FileManager) -> [RecordedQuotaWindow]? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+
+        let size = (try? fileManager.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+        let maxBytes = min(max(size, 0), 512 * 1024)
+        if size > maxBytes {
+            do { try handle.seek(toOffset: UInt64(size - maxBytes)) } catch { return nil }
+        }
+        let data = (try? handle.readToEnd()) ?? Data()
+        guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return nil }
+
+        var latest: [RecordedQuotaWindow]?
+        for line in text.split(whereSeparator: \.isNewline).reversed() {
+            guard let lineData = String(line).data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: lineData) as? [String: Any],
+                  let windows = RecordedQuotaWindow.codex(in: object) else { continue }
+            if !windows.isEmpty {
+                latest = windows
+                break
+            }
+        }
+        return latest
     }
 
     // MARK: - Cursor
@@ -296,15 +406,25 @@ extension RecordedQuotaWindow {
             if let nested = dict["rate_limits"] {
                 return parseFlexible(nested, observedAt: observedAt)
             }
+            // ccusage / newer OAuth: structured `limits` array
+            if let limits = dict["limits"] as? [[String: Any]] {
+                let mapped = windows(fromLimitsArray: limits, observedAt: observedAt)
+                if !mapped.isEmpty { return mapped }
+            }
             // Claude Code statusline: rate_limits.five_hour / seven_day
             // OAuth usage cache: top-level five_hour / seven_day with utilization
-            if dict["five_hour"] != nil || dict["seven_day"] != nil || dict["fiveHour"] != nil {
+            if dict["five_hour"] != nil || dict["seven_day"] != nil || dict["fiveHour"] != nil
+                || dict["session"] != nil || dict["5h"] != nil {
                 var windows: [RecordedQuotaWindow] = []
-                if let five = window(from: dict["five_hour"] ?? dict["fiveHour"], minutes: 300, observedAt: observedAt) {
+                if let five = window(
+                    from: dict["five_hour"] ?? dict["fiveHour"] ?? dict["session"] ?? dict["5h"],
+                    minutes: 300,
+                    observedAt: observedAt
+                ) {
                     windows.append(five)
                 }
                 if let week = window(
-                    from: dict["seven_day"] ?? dict["sevenDay"] ?? dict["week"],
+                    from: dict["seven_day"] ?? dict["sevenDay"] ?? dict["week"] ?? dict["weekly"] ?? dict["7d"],
                     minutes: 10_080,
                     observedAt: observedAt
                 ) {
@@ -323,16 +443,52 @@ extension RecordedQuotaWindow {
         return nil
     }
 
+    private static func windows(fromLimitsArray limits: [[String: Any]], observedAt: Date) -> [RecordedQuotaWindow] {
+        var result: [RecordedQuotaWindow] = []
+        for entry in limits {
+            let kind = ((entry["kind"] as? String) ?? (entry["type"] as? String) ?? "").lowercased()
+            let minutes: Int
+            if kind.contains("session") || kind.contains("five") || kind == "5h" {
+                minutes = 300
+            } else if kind.contains("week") || kind.contains("seven") || kind == "7d" {
+                // Prefer all-models weekly; skip model-scoped duplicates for dual meters.
+                if kind.contains("scoped") || entry["scope"] != nil { continue }
+                minutes = 10_080
+            } else {
+                continue
+            }
+            if let window = window(from: entry, minutesHint: minutes, observedAt: observedAt) {
+                if !result.contains(where: { $0.minutes == minutes }) {
+                    result.append(window)
+                }
+            }
+        }
+        return result
+    }
+
     private static func window(from value: Any?, minutes: Int, observedAt: Date) -> RecordedQuotaWindow? {
         guard let block = value as? [String: Any] else { return nil }
         return window(from: block, minutesHint: minutes, observedAt: observedAt)
     }
 
     private static func window(from block: [String: Any], minutesHint: Int, observedAt: Date) -> RecordedQuotaWindow? {
-        let percent = flexibleNumber(block["used_percentage"])
+        let used = flexibleNumber(block["used_percentage"])
             ?? flexibleNumber(block["used_percent"])
             ?? flexibleNumber(block["utilization"])
             ?? flexibleNumber(block["percent"])
+            ?? flexibleNumber(block["percent_used"])
+        let remaining = flexibleNumber(block["remaining_percentage"])
+            ?? flexibleNumber(block["remaining_percent"])
+            ?? flexibleNumber(block["remaining"])
+        let percent: Double?
+        if let used, (0...100).contains(used) {
+            percent = used
+        } else if let remaining, (0...100).contains(remaining) {
+            // ChatGPT-style “usage remaining” → MOMO displays used %.
+            percent = 100 - remaining
+        } else {
+            percent = nil
+        }
         guard let percent, (0...100).contains(percent) else { return nil }
         let minutes = Int(flexibleNumber(block["window_minutes"]) ?? Double(minutesHint))
         guard minutes > 0 else { return nil }

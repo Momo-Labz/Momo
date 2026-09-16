@@ -12,6 +12,8 @@
 		F4A5B6C7D8E90819293A4B5C /* UsageMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */; };
 		D2E3F4A5B6C70819293A4B5C /* DesktopConnectionVerifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */; };
 		A9B0C1D2E3F418293A4B5C6D /* LocalUsageArtifactReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0C1D2E3F40819293A4B5C6D /* LocalUsageArtifactReader.swift */; };
+		E7F8A9B0C1D20819293A4B5C /* ProviderCLIUsageProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E7F8A9B0C10819293A4B5C /* ProviderCLIUsageProbe.swift */; };
+		F8A9B0C1D2E30819293A4B5C /* SystemSettingsDeepLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = E7F8A9B0C1D20819293A4B5D /* SystemSettingsDeepLink.swift */; };
 		A2B3C4D5E6F70819293A4B5C /* TalkSessionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */; };
 		E2F3A4B5C6D70819293A4B5C /* VoicePermission.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */; };
 		B2C3D4E5F60718293A4B5C6D /* DesktopAppCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C /* DesktopAppCatalog.swift */; };
@@ -106,6 +108,8 @@
 		E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageMeter.swift; sourceTree = "<group>"; };
 		C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopConnectionVerifier.swift; sourceTree = "<group>"; };
 		B0C1D2E3F40819293A4B5C6D /* LocalUsageArtifactReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalUsageArtifactReader.swift; sourceTree = "<group>"; };
+		D6E7F8A9B0C10819293A4B5C /* ProviderCLIUsageProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProviderCLIUsageProbe.swift; sourceTree = "<group>"; };
+		E7F8A9B0C1D20819293A4B5D /* SystemSettingsDeepLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemSettingsDeepLink.swift; sourceTree = "<group>"; };
 		F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TalkSessionCoordinator.swift; sourceTree = "<group>"; };
 		D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoicePermission.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A4B5C /* DesktopAppCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesktopAppCatalog.swift; sourceTree = "<group>"; };
@@ -281,6 +285,8 @@
 				E3F4A5B6C7D80819293A4B5C /* UsageMeter.swift */,
 				C1D2E3F4A5B60718293A4B5C /* DesktopConnectionVerifier.swift */,
 				B0C1D2E3F40819293A4B5C6D /* LocalUsageArtifactReader.swift */,
+				D6E7F8A9B0C10819293A4B5C /* ProviderCLIUsageProbe.swift */,
+				E7F8A9B0C1D20819293A4B5D /* SystemSettingsDeepLink.swift */,
 				F1A2B3C4D5E60718293A4B5C /* TalkSessionCoordinator.swift */,
 				D1E2F3A4B5C60718293A4B5C /* VoicePermission.swift */,
 				B2C3D4E5F60718293A4B5C6D /* ProviderAllowChooserView.swift */,
@@ -690,6 +696,8 @@
 				F4A5B6C7D8E90819293A4B5C /* UsageMeter.swift in Sources */,
 				D2E3F4A5B6C70819293A4B5C /* DesktopConnectionVerifier.swift in Sources */,
 				A9B0C1D2E3F418293A4B5C6D /* LocalUsageArtifactReader.swift in Sources */,
+				E7F8A9B0C1D20819293A4B5C /* ProviderCLIUsageProbe.swift in Sources */,
+				F8A9B0C1D2E30819293A4B5C /* SystemSettingsDeepLink.swift in Sources */,
 				A2B3C4D5E6F70819293A4B5C /* TalkSessionCoordinator.swift in Sources */,
 				E2F3A4B5C6D70819293A4B5C /* VoicePermission.swift in Sources */,
 				A1B2C3D4E5F60718293A4B5C /* ProviderAllowChooserView.swift in Sources */,

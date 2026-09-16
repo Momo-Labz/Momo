@@ -45,6 +45,29 @@ struct TalkPanelView: View {
             if talk.phase == .upsell {
                 upsellBlock
             } else {
+                if let block = VoicePermission.microphoneBlockReason() ?? VoicePermission.speechBlockReason() {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(VoicePermission.settingsGuidance(for: block))
+                            .font(BarBoyStyle.bodySmall)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            if block == .microphoneDenied || block == .microphoneRestricted {
+                                Button("Open Microphone Settings") {
+                                    SystemSettingsDeepLink.openMicrophone()
+                                }
+                                .barBoyButton()
+                            }
+                            if block == .speechDenied || block == .speechRestricted {
+                                Button("Open Speech Settings") {
+                                    SystemSettingsDeepLink.openSpeechRecognition()
+                                }
+                                .barBoyButton()
+                            }
+                        }
+                    }
+                }
+
                 TextField("Ask about usage or what’s running…", text: $talk.typedAsk)
                     .textFieldStyle(.plain)
                     .padding(10)

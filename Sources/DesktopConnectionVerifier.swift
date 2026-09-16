@@ -69,7 +69,7 @@ struct ConnectUsageHonesty: Equatable {
             }
             return parts.joined(separator: " ")
         case .noReadableCache:
-            return "Connected — no readable usage cache yet. Session files may exist; % bars appear when Claude’s statusline / usage-cache is present (~/.claude or /tmp/claude)."
+            return "Connected — no readable usage % yet. Claude/Codex need a local CLI cache or session rate_limits file; see the Usage tab for the exact next step."
         case .privacyBlocked:
             return "macOS blocked reading local provider files. Open System Settings → Privacy & Security → Full Disk Access, allow MOMO, then Retry."
         }
@@ -225,12 +225,14 @@ enum DesktopConnectionVerifier {
         case .privacyBlocked:
             return ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
         case .verified:
-            let detail = LocalUsageArtifactReader.detail(
+            let probed = LocalUsageArtifactReader.probeDetail(
                 for: provider,
                 home: home,
                 now: now,
-                fileManager: fileManager
+                fileManager: fileManager,
+                timeout: 5
             )
+            let detail = probed.detail
             if detail.hasQuotaMeters {
                 let session = detail.fiveHour.map { Int($0.percent.rounded()) }
                 let week = detail.weekly.map { Int($0.percent.rounded()) }

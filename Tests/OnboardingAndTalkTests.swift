@@ -110,6 +110,34 @@ final class OnboardingAndTalkTests: XCTestCase {
         // Replay clears allow-list so connect starts empty again.
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
         XCTAssertEqual(preferences.trackingStripProviders(), [])
+        XCTAssertNil(preferences.resumedOnboardingStep())
+    }
+
+    func testOnboardingProgressSurvivesTCCRelaunchCheckpoint() {
+        let suite = UserDefaults(suiteName: "MomoOnboardingResume.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let preferences = PreferencesStore(defaults: suite)
+        preferences.saveOnboardingProgress(
+            step: .talkTrial,
+            intents: [.usageTracking],
+            partialAllowed: [.claude],
+            pendingProvider: nil
+        )
+        XCTAssertEqual(preferences.resumedOnboardingStep(), .talkTrial)
+        XCTAssertEqual(preferences.resumedOnboardingPartialAllowed(), [.claude])
+        XCTAssertEqual(preferences.onboardingIntents, [.usageTracking])
+        XCTAssertEqual(preferences.allowedTrackingProviders, [.claude])
+        // Incomplete until Finish marks seen.
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+
+        let reloaded = PreferencesStore(defaults: suite)
+        XCTAssertEqual(reloaded.resumedOnboardingStep(), .talkTrial)
+        XCTAssertEqual(reloaded.resumedOnboardingPartialAllowed(), [.claude])
+
+        reloaded.setAllowedTrackingProviders([.claude], markOnboardingSeen: true)
+        XCTAssertNil(reloaded.resumedOnboardingStep())
+        XCTAssertFalse(reloaded.needsTrackingOnboarding)
     }
 
     func testAllowListStripEqualFlexibleWidths() {
