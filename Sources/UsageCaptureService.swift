@@ -192,7 +192,9 @@ final class UsageCaptureService: NSObject, ObservableObject, WKNavigationDelegat
         case .cancelled:
             return "Capture was cancelled."
         case .failed:
-            return "Capture could not continue on this page."
+            return status == "USAGE PAGE UNAVAILABLE"
+                ? "No allowlisted official usage page is available for this provider yet."
+                : "Capture could not continue on this page."
         }
     }
 
