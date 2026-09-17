@@ -47,9 +47,9 @@ enum UsageEmptyReason: Equatable {
         case .cursorCLIMissing:
             return "Cursor CLI/binary not found and no local usage-cache.json. Install Cursor, or place a usage-cache.json MOMO can read — otherwise account % is unavailable."
         case .grokNoLocalUsage:
-            return "No readable local Grok usage cache or CLI usage output on this Mac. Grok account % is not exposed in session files MOMO supports."
+            return "Grok Bot / Grok sessions do not publish account usage % as a local cache MOMO can read. Activity can still be tracked; usage bars stay — until a supported cache exists."
         case .grokCLIMissing:
-            return "Grok CLI not found and no local usage cache. Install/sign in to Grok if a CLI exists, or MOMO cannot show account %."
+            return "Grok Bot.app (or Grok CLI) not found and no local usage cache. Install Grok Bot from docs.x.ai/grok-bot, sign in, then Retry — account % stays unavailable until a local meter appears."
         case .geminiNoLocalUsage:
             return "No readable local Gemini usage cache on this Mac."
         case .cliTimedOut(let command):

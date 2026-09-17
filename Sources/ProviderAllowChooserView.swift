@@ -7,6 +7,16 @@ enum TrackingOnboardingStep: Int, CaseIterable {
     case connectProviders
     case preferences
     case talkTrial
+
+    var railTitle: String {
+        switch self {
+        case .welcome: return "WELCOME"
+        case .intents: return "INTENT"
+        case .connectProviders: return "CONNECT"
+        case .preferences: return "PREFS"
+        case .talkTrial: return "TALK"
+        }
+    }
 }
 
 /// Welcome → intent → desktop-app allow → prefs → Talk trial.
@@ -100,6 +110,11 @@ struct TrackingOnboardingView: View {
             .padding(.horizontal, 12)
             .padding(.top, 10)
 
+            journeyRail
+                .padding(.horizontal, 12)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
             Group {
                 switch step {
                 case .welcome: welcomeStep
@@ -121,6 +136,24 @@ struct TrackingOnboardingView: View {
         .onChange(of: intents) { _, _ in checkpoint() }
     }
 
+    private var journeyRail: some View {
+        HStack(spacing: 4) {
+            ForEach(TrackingOnboardingStep.allCases, id: \.rawValue) { item in
+                let active = item.rawValue <= step.rawValue
+                Text(item.railTitle)
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(active ? BarBoyStyle.inverseInk : .secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 5)
+                    .frame(maxWidth: .infinity)
+                    .background(active ? Color.primary : BarBoyStyle.surface)
+                    .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Onboarding step \(step.railTitle)")
+    }
+
     private func checkpoint() {
         preferences.saveOnboardingProgress(
             step: step,
@@ -131,18 +164,31 @@ struct TrackingOnboardingView: View {
     }
 
     private var welcomeStep: some View {
-        VStack(spacing: 14) {
-            AnimatedMomoMark(size: 52, animated: !reduceMotion)
-            Text("Welcome to MOMO Trackr")
+        VStack(spacing: 16) {
+            AnimatedMomoMark(size: 64, animated: !reduceMotion)
+            Text("MOMO")
                 .font(BarBoyStyle.display)
-                .multilineTextAlignment(.center)
-            Text("Local tracking for the AI desktop apps you already use. On-device only — we don’t scrape browser cookies or invent usage %.")
+                .tracking(1.2)
+            Text("TRACKR")
+                .font(BarBoyStyle.sectionLabel)
+                .foregroundStyle(.secondary)
+            Text("Open the Mac apps you already use. MOMO watches local sessions and usage caches on this machine — never browser cookies, never invented %.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
-            primaryButton("Continue") {
+            VStack(alignment: .leading, spacing: 6) {
+                welcomeBeat("1", "Pick what you care about")
+                welcomeBeat("2", "Connect Claude, Cursor, Grok Bot, and friends")
+                welcomeBeat("3", "Preview defaults, then try Talk")
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(BarBoyStyle.surface)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+
+            primaryButton("Start setup") {
                 allowed = []
                 step = .intents
                 checkpoint()
@@ -151,6 +197,20 @@ struct TrackingOnboardingView: View {
         .padding(.horizontal, 22)
         .padding(.top, 8)
         .padding(.bottom, 22)
+    }
+
+    private func welcomeBeat(_ number: String, _ title: String) -> some View {
+        HStack(spacing: 10) {
+            Text(number)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(BarBoyStyle.inverseInk)
+                .frame(width: 22, height: 22)
+                .background(Color.primary)
+            Text(title)
+                .font(BarBoyStyle.rowTitle)
+                .foregroundStyle(Color.primary)
+            Spacer(minLength: 0)
+        }
     }
 
     private var intentsStep: some View {
@@ -206,10 +266,12 @@ struct TrackingOnboardingView: View {
 
     private var connectStep: some View {
         VStack(spacing: 12) {
-            Text("Connect the desktop apps you use")
+            Text(permissionProvider.map { "MOMO / CONNECT \($0.name.uppercased())" } ?? "Connect desktop apps")
                 .font(BarBoyStyle.display)
                 .multilineTextAlignment(.center)
-            Text("Start empty. Click a provider to open its Mac app. MOMO marks it connected only after a real local readiness check — not just because the process is running. Free includes up to \(DesktopAppCatalog.freeProviderLimit) verified providers.")
+            Text(permissionProvider == nil
+                 ? "Installed apps rise to the top. Tap one to open it — MOMO never writes into the other .app. Usage Connected needs a real local %; Grok Bot can Allow activity when % is not published yet."
+                 : "Keep this panel open while the desktop app launches. Sign in there if asked. MOMO only reads local files on this Mac.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -227,7 +289,7 @@ struct TrackingOnboardingView: View {
                 verificationPanel(for: permissionProvider)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(AIProvider.allCases) { provider in
+                    ForEach(DesktopAppCatalog.onboardingConnectProviders()) { provider in
                         providerConnectButton(provider)
                     }
                 }
@@ -236,7 +298,7 @@ struct TrackingOnboardingView: View {
                     guard !allowed.isEmpty else { return }
                     step = .preferences
                 } label: {
-                    Text(allowed.isEmpty ? "Connect at least one app to continue" : "Continue")
+                    Text(allowed.isEmpty ? "Connect at least one app to continue" : "Continue with \(allowed.count) connected")
                         .font(BarBoyStyle.navLabel)
                         .frame(maxWidth: .infinity, minHeight: 40)
                         .contentShape(Rectangle())
@@ -391,23 +453,25 @@ struct TrackingOnboardingView: View {
                 plusGateMessage = "Free includes up to \(DesktopAppCatalog.freeProviderLimit) providers. Unlock more on the Upgrade tab with MOMO+."
                 return
             }
-            allowUsage = true
+            allowUsage = !provider.supportsActivityOnlyConnect
             allowRecentPrompts = true
             permissionProvider = provider
-            beginVerification(for: provider, openApp: true)
+            beginVerification(for: provider, openApp: match.isInstalled)
         } label: {
             HStack(spacing: 12) {
                 ProviderMark(provider: provider, size: 28, active: isAllowed)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(isAllowed ? "\(provider.connectButtonTitle) · Verified" : provider.connectButtonTitle)
+                    Text(isAllowed ? "\(provider.connectButtonTitle) · Connected" : provider.connectButtonTitle)
                         .font(BarBoyStyle.rowTitle)
                         .foregroundStyle(Color.primary)
-                    Text(match.isInstalled ? match.displayName : "Not installed in Applications")
+                    Text(match.isInstalled
+                         ? "\(match.displayName) · Ready to open"
+                         : "Not installed — open download page")
                         .font(BarBoyStyle.microLabel)
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Image(systemName: isAllowed ? "checkmark" : (match.isInstalled ? "arrow.up.forward.app" : "plus"))
+                Image(systemName: isAllowed ? "checkmark" : (match.isInstalled ? "arrow.up.forward.app" : "arrow.down.app"))
                     .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
             }
@@ -429,21 +493,70 @@ struct TrackingOnboardingView: View {
     private func verificationPanel(for provider: AIProvider) -> some View {
         let match = DesktopAppCatalog.match(for: provider)
         return VStack(alignment: .leading, spacing: 12) {
-            Text(provider.name)
-                .font(BarBoyStyle.sectionLabel)
-            Text("MOMO opens \(match.displayName) (never writes into it). Answer the questions below — Allow saves this provider only when usage % is readable.")
+            HStack(spacing: 10) {
+                ProviderMark(provider: provider, size: 34, active: canCommit(provider) || canCommitActivityOnly(provider))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CONNECT \(provider.name.uppercased())")
+                        .font(BarBoyStyle.sectionLabel)
+                    Text(match.isInstalled ? match.displayName : "Desktop app not found")
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Text(providerConnectBlurb(provider))
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            VStack(spacing: 0) {
+                connectGuideRow(
+                    number: "1",
+                    title: match.isInstalled ? "\(match.displayName) detected" : "Install \(DesktopAppCatalog.displayName(for: provider))",
+                    detail: match.isInstalled
+                        ? "MOMO opens the app via Launch Services — it never writes into the .app bundle."
+                        : "Install the Mac app, then Retry. MOMO will not invent a connection.",
+                    state: match.isInstalled ? .done : .attention
+                )
+                Divider().overlay(BarBoyStyle.hairline.opacity(0.7))
+                connectGuideRow(
+                    number: "2",
+                    title: "Open & sign in if needed",
+                    detail: "Finish any login prompts inside \(match.displayName). Stay signed in so local session files appear.",
+                    state: guideState(for: .signIn)
+                )
+                Divider().overlay(BarBoyStyle.hairline.opacity(0.7))
+                connectGuideRow(
+                    number: "3",
+                    title: provider.supportsActivityOnlyConnect ? "Local activity check" : "Local usage % check",
+                    detail: provider.supportsActivityOnlyConnect
+                        ? "Account % is not published locally yet. MOMO looks for sessions; usage bars stay — until a cache exists."
+                        : "Reads local caches / CLI / rate_limits only. No cookies, no invented percentages.",
+                    state: guideState(for: .usage)
+                )
+            }
+            .background(BarBoyStyle.panel)
+            .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+
+            if !match.isInstalled, let url = provider.desktopInstallURL {
+                Button("Open download page") {
+                    NSWorkspace.shared.open(url)
+                }
+                .barBoyButton()
+            }
+
             Toggle(isOn: $allowUsage) {
-                Text("Track usage").font(BarBoyStyle.rowTitle)
+                Text(provider.supportsActivityOnlyConnect
+                     ? "Track usage % when a local meter appears"
+                     : "Track usage %")
+                    .font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
-            .disabled(isConnecting)
+            .disabled(isConnecting || provider.supportsActivityOnlyConnect)
 
             Toggle(isOn: $allowRecentPrompts) {
-                Text("Track recent prompts").font(BarBoyStyle.rowTitle)
+                Text("Track recent activity / prompts").font(BarBoyStyle.rowTitle)
             }
             .toggleStyle(.checkbox)
             .disabled(isConnecting)
@@ -462,8 +575,8 @@ struct TrackingOnboardingView: View {
                 .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
                 .buttonStyle(.plain)
 
-                Button("Retry") {
-                    beginVerification(for: provider, openApp: true)
+                Button(match.isInstalled ? "Retry" : "Check again") {
+                    beginVerification(for: provider, openApp: match.isInstalled)
                 }
                 .font(BarBoyStyle.navLabel)
                 .frame(maxWidth: .infinity, minHeight: 36)
@@ -473,25 +586,118 @@ struct TrackingOnboardingView: View {
                 .buttonStyle(.plain)
                 .disabled(isConnecting)
 
-                Button("Allow") {
-                    commitVerifiedConnection(provider)
+                if canCommit(provider) {
+                    Button("Allow") {
+                        commitVerifiedConnection(provider, activityOnly: false)
+                    }
+                    .font(BarBoyStyle.navLabel)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(BarBoyStyle.inverseInk)
+                    .background(Color.primary)
+                    .buttonStyle(.plain)
+                    .help("Save this provider — usage % is readable.")
+                } else if canCommitActivityOnly(provider) {
+                    Button("Allow activity") {
+                        allowUsage = false
+                        allowRecentPrompts = true
+                        commitVerifiedConnection(provider, activityOnly: true)
+                    }
+                    .font(BarBoyStyle.navLabel)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(BarBoyStyle.inverseInk)
+                    .background(Color.primary)
+                    .buttonStyle(.plain)
+                    .help("Track local activity. Usage % stays unavailable until a cache exists.")
+                } else {
+                    Button(provider.supportsActivityOnlyConnect ? "Allow activity" : "Allow") {
+                        // Disabled placeholder keeps layout stable.
+                    }
+                    .font(BarBoyStyle.navLabel)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .contentShape(Rectangle())
+                    .foregroundStyle(BarBoyStyle.inverseInk)
+                    .background(Color.primary.opacity(0.35))
+                    .buttonStyle(.plain)
+                    .disabled(true)
+                    .help(provider.supportsActivityOnlyConnect
+                          ? "Open Grok Bot, sign in, then Retry."
+                          : "Allow stays off until Retry finds readable usage %.")
                 }
-                .font(BarBoyStyle.navLabel)
-                .frame(maxWidth: .infinity, minHeight: 36)
-                .contentShape(Rectangle())
-                .foregroundStyle(BarBoyStyle.inverseInk)
-                .background(canCommit(provider) ? Color.primary : Color.primary.opacity(0.35))
-                .buttonStyle(.plain)
-                .disabled(!canCommit(provider))
-                .help(canCommit(provider)
-                      ? "Save this provider — usage % is readable."
-                      : "Allow stays off until Retry finds readable usage %.")
             }
         }
         .padding(14)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
         .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: connectProgress?.title)
+    }
+
+    private enum GuidePhase { case signIn, usage }
+    private enum GuideState { case pending, active, done, attention }
+
+    private func guideState(for phase: GuidePhase) -> GuideState {
+        guard let connectProgress else { return .pending }
+        switch phase {
+        case .signIn:
+            switch connectProgress {
+            case .openingApp, .waitingForSignIn: return .active
+            case .searchingUsage, .connected, .notReady, .needsPermission: return .done
+            case .failed, .timedOut: return .attention
+            }
+        case .usage:
+            switch connectProgress {
+            case .openingApp, .waitingForSignIn: return .pending
+            case .searchingUsage: return .active
+            case .connected: return .done
+            case .notReady, .needsPermission, .failed, .timedOut: return .attention
+            }
+        }
+    }
+
+    private func connectGuideRow(number: String, title: String, detail: String, state: GuideState) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(number)
+                .font(BarBoyStyle.microLabel)
+                .foregroundStyle(state == .pending ? .secondary : BarBoyStyle.inverseInk)
+                .frame(width: 22, height: 22)
+                .background(state == .pending ? BarBoyStyle.raised : Color.primary)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(BarBoyStyle.rowTitle)
+                    if state == .active {
+                        ProgressView().controlSize(.mini)
+                    } else if state == .done {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Text(detail)
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .opacity(state == .pending ? 0.72 : 1)
+    }
+
+    private func providerConnectBlurb(_ provider: AIProvider) -> String {
+        switch provider {
+        case .claude:
+            return "MOMO opens Claude.app, then looks for Claude Code usage caches / `ccusage`. Menu-bar % inside Claude alone is not a file other apps can read."
+        case .cursor:
+            return "MOMO opens Cursor.app and looks for a local usage-cache.json. Transcripts alone do not expose account %."
+        case .grok:
+            return "MOMO opens Grok Bot.app for local activity. Account usage % is not published in a supported local cache yet — Allow activity keeps bars honest as —."
+        case .codex:
+            return "MOMO opens ChatGPT / Codex and reads rate_limits from ~/.codex/sessions after you run one chat."
+        case .gemini:
+            return "Gemini local usage % is not published yet. Activity-only connect stays honest when the desktop app is available."
+        }
     }
 
     @ViewBuilder
@@ -591,6 +797,23 @@ struct TrackingOnboardingView: View {
             || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already)
     }
 
+    /// Honest path for providers that never publish account % locally (Grok Bot / Gemini).
+    /// Requires the desktop app to be installed and the connect attempt to finish without privacy failure.
+    private func canCommitActivityOnly(_ provider: AIProvider) -> Bool {
+        guard provider.supportsActivityOnlyConnect else { return false }
+        guard allowRecentPrompts, !isConnecting else { return false }
+        guard let result = pendingResult else { return false }
+        switch result.status {
+        case .awaitingUsage, .awaitingSignIn, .verified:
+            break
+        case .notInstalled, .notRunning, .privacyBlocked, .failed:
+            return false
+        }
+        let already = allowed.contains(provider)
+        return talkQuota.momoPlusEntitled
+            || MomoPlusGate.canAllowAdditionalProvider(currentAllowedCount: allowed.count, alreadyAllowed: already)
+    }
+
     private func beginVerification(for provider: AIProvider, openApp: Bool) {
         // Debounce repeat clicks while a connect attempt is in flight.
         if isConnecting { return }
@@ -599,7 +822,7 @@ struct TrackingOnboardingView: View {
         connectGeneration += 1
         let generation = connectGeneration
         pendingResult = nil
-        connectProgress = .openingApp
+        connectProgress = openApp ? .openingApp : .searchingUsage
         connectTask = Task { @MainActor in
             let result = await DesktopConnectionVerifier.runConnectAttempt(
                 for: provider,
@@ -623,8 +846,14 @@ struct TrackingOnboardingView: View {
         connectProgress = nil
     }
 
-    private func commitVerifiedConnection(_ provider: AIProvider) {
-        guard canCommit(provider) else { return }
+    private func commitVerifiedConnection(_ provider: AIProvider, activityOnly: Bool) {
+        if activityOnly {
+            guard canCommitActivityOnly(provider) else { return }
+            allowUsage = false
+            allowRecentPrompts = true
+        } else {
+            guard canCommit(provider) else { return }
+        }
         allowed.insert(provider)
         cancelConnect()
         permissionProvider = nil

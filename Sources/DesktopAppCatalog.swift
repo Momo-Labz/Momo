@@ -20,7 +20,7 @@ enum DesktopAppCatalog {
         case .claude: return "Claude"
         case .gemini: return "Gemini"
         case .cursor: return "Cursor"
-        case .grok: return "Grok"
+        case .grok: return "Grok Bot"
         }
     }
 
@@ -31,7 +31,19 @@ enum DesktopAppCatalog {
         case .claude: return ["Claude.app"]
         case .gemini: return ["Gemini.app", "Google Gemini.app"]
         case .cursor: return ["Cursor.app"]
-        case .grok: return ["Grok.app"]
+        // Prefer Grok Bot.app (desktop bots); fall back to consumer Grok.app if present.
+        case .grok: return ["Grok Bot.app", "Grok.app"]
+        }
+    }
+
+    /// Installed desktop apps first, then the preferred onboarding order.
+    static func onboardingConnectProviders() -> [AIProvider] {
+        AIProvider.onboardingConnectOrder.sorted { lhs, rhs in
+            let left = match(for: lhs).isInstalled
+            let right = match(for: rhs).isInstalled
+            if left != right { return left && !right }
+            let order = AIProvider.onboardingConnectOrder
+            return (order.firstIndex(of: lhs) ?? 99) < (order.firstIndex(of: rhs) ?? 99)
         }
     }
 

@@ -97,6 +97,21 @@ final class TrackingAllowlistAndPeekTests: XCTestCase {
         XCTAssertEqual(DesktopAppCatalog.applicationFileNames(for: .codex), ["ChatGPT.app", "Codex.app"])
     }
 
+    func testGrokBotDesktopCatalogAndActivityOnlyConnect() {
+        XCTAssertEqual(AIProvider.grok.connectButtonTitle, "Connect Grok Bot")
+        XCTAssertEqual(DesktopAppCatalog.displayName(for: .grok), "Grok Bot")
+        XCTAssertEqual(
+            DesktopAppCatalog.applicationFileNames(for: .grok),
+            ["Grok Bot.app", "Grok.app"]
+        )
+        XCTAssertTrue(AIProvider.grok.applicationBundleIdentifiers.contains("com.anysphere.sand"))
+        XCTAssertTrue(AIProvider.grok.supportsActivityOnlyConnect)
+        XCTAssertFalse(AIProvider.claude.supportsActivityOnlyConnect)
+        XCTAssertFalse(AIProvider.cursor.supportsActivityOnlyConnect)
+        XCTAssertEqual(AIProvider.onboardingConnectOrder.first, .claude)
+        XCTAssertEqual(TrackingOnboardingStep.connectProviders.railTitle, "CONNECT")
+    }
+
     func testPeekMappingUsesFiveHourAndWeeklyWhenPresent() {
         let capturedAt = Date(timeIntervalSince1970: 1_800_000_000)
         let observations = [
