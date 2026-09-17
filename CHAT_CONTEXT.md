@@ -1,58 +1,59 @@
 # MOMO Chat Context and Handoff
 
-Updated: 2026-09-16 (connect hang fix + schema v6 + Claude usage honesty)
+Updated: 2026-09-16 (schema v7 forces Welcome again + usage/CLI + Settings deep-links + TCC resume)
 
-Branch `cursor/connect-status-migration-3a53` off `main` after PR #3 squash `32ec350`.
+Branch `cursor/usage-cli-onboarding-resume-02e3` / PR #6 off `main` after PR #5 (`6d816e9`).
 
-## P0 — Never freeze during connect (root cause)
+## P0 — Connected honesty (usage meters only)
 
-**Verified hang:** Onboarding `beginVerification` ran on MainActor and:
+**Connected** requires readable usage % meters (cache / CLI / rate_limits). Opening the desktop app or finding a session file alone is **Not ready** / Searching… — never “Connected — no readable usage %”. Allow stays disabled until meters exist. Same rule for Claude, Codex/ChatGPT, Cursor, Grok.
 
-1. Called `DesktopAppConnect.openViaLaunchServices`, which **`DispatchSemaphore.wait`’d up to 2.5s** while `NSWorkspace.openApplication` completions hop to the main thread → classic MainActor deadlock / multi-second freeze (same class as the mic permission continuation hang).
-2. Then called `DesktopConnectionVerifier.verify` on MainActor (`ps waitUntilExit` + up to 2 000-file session walk + Claude cache reads).
+## P0 — Mic false-off
 
-**Fix:**
-- Launch Services open is fire-and-forget / async — **never semaphore-wait on MainActor**
-- Verify + Claude cache / FDA checks run in `Task.detached`; UI updates via MainActor progress callbacks only
-- Live status UI: Opening app → Waiting for sign-in → Reading local usage → Connected / Needs permission / Failed / Timed out + Retry
-- Spinners while in-flight; debounce repeat clicks; 20s hard timeout with Retry recovery
-- Usage tab Claude artifact load also off-main (`.task` + ProgressView)
+Do not treat `undetermined` + prompted latch as denied. Prefer `AVCaptureDevice` (matches System Settings) and accept `AVAudioApplication` when granted. Open Microphone Settings remains for real denied/restricted.
 
-Mic path already avoided MainActor continuation resume (`VoicePermission`); connect no longer shares the blocking pattern.
+## P0 — Onboarding skip regression (schema v7)
 
-## P0 — Claude connect + data honesty
+**Cause:** PR #5 wrote `trackingOnboardingSchemaVersion=6` + `onboardingMigration.v6=true`. A broken/skipped grok9–10 run could also leave `trackingOnboardingComplete.v6` + a non-empty allow-list. This branch’s gate treated that as finished (`needsTrackingOnboarding == false`) and opened the main UI with no Welcome.
 
-On verified connect, surface `ConnectUsageHonesty` (never invent %):
+**Fix:** Schema **v7** + one-time `onboardingMigration.v7` clears allow-list, completion flags (v2…v7), and stale resume keys, then forces Welcome → intents → connect. No Terminal `defaults delete`.
 
-| Outcome | UI |
-|---|---|
-| Usage found | Connected + Session N% / Week N% from real cache |
-| No readable cache | Connected — honest empty + `~/.claude` / `/tmp/claude` next steps |
-| Privacy blocked | Needs permission + FDA / App Management guidance |
+**Resume preserved:** After v7 is applied, genuine mid-flow TCC checkpoints (`onboardingResumeStep.v1` while `trackingOnboardingSeen == false`) still restore the unfinished step — never used to skip a forced Welcome upgrade.
 
-Parses existing statusline + usage-cache paths only (`LocalUsageArtifactReader`).
+Settings → **Replay onboarding** remains the retest path.
 
-## P0 — No manual `defaults delete` for shipping QA
+## P0 — Usage sources that match the apps (no invented %)
 
-Schema **v6** (`trackingOnboardingComplete.v6`) + one-time `onboardingMigration.v6`:
+MOMO never scrapes WebKit / cookies and never invents percentages. Empty providers always show a **specific reason**.
 
-- Upgrade from prior main/grok (schema &lt; 6 or missing migration flag) clears allow-list + complete/seen and forces Welcome→connect
-- Empty allow-list never counts as finished
-- **Settings → Replay onboarding** remains the supported retest path
+| Provider | Readable sources (priority order) | Honest empty reason |
+|---|---|---|
+| **Claude** | `~/.claude/usage-limits.json` (ccusage), `usage-cache.json` / statusline caches, `Library/Application Support/Claude(-3p)/`, `/tmp/claude/statusline-*`, then optional `ccusage json` CLI | Claude.app menu % is live from Anthropic — not a plaintext local file. Install/sign in Claude Code or run `ccusage`. |
+| **Codex / ChatGPT** | Newest `~/.codex/sessions/**/rollout-*.jsonl` `token_count.rate_limits` (primary=5h, secondary=week). Fresh **until reset**, not 15 minutes. | ChatGPT.app “usage remaining” is not a local file. Run Codex once so rate_limits exist. MOMO shows **used %** (`100 − remaining` when only remaining is present). |
+| **Cursor** | `Library/Application Support/Cursor/usage-cache.json`, `~/.cursor/usage-cache.json` | Transcripts lack account %; need a usage-cache.json or say CLI/cache missing. |
+| **Grok** | None supported today | Exact “no local cache / CLI missing” copy. |
 
-### Optional advanced reset (not primary)
-
-Only if Replay is unavailable:
+### CLI commands (read-only, timeout off-main)
 
 ```sh
-defaults delete com.momolabz.barboy
+ccusage json
+which claude
+which codex
+which cursor
+which grok
 ```
 
-Do not document per-key `defaults delete` as the normal QA wipe.
+## P0 — Settings deep-link buttons
 
-## Preserve
+`SystemSettingsDeepLink`: Microphone, Notifications (MOMO bundle), Speech, FDA.
 
-Desktop-app connect, Claude Code–style Usage tab (no Activity clone), four tabs, no WebKit Connect Usage, mic latch, safe Launch Services open.
+## P0 — Survive TCC quit/relaunch mid-onboarding
+
+Checkpoint: step + partial allow-list + pending provider. Cleared on Finish / Replay / schema upgrade wipe.
+
+## P1 — Minute refresh
+
+Honors 1/5/10/30 min prefs; Usage tab shows last-updated.
 
 Mac verify:
 
@@ -60,4 +61,4 @@ Mac verify:
 xcodebuild -project BarBoy.xcodeproj -scheme BarBoy -destination 'platform=macOS' test CODE_SIGNING_ALLOWED=NO
 ```
 
-Manual: upgrade install → Welcome without Terminal; connect Claude → status stages + found/missing/blocked; Retry after timeout; Replay onboarding; Usage tab spinner then honest empty or %.
+Manual: upgrade from grok10/PR#5 install (even with prior complete flags) → Welcome without `defaults delete`; mid-flow Allow that relaunches → same unfinished step; Finish once → next launch stays on main UI.

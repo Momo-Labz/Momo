@@ -14,26 +14,21 @@ final class VoiceInputLifecycleTests: XCTestCase {
         voice.stop()
         XCTAssertEqual(voice.state, .ready)
 
-        // Simulate mid-start: mark as permission without opening a system sheet.
-        // prepare must not tear down an in-flight permission wait.
-        // We exercise the public gate via isPendingStart after forcing state through a blocked start path
-        // when mic is already denied via latch.
+        // Undetermined + prompted latch must NOT fake “mic off” (System Settings can show ON).
         UserDefaults.standard.set(true, forKey: "voiceMicrophonePrompted.v1")
-        // Status remains notDetermined in this Linux/simulator host; latch makes block reason denied.
-        if VoicePermission.microphoneBlockReason() != nil {
-            await voice.start()
-            XCTAssertEqual(voice.state, .unavailable)
-            XCTAssertFalse(voice.isPendingStart)
-            // Repeat start while unavailable should not hang — returns quickly.
-            await voice.start()
-            XCTAssertEqual(voice.state, .unavailable)
-        }
+        XCTAssertNil(VoicePermission.microphoneBlockReason())
 
         VoicePermission.resetPromptLatchForTesting()
         voice.stop()
         voice.prepare(.talk)
         XCTAssertEqual(voice.state, .ready)
         XCTAssertFalse(voice.isActive)
+    }
+
+    func testMicrophoneGuidanceOnlyForHardDeny() {
+        // Guidance strings stay useful when the OS reports a real denial.
+        XCTAssertFalse(VoicePermission.settingsGuidance(for: .microphoneDenied).isEmpty)
+        XCTAssertTrue(VoicePermission.settingsGuidance(for: .microphoneDenied).contains("Microphone"))
     }
 
     func testStopFromPermissionLikeStatesReturnsReadyWithoutHang() {

@@ -22,11 +22,11 @@ final class OnboardingAndTalkTests: XCTestCase {
         preferences.setAllowedTrackingProviders([.codex], markOnboardingSeen: true)
         XCTAssertFalse(preferences.needsTrackingOnboarding)
         XCTAssertEqual(suite.integer(forKey: "trackingOnboardingSchemaVersion.v1"), PreferencesStore.currentOnboardingSchemaVersion)
-        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v6"))
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v7"))
     }
 
-    func testSchemaV6ClearsV5CompleteAndEmptyAllowListNeverFinishes() {
-        let suite = UserDefaults(suiteName: "MomoSchemaV6.\(UUID().uuidString)")!
+    func testSchemaV7ClearsV5CompleteAndEmptyAllowListNeverFinishes() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV7.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
 
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
@@ -35,11 +35,11 @@ final class OnboardingAndTalkTests: XCTestCase {
         suite.set([], forKey: "allowedTrackingProviders.v1")
 
         let preferences = PreferencesStore(defaults: suite)
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 6)
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 7)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertFalse(preferences.trackingOnboardingSeen)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
-        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v7"))
 
         // Marking complete without providers must not stick.
         preferences.markTrackingOnboardingSeen()
@@ -47,8 +47,8 @@ final class OnboardingAndTalkTests: XCTestCase {
         XCTAssertFalse(preferences.trackingOnboardingSeen)
     }
 
-    func testCompletedV5WithProvidersStillForcedBySchemaV6() {
-        let suite = UserDefaults(suiteName: "MomoSchemaV6Providers.\(UUID().uuidString)")!
+    func testCompletedV5WithProvidersStillForcedBySchemaV7() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV7Providers.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
 
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
@@ -59,21 +59,66 @@ final class OnboardingAndTalkTests: XCTestCase {
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
-        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v7"))
+    }
+
+    /// Regression: PR#5/grok10 already wrote schema v6 + migration.v6 + complete + allow-list
+    /// from a broken/skipped run. This build must still force Welcome (no defaults wipe).
+    func testCompletedV6WithProvidersStillForcedBySchemaV7() {
+        let suite = UserDefaults(suiteName: "MomoSchemaV6Skip.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        suite.set(true, forKey: "trackingOnboardingSeen.v1")
+        suite.set(6, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v6")
+        suite.set(true, forKey: "onboardingMigration.v6")
+        suite.set([AIProvider.claude.rawValue, AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
+        // Stale mid-flow resume must not jump past Welcome after upgrade wipe.
+        suite.set(TrackingOnboardingStep.talkTrial.rawValue, forKey: "onboardingResumeStep.v1")
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 7)
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertFalse(preferences.trackingOnboardingSeen)
+        XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v7"))
+        XCTAssertNil(preferences.resumedOnboardingStep())
+        XCTAssertFalse(suite.bool(forKey: "trackingOnboardingComplete.v6"))
+        XCTAssertFalse(suite.bool(forKey: "trackingOnboardingComplete.v7"))
     }
 
     func testMigrationFlagPreventsRepeatWipeAfterComplete() {
-        let suite = UserDefaults(suiteName: "MomoSchemaV6Stable.\(UUID().uuidString)")!
+        let suite = UserDefaults(suiteName: "MomoSchemaV7Stable.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
 
         let first = PreferencesStore(defaults: suite)
         XCTAssertTrue(first.needsTrackingOnboarding)
         first.setAllowedTrackingProviders([.claude], markOnboardingSeen: true)
         XCTAssertFalse(first.needsTrackingOnboarding)
+        XCTAssertTrue(suite.bool(forKey: "trackingOnboardingComplete.v7"))
 
         let second = PreferencesStore(defaults: suite)
         XCTAssertFalse(second.needsTrackingOnboarding)
         XCTAssertEqual(second.allowedTrackingProviders, [.claude])
+    }
+
+    func testMidFlowProvidersWithoutFinishStillNeedOnboarding() {
+        let suite = UserDefaults(suiteName: "MomoMidFlow.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        // Simulate post-v7 mid-flow: allow-list written by connect, Finish never ran.
+        suite.set(7, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "onboardingMigration.v7")
+        suite.set([AIProvider.claude.rawValue], forKey: "allowedTrackingProviders.v1")
+        suite.set(false, forKey: "trackingOnboardingSeen.v1")
+        suite.set(false, forKey: "trackingOnboardingComplete.v7")
+        suite.set(TrackingOnboardingStep.preferences.rawValue, forKey: "onboardingResumeStep.v1")
+
+        let preferences = PreferencesStore(defaults: suite)
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+        XCTAssertFalse(preferences.trackingOnboardingSeen)
+        XCTAssertEqual(preferences.allowedTrackingProviders, [.claude])
+        XCTAssertEqual(preferences.resumedOnboardingStep(), .preferences)
     }
 
     func testFreeProviderSoftLockAndDesktopConnect() {
@@ -110,6 +155,34 @@ final class OnboardingAndTalkTests: XCTestCase {
         // Replay clears allow-list so connect starts empty again.
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
         XCTAssertEqual(preferences.trackingStripProviders(), [])
+        XCTAssertNil(preferences.resumedOnboardingStep())
+    }
+
+    func testOnboardingProgressSurvivesTCCRelaunchCheckpoint() {
+        let suite = UserDefaults(suiteName: "MomoOnboardingResume.\(UUID().uuidString)")!
+        defer { suite.removePersistentDomain(forName: suite.suiteName!) }
+
+        let preferences = PreferencesStore(defaults: suite)
+        preferences.saveOnboardingProgress(
+            step: .talkTrial,
+            intents: [.usageTracking],
+            partialAllowed: [.claude],
+            pendingProvider: nil
+        )
+        XCTAssertEqual(preferences.resumedOnboardingStep(), .talkTrial)
+        XCTAssertEqual(preferences.resumedOnboardingPartialAllowed(), [.claude])
+        XCTAssertEqual(preferences.onboardingIntents, [.usageTracking])
+        XCTAssertEqual(preferences.allowedTrackingProviders, [.claude])
+        // Incomplete until Finish marks seen.
+        XCTAssertTrue(preferences.needsTrackingOnboarding)
+
+        let reloaded = PreferencesStore(defaults: suite)
+        XCTAssertEqual(reloaded.resumedOnboardingStep(), .talkTrial)
+        XCTAssertEqual(reloaded.resumedOnboardingPartialAllowed(), [.claude])
+
+        reloaded.setAllowedTrackingProviders([.claude], markOnboardingSeen: true)
+        XCTAssertNil(reloaded.resumedOnboardingStep())
+        XCTAssertFalse(reloaded.needsTrackingOnboarding)
     }
 
     func testAllowListStripEqualFlexibleWidths() {

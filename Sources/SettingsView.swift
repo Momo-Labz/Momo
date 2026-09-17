@@ -51,10 +51,6 @@ struct SettingsView: View {
     @AppStorage("notifyThreshold100") private var notifyThreshold100 = true
     @State private var pendingProvider: AIProvider?
     @State private var pendingRoot: String?
-    private var refreshIntervalLabel: String {
-        let seconds = PreferencesStore.normalizedRefreshInterval(UserDefaults.standard.integer(forKey: "refreshIntervalSeconds.v1"))
-        return "\(seconds) second\(seconds == 1 ? "" : "s")"
-    }
 
     var body: some View {
         Group {
@@ -341,7 +337,19 @@ struct SettingsView: View {
             Toggle("Launch at login", isOn: $preferences.launchAtLogin)
                 .disabled(true)
             Button("Open macOS menu bar controls") { openMenuBarSettings() }
-            LabeledContent("Refresh interval", value: refreshIntervalLabel)
+            Picker("Refresh interval", selection: Binding(
+                get: { preferences.refreshIntervalSeconds },
+                set: { value in
+                    preferences.refreshIntervalSeconds = PreferencesStore.normalizedRefreshInterval(value)
+                    monitor.rescheduleRefreshTimer()
+                    monitor.refresh()
+                }
+            )) {
+                Text("1 min").tag(60)
+                Text("5 min").tag(300)
+                Text("10 min").tag(600)
+                Text("30 min").tag(1_800)
+            }
             LabeledContent("Version", value: BarBoyAppInfo.marketingVersion)
             Section("Talk") {
                 LabeledContent("Shortcut", value: shortcutService.bindings[.talk]?.label ?? "⌃⌥ T")
@@ -382,6 +390,7 @@ struct SettingsView: View {
     private var notifications: some View {
         Form {
             Toggle("Enable notifications", isOn: $preferences.attentionAlertsEnabled)
+            Button("Open Notifications Settings") { SystemSettingsDeepLink.openNotifications() }
             Toggle("Completion", isOn: $notifyCompletion)
             Toggle("Approval or input needed", isOn: $notifyNeedsInput)
             Toggle("Failure", isOn: $notifyFailure)

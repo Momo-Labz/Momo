@@ -11,8 +11,10 @@ enum TrackingOnboardingStep: Int, CaseIterable {
 
 /// Welcome → intent → desktop-app allow → prefs → Talk trial.
 /// Providers start empty; each click opens the desktop app and grants local tracking.
+/// Mid-flow progress is checkpointed so TCC quit/relaunch resumes the same step.
 struct TrackingOnboardingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @EnvironmentObject private var preferences: PreferencesStore
     @ObservedObject private var talkQuota = TalkService.shared.quota
 
     @State private var step: TrackingOnboardingStep
@@ -44,6 +46,7 @@ struct TrackingOnboardingView: View {
         initialStep: TrackingOnboardingStep = .welcome,
         initialIntents: Set<OnboardingIntent> = [],
         initialAllowed: Set<AIProvider> = [],
+        initialPendingProvider: AIProvider? = nil,
         onFinish: @escaping (_ intents: Set<OnboardingIntent>, _ allowed: Set<AIProvider>) -> Void,
         onDismiss: (() -> Void)? = nil,
         onTalkTrial: (() -> Void)? = nil,
@@ -52,8 +55,9 @@ struct TrackingOnboardingView: View {
         self.initialStep = initialStep
         _step = State(initialValue: initialStep)
         _intents = State(initialValue: initialIntents)
-        // Connect UI always starts empty; strip fills only after each successful allow.
-        _allowed = State(initialValue: [])
+        // Resume mid-flow allow-list when TCC relaunched the app; otherwise start empty.
+        _allowed = State(initialValue: initialAllowed)
+        _permissionProvider = State(initialValue: initialPendingProvider)
         self.onFinish = onFinish
         self.onDismiss = onDismiss
         self.onTalkTrial = onTalkTrial
@@ -70,6 +74,7 @@ struct TrackingOnboardingView: View {
                             cancelConnect()
                             permissionProvider = nil
                             plusGateMessage = nil
+                            checkpoint()
                         }
                     } label: {
                         Label("BACK", systemImage: "chevron.left")
@@ -109,6 +114,20 @@ struct TrackingOnboardingView: View {
         .frame(maxWidth: 440)
         .background(BarBoyStyle.panel)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .onAppear { checkpoint() }
+        .onChange(of: step) { _, _ in checkpoint() }
+        .onChange(of: allowed) { _, _ in checkpoint() }
+        .onChange(of: permissionProvider) { _, _ in checkpoint() }
+        .onChange(of: intents) { _, _ in checkpoint() }
+    }
+
+    private func checkpoint() {
+        preferences.saveOnboardingProgress(
+            step: step,
+            intents: intents,
+            partialAllowed: allowed,
+            pendingProvider: permissionProvider
+        )
     }
 
     private var welcomeStep: some View {
@@ -126,6 +145,7 @@ struct TrackingOnboardingView: View {
             primaryButton("Continue") {
                 allowed = []
                 step = .intents
+                checkpoint()
             }
         }
         .padding(.horizontal, 22)
@@ -268,11 +288,22 @@ struct TrackingOnboardingView: View {
                 Toggle("Needs you", isOn: $notifyNeedsInput).toggleStyle(.checkbox)
                 Toggle("Usage running low", isOn: $notifyThreshold90).toggleStyle(.checkbox)
                 Toggle("Play notification sound", isOn: $alertSoundEnabled).toggleStyle(.checkbox)
+                Button("Open Notifications Settings") {
+                    checkpoint()
+                    SystemSettingsDeepLink.openNotifications()
+                }
+                .barBoyButton()
+                Text("If macOS asks to quit & reopen MOMO after Allow, setup resumes here.")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             primaryButton("Continue") {
                 UserDefaults.standard.set(selectedRefreshInterval, forKey: "refreshIntervalSeconds.v1")
+                preferences.syncRefreshIntervalFromDefaults()
                 step = .talkTrial
+                checkpoint()
             }
         }
         .padding(.horizontal, 18)
@@ -307,8 +338,21 @@ struct TrackingOnboardingView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if VoicePermission.microphoneBlockReason() != nil {
+                Text(VoicePermission.settingsGuidance(for: .microphoneDenied))
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Open Microphone Settings") {
+                    checkpoint()
+                    SystemSettingsDeepLink.openMicrophone()
+                }
+                .barBoyButton()
+            }
+
             if onTalkTrial != nil {
                 primaryButton("Try Talk (1 free)") {
+                    checkpoint()
                     onTalkTrial?()
                 }
             }
@@ -387,7 +431,7 @@ struct TrackingOnboardingView: View {
         return VStack(alignment: .leading, spacing: 12) {
             Text(provider.name)
                 .font(BarBoyStyle.sectionLabel)
-            Text("MOMO opens \(match.displayName) via Launch Services (never writes into the other app). Connected only after a readable local session or usage artifact is found.")
+            Text("MOMO opens \(match.displayName) (never writes into it). Answer the questions below — Allow saves this provider only when usage % is readable.")
                 .font(BarBoyStyle.bodySmall)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -439,11 +483,15 @@ struct TrackingOnboardingView: View {
                 .background(canCommit(provider) ? Color.primary : Color.primary.opacity(0.35))
                 .buttonStyle(.plain)
                 .disabled(!canCommit(provider))
+                .help(canCommit(provider)
+                      ? "Save this provider — usage % is readable."
+                      : "Allow stays off until Retry finds readable usage %.")
             }
         }
         .padding(14)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: connectProgress?.title)
     }
 
     @ViewBuilder
@@ -455,7 +503,7 @@ struct TrackingOnboardingView: View {
                         .controlSize(.small)
                         .frame(width: 16, height: 16)
                 } else {
-                    Image(systemName: connectProgress.isVerified ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    Image(systemName: connectStatusSymbol(connectProgress))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(connectProgress.isVerified ? Color.primary : BarBoyStyle.coral)
                         .frame(width: 16, height: 16)
@@ -505,22 +553,33 @@ struct TrackingOnboardingView: View {
         }
     }
 
+    private func connectStatusSymbol(_ progress: DesktopConnectProgress) -> String {
+        switch progress {
+        case .connected: return "checkmark.circle.fill"
+        case .notReady, .timedOut, .failed: return "circle.dashed"
+        case .needsPermission: return "exclamationmark.triangle.fill"
+        default: return "circle"
+        }
+    }
+
     private func connectStatusDetail(_ progress: DesktopConnectProgress, provider: AIProvider) -> String {
         switch progress {
         case .openingApp:
-            return "Launching \(DesktopAppCatalog.displayName(for: provider))…"
+            return "Opening \(DesktopAppCatalog.displayName(for: provider))…"
         case .waitingForSignIn:
-            return "Finish any sign-in prompts in the app. MOMO does not invent connection status."
-        case .readingLocalUsage:
-            return "Scanning local session files and usage caches off the UI thread…"
+            return "Finish any sign-in prompts in the app if it asks."
+        case .searchingUsage:
+            return "Looking for local usage % (caches, CLI, rate_limits)…"
         case .connected(let honesty):
             return honesty.summary
+        case .notReady(let detail):
+            return detail
         case .needsPermission:
             return LocalUsageArtifactReader.privacyGuidance(for: provider)
         case .failed(let reason):
             return reason
         case .timedOut:
-            return "Check timed out. Tap Retry — the UI stays responsive while MOMO scans again."
+            return "Check timed out. Tap Retry when you’ve run a chat once so usage can appear."
         }
     }
 

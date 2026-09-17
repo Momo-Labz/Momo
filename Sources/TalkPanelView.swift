@@ -45,6 +45,29 @@ struct TalkPanelView: View {
             if talk.phase == .upsell {
                 upsellBlock
             } else {
+                if let block = VoicePermission.microphoneBlockReason() ?? VoicePermission.speechBlockReason() {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(VoicePermission.settingsGuidance(for: block))
+                            .font(BarBoyStyle.bodySmall)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        HStack(spacing: 8) {
+                            if block == .microphoneDenied || block == .microphoneRestricted {
+                                Button("Open Microphone Settings") {
+                                    SystemSettingsDeepLink.openMicrophone()
+                                }
+                                .barBoyButton()
+                            }
+                            if block == .speechDenied || block == .speechRestricted {
+                                Button("Open Speech Settings") {
+                                    SystemSettingsDeepLink.openSpeechRecognition()
+                                }
+                                .barBoyButton()
+                            }
+                        }
+                    }
+                }
+
                 TextField("Ask about usage or what’s running…", text: $talk.typedAsk)
                     .textFieldStyle(.plain)
                     .padding(10)
@@ -101,7 +124,13 @@ struct TalkPanelView: View {
         .frame(maxWidth: 440)
         .background(BarBoyStyle.panel)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-        .onAppear { talk.begin(isOnboardingTrial: isOnboardingTrial) }
+        .onAppear {
+            talk.begin(isOnboardingTrial: isOnboardingTrial)
+            // If System Settings already granted mic, clear a stale “access is off” Talk state.
+            if VoicePermission.microphoneAuthorized(), voice.state == .unavailable {
+                voice.stop()
+            }
+        }
         .onDisappear { talk.cancel(); voice.stop() }
         .sheet(isPresented: $recordingShortcut) {
             VStack(spacing: 16) {

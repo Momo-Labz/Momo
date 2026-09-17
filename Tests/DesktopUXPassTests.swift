@@ -45,13 +45,14 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(limited.filter { $0.provider == .codex }.first?.title, "Codex chat 0")
     }
 
-    func testConnectionVerifierRequiresReadableSourceNotJustRunning() {
+    func testConnectionVerifierRequiresUsageMetersNotJustRunningOrSessions() {
         XCTAssertEqual(
             DesktopConnectionVerifier.evaluate(
                 provider: .claude,
                 isInstalled: true,
                 isRunning: true,
-                hasReadableSessionSource: false
+                hasReadableSessionSource: false,
+                hasUsageMeters: false
             ),
             .awaitingSignIn
         )
@@ -59,8 +60,19 @@ final class DesktopUXPassTests: XCTestCase {
             DesktopConnectionVerifier.evaluate(
                 provider: .claude,
                 isInstalled: true,
+                isRunning: true,
+                hasReadableSessionSource: true,
+                hasUsageMeters: false
+            ),
+            .awaitingUsage
+        )
+        XCTAssertEqual(
+            DesktopConnectionVerifier.evaluate(
+                provider: .claude,
+                isInstalled: true,
                 isRunning: false,
-                hasReadableSessionSource: true
+                hasReadableSessionSource: true,
+                hasUsageMeters: true
             ),
             .notRunning
         )
@@ -78,7 +90,18 @@ final class DesktopUXPassTests: XCTestCase {
                 provider: .claude,
                 isInstalled: true,
                 isRunning: true,
-                hasReadableSessionSource: true
+                hasReadableSessionSource: true,
+                hasUsageMeters: true
+            ).isVerified
+        )
+        // Session alone is never Connected.
+        XCTAssertFalse(
+            DesktopConnectionVerifier.evaluate(
+                provider: .codex,
+                isInstalled: true,
+                isRunning: true,
+                hasReadableSessionSource: true,
+                hasUsageMeters: false
             ).isVerified
         )
         XCTAssertTrue(
@@ -90,7 +113,8 @@ final class DesktopUXPassTests: XCTestCase {
                 isInstalled: true,
                 isRunning: true,
                 hasReadableSessionSource: false,
-                privacyBlocked: true
+                privacyBlocked: true,
+                hasUsageMeters: false
             ),
             .privacyBlocked
         )
@@ -125,18 +149,19 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertEqual(mapped.weekly.percentage, 44)
     }
 
-    func testOnboardingSchemaIsV6ForForcedConnect() {
-        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 6)
-        let suite = UserDefaults(suiteName: "MomoSchemaV6UX.\(UUID().uuidString)")!
+    func testOnboardingSchemaIsV7ForForcedConnect() {
+        XCTAssertEqual(PreferencesStore.currentOnboardingSchemaVersion, 7)
+        let suite = UserDefaults(suiteName: "MomoSchemaV7UX.\(UUID().uuidString)")!
         defer { suite.removePersistentDomain(forName: suite.suiteName!) }
         suite.set(true, forKey: "trackingOnboardingSeen.v1")
-        suite.set(5, forKey: "trackingOnboardingSchemaVersion.v1")
-        suite.set(true, forKey: "trackingOnboardingComplete.v5")
+        suite.set(6, forKey: "trackingOnboardingSchemaVersion.v1")
+        suite.set(true, forKey: "trackingOnboardingComplete.v6")
+        suite.set(true, forKey: "onboardingMigration.v6")
         suite.set([AIProvider.codex.rawValue], forKey: "allowedTrackingProviders.v1")
         let preferences = PreferencesStore(defaults: suite)
         XCTAssertTrue(preferences.needsTrackingOnboarding)
         XCTAssertTrue(preferences.allowedTrackingProviders.isEmpty)
-        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v6"))
+        XCTAssertTrue(suite.bool(forKey: "onboardingMigration.v7"))
     }
 
     func testConnectUsageHonestyReportsFoundMissingAndBlocked() {
@@ -146,10 +171,17 @@ final class DesktopUXPassTests: XCTestCase {
         )
         XCTAssertTrue(found.summary.contains("27%"))
         XCTAssertTrue(found.summary.contains("100%"))
+        XCTAssertTrue(found.summary.contains("Connected"))
         XCTAssertFalse(found.summary.contains("invent"))
 
-        let missing = ConnectUsageHonesty(outcome: .noReadableCache, sourcePath: nil)
-        XCTAssertTrue(missing.summary.contains("no readable usage cache"))
+        let missing = ConnectUsageHonesty(
+            outcome: .noReadableCache,
+            sourcePath: nil,
+            nextStep: "Not ready — run Claude Code once, then Retry."
+        )
+        XCTAssertTrue(missing.summary.contains("Not ready"))
+        XCTAssertFalse(missing.summary.hasPrefix("Connected"))
+        XCTAssertFalse(missing.summary.contains("Connected — no readable"))
 
         let blocked = ConnectUsageHonesty(outcome: .privacyBlocked, sourcePath: nil)
         XCTAssertTrue(blocked.summary.contains("Full Disk Access"))
@@ -161,11 +193,27 @@ final class DesktopUXPassTests: XCTestCase {
             ),
             .connected(found)
         )
+        // Verified without meters must not become Connected.
+        let fakeVerified = DesktopConnectionVerifier.progress(
+            from: .verified,
+            honesty: missing
+        )
+        if case .notReady(let detail) = fakeVerified {
+            XCTAssertTrue(detail.contains("Not ready"))
+        } else {
+            XCTFail("Expected notReady, got \(fakeVerified)")
+        }
+        XCTAssertEqual(
+            DesktopConnectionVerifier.progress(from: .awaitingUsage, honesty: missing),
+            .notReady(missing.summary)
+        )
         XCTAssertEqual(
             DesktopConnectionVerifier.progress(from: .privacyBlocked, honesty: blocked),
             .needsPermission
         )
-        XCTAssertTrue(DesktopConnectProgress.openingApp.showsSpinner)
+        XCTAssertTrue(DesktopConnectProgress.searchingUsage.showsSpinner)
+        XCTAssertEqual(DesktopConnectProgress.searchingUsage.title, "Searching…")
+        XCTAssertEqual(DesktopConnectProgress.notReady("x").title, "Not ready")
         XCTAssertFalse(DesktopConnectProgress.timedOut.showsSpinner)
     }
 
@@ -176,10 +224,11 @@ final class DesktopUXPassTests: XCTestCase {
 
         let withoutCache = DesktopConnectionVerifier.usageHonesty(
             for: .claude,
-            status: .verified,
+            status: .awaitingUsage,
             home: tmp
         )
         XCTAssertEqual(withoutCache?.outcome, .noReadableCache)
+        XCTAssertFalse(withoutCache?.summary.contains("Connected —") == true)
 
         let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
@@ -275,5 +324,79 @@ final class DesktopUXPassTests: XCTestCase {
         XCTAssertNotNil(invalid)
         XCTAssertTrue(invalid?.isEmpty == true)
         XCTAssertTrue(LocalUsageDetail.parse(["hello": "world"], observedAt: .now).isEmpty)
+    }
+
+    func testRemainingPercentConvertsToUsed() {
+        let windows = RecordedQuotaWindow.parseFlexible(
+            [
+                "five_hour": ["remaining_percent": 100.0, "resets_at": 2_000_000_000],
+                "seven_day": ["remaining_percentage": 52.0, "resets_at": 2_000_086_400]
+            ],
+            observedAt: .now
+        )
+        XCTAssertEqual(windows?.first { $0.minutes == 300 }?.percent, 0)
+        XCTAssertEqual(windows?.first { $0.minutes == 10_080 }?.percent, 48)
+    }
+
+    func testCodexSessionRateLimitsReadUntilReset() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-codex-usage-\(UUID().uuidString)", isDirectory: true)
+        let day = tmp.appendingPathComponent(".codex/sessions/2026/09/16", isDirectory: true)
+        try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let resets = Int(Date().addingTimeInterval(3_600).timeIntervalSince1970)
+        let line: [String: Any] = [
+            "type": "event_msg",
+            "timestamp": ISO8601DateFormatter().string(from: Date().addingTimeInterval(-3_600)),
+            "payload": [
+                "type": "token_count",
+                "rate_limits": [
+                    "primary": ["used_percent": 12.0, "window_minutes": 300, "resets_at": resets],
+                    "secondary": ["used_percent": 48.0, "window_minutes": 10_080, "resets_at": resets + 86_400]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: line)
+        var body = data
+        body.append(contentsOf: [0x0A])
+        try body.write(to: day.appendingPathComponent("rollout-old.jsonl"))
+
+        let detail = LocalUsageArtifactReader.detail(for: .codex, home: tmp, now: .now)
+        XCTAssertEqual(Int(detail.fiveHour?.percent ?? -1), 12)
+        XCTAssertEqual(Int(detail.weekly?.percent ?? -1), 48)
+        XCTAssertTrue(detail.sourceDescription?.contains("rollout-old.jsonl") == true)
+
+        let probed = LocalUsageArtifactReader.probeDetail(for: .codex, home: tmp, now: .now, timeout: 1)
+        XCTAssertNil(probed.emptyReason)
+        XCTAssertEqual(Int(probed.detail.weekly?.percent ?? -1), 48)
+    }
+
+    func testUsageEmptyReasonsAreSpecific() {
+        XCTAssertTrue(UsageEmptyReason.claudeAppOnlyNoLocalFile.message.contains("Claude.app"))
+        XCTAssertTrue(UsageEmptyReason.chatgptAppOnlyNoLocalFile.message.contains("ChatGPT.app"))
+        XCTAssertTrue(UsageEmptyReason.codexNoSessionRateLimits.message.contains("~/.codex/sessions"))
+        XCTAssertTrue(UsageEmptyReason.cursorNoLocalUsageCache.message.contains("usage-cache.json"))
+        XCTAssertTrue(UsageEmptyReason.grokNoLocalUsage.message.contains("Grok"))
+    }
+
+    func testUsageLimitsJsonAndLimitsArrayParse() throws {
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("momo-usage-limits-\(UUID().uuidString)", isDirectory: true)
+        let cacheDir = tmp.appendingPathComponent(".claude", isDirectory: true)
+        try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmp) }
+
+        let payload: [String: Any] = [
+            "limits": [
+                ["kind": "session", "percent": 0.0, "resets_at": "2026-09-20T20:00:00Z"],
+                ["kind": "weekly_all", "percent": 100.0, "resets_at": "2026-09-19T18:59:00Z"],
+                ["kind": "weekly_scoped", "percent": 40.0, "scope": ["model": ["display_name": "Fable"]], "resets_at": "2026-09-18T12:00:00Z"]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: payload)
+            .write(to: cacheDir.appendingPathComponent("usage-limits.json"))
+
+        let detail = LocalUsageArtifactReader.detail(for: .claude, home: tmp, now: .now)
+        XCTAssertEqual(Int(detail.fiveHour?.percent ?? -1), 0)
+        XCTAssertEqual(Int(detail.weekly?.percent ?? -1), 100)
     }
 }

@@ -32,6 +32,14 @@ struct TrackingDashboardView: View {
     @State private var showTalkTrial = false
 
     private var needsOnboarding: Bool { preferences.needsTrackingOnboarding || showOnboarding }
+
+    /// Prefer an explicit start step (Replay / notification), else resume checkpoint, else Welcome.
+    private var onboardingResumeStep: TrackingOnboardingStep {
+        if !preferences.needsTrackingOnboarding {
+            return onboardingStartStep
+        }
+        return preferences.resumedOnboardingStep() ?? onboardingStartStep
+    }
     private var snapshots: [ProviderSnapshot] {
         AIProvider.allCases.map { provider in
             var snapshot = monitor.snapshot(for: provider)
@@ -103,9 +111,10 @@ struct TrackingDashboardView: View {
                     .onTapGesture { /* block chrome until Welcome finishes */ }
                 ScrollView {
                     TrackingOnboardingView(
-                        initialStep: preferences.needsTrackingOnboarding ? .welcome : onboardingStartStep,
+                        initialStep: onboardingResumeStep,
                         initialIntents: preferences.onboardingIntents,
-                        initialAllowed: [],
+                        initialAllowed: preferences.resumedOnboardingPartialAllowed(),
+                        initialPendingProvider: preferences.resumedOnboardingPendingProvider(),
                         onFinish: finishOnboarding,
                         onDismiss: preferences.needsTrackingOnboarding ? nil : { showOnboarding = false },
                         onTalkTrial: { showTalkTrial = true },
@@ -122,6 +131,7 @@ struct TrackingDashboardView: View {
                             monitor.refresh()
                         }
                     )
+                    .environmentObject(preferences)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                 }
@@ -149,13 +159,15 @@ struct TrackingDashboardView: View {
             loading = false
             if preferences.needsTrackingOnboarding {
                 surface.expanded = true
+                // Resume mid-flow after TCC quit/relaunch; schema upgrade clears stale resume → Welcome.
+                onboardingStartStep = preferences.resumedOnboardingStep() ?? .welcome
                 showOnboarding = true
             }
         }
         .onChange(of: preferences.trackingOnboardingSeen) { _, seen in
             if !seen {
                 showOnboarding = true
-                onboardingStartStep = .welcome
+                onboardingStartStep = preferences.resumedOnboardingStep() ?? .welcome
                 surface.expanded = true
             }
         }
@@ -210,6 +222,7 @@ struct TrackingDashboardView: View {
         }
         preferences.setOnboardingIntents(intents)
         preferences.syncRefreshIntervalFromDefaults()
+        monitor.rescheduleRefreshTimer()
         for provider in allowed {
             _ = preferences.connectDesktopProvider(
                 provider,
@@ -487,12 +500,23 @@ struct TrackingDashboardView: View {
                 HStack {
                     Text("USAGE").font(BarBoyStyle.sectionLabel)
                     Spacer()
-                    Text("LOCAL ONLY").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+                    if monitor.isRefreshing {
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(lastRefreshedLabel)
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(.secondary)
                 }
-                Text("Approximate, based on local sessions and quota caches on this Mac — never invented. Empty bars mean no readable local usage.")
+                Text("Approximate, based on local sessions, CLI caches, and quota files on this Mac — never invented. Empty bars always include a specific next step.")
                     .font(BarBoyStyle.bodySmall)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let error = monitor.lastRefreshError {
+                    Text(error)
+                        .font(BarBoyStyle.microLabel)
+                        .foregroundStyle(BarBoyStyle.coral)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 if railSnapshots.isEmpty {
                     Text("Connect a desktop app to see local usage.")
@@ -503,13 +527,23 @@ struct TrackingDashboardView: View {
                     ForEach(railSnapshots) { snapshot in
                         ClaudeStyleUsageBlock(
                             snapshot: snapshot,
-                            observations: monitor.usageObservations.filter { $0.provider == snapshot.provider }
+                            observations: monitor.usageObservations.filter { $0.provider == snapshot.provider },
+                            refreshToken: monitor.lastUpdated?.timeIntervalSince1970 ?? 0
                         )
                     }
                 }
             }
             .padding(12)
         }
+    }
+
+    private var lastRefreshedLabel: String {
+        guard let last = monitor.lastUpdated else { return "Not refreshed yet" }
+        let seconds = Date().timeIntervalSince(last)
+        if seconds < 5 { return "Updated just now" }
+        if seconds < 60 { return "Updated \(Int(seconds))s ago" }
+        if seconds < 3_600 { return "Updated \(Int(seconds / 60))m ago" }
+        return "Updated \(last.formatted(date: .omitted, time: .shortened))"
     }
 
     private var upgrade: some View {
@@ -643,13 +677,15 @@ private struct ProviderCard: View {
 }
 
 /// Claude Code `/usage`-inspired layout for one connected provider. No activity chat list.
-/// Cache / FDA checks load off the main thread so the Usage tab cannot freeze the panel.
+/// Cache / FDA / CLI checks load off the main thread so the Usage tab cannot freeze the panel.
 private struct ClaudeStyleUsageBlock: View {
     let snapshot: ProviderSnapshot
     let observations: [ProviderUsageObservation]
+    var refreshToken: TimeInterval = 0
     var now: Date = .now
 
     @State private var artifact = LocalUsageDetail()
+    @State private var emptyReason: UsageEmptyReason?
     @State private var privacyBlocked = false
     @State private var isLoadingArtifact = true
 
@@ -687,7 +723,7 @@ private struct ClaudeStyleUsageBlock: View {
             if isLoadingArtifact && artifact.isEmpty {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
-                    Text("Reading local usage…")
+                    Text("Reading local / CLI usage…")
                         .font(BarBoyStyle.microLabel)
                         .foregroundStyle(.secondary)
                 }
@@ -712,7 +748,7 @@ private struct ClaudeStyleUsageBlock: View {
                mapped.fiveHour.percentage == nil,
                mapped.weekly.percentage == nil,
                !artifact.hasSessionStats {
-                if privacyBlocked {
+                if privacyBlocked || emptyReason?.isPrivacyBlocked == true {
                     Text(LocalUsageArtifactReader.privacyGuidance(for: snapshot.provider))
                         .font(BarBoyStyle.microLabel)
                         .foregroundStyle(BarBoyStyle.coral)
@@ -722,11 +758,18 @@ private struct ClaudeStyleUsageBlock: View {
                     }
                     .barBoyButton()
                 } else {
-                    Text(emptyGuidance)
+                    Text(emptyReason?.message ?? fallbackEmptyGuidance)
                         .font(BarBoyStyle.microLabel)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            if let source = artifact.sourceDescription, !source.isEmpty {
+                Text("Source: \(source)")
+                    .font(BarBoyStyle.microLabel)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
             }
 
             Text("What’s contributing to your limits usage?")
@@ -740,7 +783,7 @@ private struct ClaudeStyleUsageBlock: View {
         .padding(12)
         .background(BarBoyStyle.surface)
         .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
-        .task(id: "\(snapshot.provider.rawValue)-\(snapshot.updatedAt.timeIntervalSince1970)") {
+        .task(id: "\(snapshot.provider.rawValue)-\(refreshToken)") {
             await reloadArtifact()
         }
     }
@@ -751,25 +794,23 @@ private struct ClaudeStyleUsageBlock: View {
         let provider = snapshot.provider
         let capturedNow = now
         let loaded = await Task.detached(priority: .userInitiated) {
-            let detail = LocalUsageArtifactReader.detail(for: provider, now: capturedNow)
+            let probed = LocalUsageArtifactReader.probeDetail(for: provider, now: capturedNow)
             let blocked = LocalUsageArtifactReader.isSessionRootPrivacyBlocked(provider)
-            return (detail, blocked)
+            return (probed, blocked)
         }.value
-        artifact = loaded.0
+        artifact = loaded.0.detail
+        emptyReason = loaded.0.emptyReason
         privacyBlocked = loaded.1
         isLoadingArtifact = false
     }
 
-    private var emptyGuidance: String {
+    private var fallbackEmptyGuidance: String {
         switch snapshot.provider {
-        case .claude:
-            return "No readable Claude usage cache yet (~/.claude or /tmp/claude statusline cache). Bars and resets appear when that file exists."
-        case .cursor:
-            return "Cursor transcripts do not expose account %. Bars appear only if a local usage-cache.json is present."
-        case .codex:
-            return "No recorded Codex rate_limits in recent local sessions yet."
-        default:
-            return "No readable local usage for \(snapshot.provider.name)."
+        case .claude: return UsageEmptyReason.claudeNoCacheInstallCLI.message
+        case .cursor: return UsageEmptyReason.cursorNoLocalUsageCache.message
+        case .codex: return UsageEmptyReason.codexNoSessionRateLimits.message
+        case .grok: return UsageEmptyReason.grokNoLocalUsage.message
+        case .gemini: return UsageEmptyReason.geminiNoLocalUsage.message
         }
     }
 
@@ -846,6 +887,13 @@ private struct ClaudeStyleUsageBlock: View {
         let h = Int(seconds / 3600)
         let m = Int((seconds.truncatingRemainder(dividingBy: 3600)) / 60)
         return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    }
+}
+
+private extension UsageEmptyReason {
+    var isPrivacyBlocked: Bool {
+        if case .privacyBlocked = self { return true }
+        return false
     }
 }
 

@@ -19,6 +19,7 @@ final class ActivityMonitor: ObservableObject {
     @Published private(set) var usageObservations: [ProviderUsageObservation] = []
     @Published private(set) var isRefreshing = false
     @Published private(set) var lastUpdated: Date?
+    @Published private(set) var lastRefreshError: String?
 
     private var timer: Timer?
     private var menuIsVisible = false
@@ -49,16 +50,26 @@ final class ActivityMonitor: ObservableObject {
         inventoryScanner = CapabilityInventoryScanner(reader: capabilityReader)
         if autoRefresh {
             refresh()
-            timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    guard let self else { return }
-                    let baseInterval = Self.configuredRefreshInterval()
-                    let interval: TimeInterval = self.menuIsVisible ? baseInterval : max(300, baseInterval)
-                    if self.lastUpdated.map({ Date().timeIntervalSince($0) >= interval }) ?? true { self.refresh() }
+            rescheduleRefreshTimer()
+        }
+    }
+
+    /// Rebuild the cadence timer from prefs (1/5/10/30 min). Call after onboarding saves interval.
+    func rescheduleRefreshTimer() {
+        timer?.invalidate()
+        let interval = Self.configuredRefreshInterval()
+        timer = Timer.scheduledTimer(withTimeInterval: min(60, interval), repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                let baseInterval = Self.configuredRefreshInterval()
+                // When the menu is hidden, still honor the user interval (do not force 5+ min).
+                let interval: TimeInterval = self.menuIsVisible ? baseInterval : baseInterval
+                if self.lastUpdated.map({ Date().timeIntervalSince($0) >= interval }) ?? true {
+                    self.refresh()
                 }
             }
-            timer?.tolerance = 5
         }
+        timer?.tolerance = min(5, interval / 10)
     }
 
     func setMenuVisible(_ visible: Bool) { menuIsVisible = visible }
@@ -106,6 +117,7 @@ final class ActivityMonitor: ObservableObject {
                 usageObservations = await trackingCache.observations(now: .now)
                 capabilityInventory = installed.markingUsed(by: latest.flatMap(\.sessions))
                 lastUpdated = .now
+                lastRefreshError = nil
             }
             isRefreshing = false
         }
@@ -156,13 +168,22 @@ final class ActivityMonitor: ObservableObject {
                 ? snapshot.recordedQuota.map { [$0] } ?? []
                 : snapshot.recordedQuotas
             return windows.map { window in
-                ProviderUsageObservation(
+                let freshness: TimeInterval
+                if let resetsAt = window.resetsAt, resetsAt > window.observedAt {
+                    freshness = max(
+                        LocalUsageArtifactReader.artifactFreshness,
+                        resetsAt.timeIntervalSince(window.observedAt) + 60
+                    )
+                } else {
+                    freshness = LocalUsageArtifactReader.artifactFreshness
+                }
+                return ProviderUsageObservation(
                     provider: snapshot.provider,
                     metric: window.durationLabel,
                     percentage: Int(window.percent.rounded()),
                     resetsAt: window.resetsAt,
                     capturedAt: window.observedAt,
-                    freshness: TrackingCache.acceptedObservationFreshness,
+                    freshness: freshness,
                     provenance: .providerEvent
                 )
             }
@@ -258,10 +279,10 @@ actor LocalActivityScanner {
                 isInstalled: processLive || hasSessionRoot(for: provider) || DesktopAppCatalog.isPresentOnDisk(provider)
             )
             let sessionWindows = diskSessions.flatMap(\.recordedQuotaWindows).filter {
-                now >= $0.observedAt
-                    && now.timeIntervalSince($0.observedAt) <= TrackingCache.acceptedObservationFreshness
+                // Rate-limit snapshots stay valid until reset (same rule as Claude artifacts).
+                LocalUsageArtifactReader.isFresh($0, now: now)
             }
-            // Artifact caches (Claude statusline / OAuth) stay useful until reset — not 15m only.
+            // Artifact caches (Claude statusline / Codex rollout / OAuth) stay useful until reset.
             let artifactWindows = LocalUsageArtifactReader.quotaWindows(
                 for: provider,
                 home: home,
