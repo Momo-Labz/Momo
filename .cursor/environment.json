@@ -1,0 +1,4 @@
+{
+  "name": "MOMO — Swift portable core + tooling (Linux)",
+  "install": "bash Scripts/cloud-agent-setup.sh"
+}
