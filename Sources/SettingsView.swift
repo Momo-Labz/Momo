@@ -215,6 +215,7 @@ struct SettingsView: View {
                     preferences.reopenTrackingOnboarding()
                 }
                 .barBoyButton()
+                .help("Shows Welcome → Intent → Connect again. Clears the allow-list for this retest — no Terminal wipe needed.")
                 Button("Connect desktop apps") {
                     NotificationCenter.default.post(
                         name: .momoShowProviderChooser,

@@ -80,10 +80,21 @@ struct BrainWorkspaceView: View {
     @StateObject private var vault: VaultStore
     @StateObject private var ollama: OllamaService
     private var refreshOnAppear: Bool
-    init(vault: VaultStore? = nil, ollama: OllamaService? = nil, refreshOnAppear: Bool = true, initialGraph: VaultVisualSnapshot = VaultVisualSnapshot(), initialSelection: String? = nil) {
+    /// When true, fill the TRACKR tab body without forcing the menu-bar panel taller
+    /// (keeps sticky TRACKR header / provider strip / tabs visible).
+    private var embedded: Bool
+    init(
+        vault: VaultStore? = nil,
+        ollama: OllamaService? = nil,
+        refreshOnAppear: Bool = true,
+        embedded: Bool = false,
+        initialGraph: VaultVisualSnapshot = VaultVisualSnapshot(),
+        initialSelection: String? = nil
+    ) {
         _vault = StateObject(wrappedValue: vault ?? .shared)
         _ollama = StateObject(wrappedValue: ollama ?? .shared)
         self.refreshOnAppear = refreshOnAppear
+        self.embedded = embedded
         _visual = State(initialValue: initialGraph)
         _selected = State(initialValue: initialSelection)
     }
@@ -120,47 +131,13 @@ struct BrainWorkspaceView: View {
     private var mappingKey: String { "momo.brain.mappings." + (vault.vaultURL?.path ?? "none") }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("MOMO BRAIN").font(BarBoyStyle.display)
-                    Text(vault.status).font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button(vault.vaultURL == nil ? "CONNECT VAULT" : "CHANGE VAULT", action: connect).barBoyButton()
-                Button("REFRESH") { Task { await vault.refresh(); await ollama.refresh() } }.barBoyButton()
-            }
-            if vault.vaultURL == nil {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Your notes, connected to your work.").font(.system(size: 19, weight: .semibold))
-                    Text("Choose an Obsidian vault to explore its notes and links. The local model runs only when you ask. Saving always previews a new note first.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                }.padding(24).frame(maxWidth: .infinity, alignment: .leading).background(BarBoyStyle.surface)
+        Group {
+            if embedded {
+                embeddedBody
             } else {
-                HStack {
-                    TextField("Find a note or tag", text: $query).textFieldStyle(.roundedBorder)
-                    Toggle("Up to 200", isOn: $expandedGraph).toggleStyle(.checkbox)
-                    Text("\(visual.nodes.count) shown").font(.system(size: 11)).foregroundStyle(.secondary)
-                }
-                HStack(alignment: .top, spacing: 12) {
-                    graph.frame(maxWidth: .infinity).frame(height: 360)
-                    inspector.frame(width: 190)
-                }
-                HStack(spacing: 12) {
-                    Text("Solid: recorded / accepted").foregroundStyle(.secondary)
-                    Text("Dashed: AI suggestion").foregroundStyle(BarBoyStyle.amber)
-                    Spacer()
-                    Button("−") { zoom = max(0.5, zoom - 0.2) }.accessibilityLabel("Zoom out")
-                    Button("+") { zoom = min(3, zoom + 0.2) }.accessibilityLabel("Zoom in")
-                    Button("RESET VIEW") { zoom = 1; pan = .zero }
-                }.font(.system(size: 10))
-                Divider()
-                assistantPanel
+                standaloneBody
             }
-            if let message { Text(message).font(.system(size: 12)).foregroundStyle(BarBoyStyle.amber) }
         }
-        .padding(16)
-        .background(BarBoyStyle.panel)
         .task {
             mappings = (UserDefaults.standard.data(forKey: mappingKey).flatMap { try? JSONDecoder().decode([BrainFolderMapping].self, from: $0) }) ?? []
             if refreshOnAppear { await ollama.refresh() }
@@ -172,6 +149,108 @@ struct BrainWorkspaceView: View {
         }
         .onChange(of: vault.revision) { _, _ in suggestions = []; answer = ""; sources = [] }
         .sheet(isPresented: $preview) { savePreview }
+    }
+
+    /// Full Brain surface (overview / standalone). May be tall; caller owns scrolling.
+    private var standaloneBody: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            brainToolbar
+            if vault.vaultURL == nil {
+                emptyVaultCard
+            } else {
+                searchRow
+                HStack(alignment: .top, spacing: 12) {
+                    graph.frame(maxWidth: .infinity).frame(height: 360)
+                    inspector.frame(width: 190).frame(height: 360)
+                }
+                graphChrome
+                Divider()
+                assistantPanel
+            }
+            if let message { Text(message).font(.system(size: 12)).foregroundStyle(BarBoyStyle.amber) }
+        }
+        .padding(16)
+        .background(BarBoyStyle.panel)
+    }
+
+    /// TRACKR tab body: fills remaining panel height so sticky chrome never scrolls away.
+    private var embeddedBody: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            brainToolbar
+            if vault.vaultURL == nil {
+                emptyVaultCard
+                Spacer(minLength: 0)
+            } else {
+                searchRow
+                GeometryReader { bounds in
+                    let graphHeight = max(160, bounds.size.height)
+                    HStack(alignment: .top, spacing: 10) {
+                        graph.frame(maxWidth: .infinity, maxHeight: .infinity)
+                        inspector.frame(width: 168).frame(maxHeight: .infinity)
+                    }
+                    .frame(width: bounds.size.width, height: graphHeight)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                graphChrome
+                ScrollView(.vertical) {
+                    assistantPanel
+                        .padding(.bottom, 4)
+                }
+                .frame(maxHeight: 150)
+            }
+            if let message {
+                Text(message).font(.system(size: 11)).foregroundStyle(BarBoyStyle.amber)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var brainToolbar: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("MOMO BRAIN").font(BarBoyStyle.display)
+                Text(vault.status).font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            Button(vault.vaultURL == nil ? "CONNECT VAULT" : "CHANGE VAULT", action: connect).barBoyButton()
+            Button("REFRESH") { Task { await vault.refresh(); await ollama.refresh() } }.barBoyButton()
+        }
+    }
+
+    private var emptyVaultCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your notes, connected to your work.")
+                .font(BarBoyStyle.rowTitle)
+            Text("Choose an Obsidian vault to explore its notes and links. The local model runs only when you ask. Saving always previews a new note first.")
+                .font(BarBoyStyle.bodySmall)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(BarBoyStyle.surface)
+        .overlay(Rectangle().stroke(BarBoyStyle.hairline, lineWidth: 1))
+    }
+
+    private var searchRow: some View {
+        HStack {
+            TextField("Find a note or tag", text: $query).textFieldStyle(.roundedBorder)
+            Toggle("Up to 200", isOn: $expandedGraph).toggleStyle(.checkbox)
+            Text("\(visual.nodes.count) shown").font(BarBoyStyle.microLabel).foregroundStyle(.secondary)
+        }
+    }
+
+    private var graphChrome: some View {
+        HStack(spacing: 12) {
+            Text("Solid: recorded / accepted").foregroundStyle(.secondary)
+            Text("Dashed: AI suggestion").foregroundStyle(BarBoyStyle.amber)
+            Spacer()
+            Button("−") { zoom = max(0.5, zoom - 0.2) }.accessibilityLabel("Zoom out")
+            Button("+") { zoom = min(3, zoom + 0.2) }.accessibilityLabel("Zoom in")
+            Button("RESET VIEW") { zoom = 1; pan = .zero }
+        }.font(.system(size: 10))
     }
 
     private var graph: some View {
@@ -235,7 +314,8 @@ struct BrainWorkspaceView: View {
                         .foregroundStyle(selected == note.id ? Color.primary : .secondary)
                 }
             }.font(.system(size: 11)).frame(maxWidth: .infinity, alignment: .leading)
-        }.frame(height: 360)
+        }
+        .frame(maxHeight: .infinity)
     }
 
     private var assistantPanel: some View {

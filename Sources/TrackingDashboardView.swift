@@ -69,12 +69,15 @@ struct TrackingDashboardView: View {
             // Sticky chrome: header + provider strip + tabs stay put; only the tab body scrolls.
             VStack(spacing: 0) {
                 header
+                    .layoutPriority(2)
                     .zIndex(2)
                 providerRail
+                    .layoutPriority(2)
                     .zIndex(2)
                 Divider().opacity(0.55)
                 if surface.route == .dashboard {
                     tabBar
+                        .layoutPriority(2)
                     Divider().opacity(0.55)
                     Group {
                         if loading { LoadingSkeleton() }
@@ -88,6 +91,7 @@ struct TrackingDashboardView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .layoutPriority(0)
                     .clipped()
                 } else if case .settings = surface.route {
                     // Settings owns its Back + tabs below sticky Tracking chrome (no overlapping route strip).
@@ -606,21 +610,23 @@ struct TrackingDashboardView: View {
     }
 
     private var brain: some View {
-        // Brain content can exceed the panel; keep chrome sticky by scrolling only this body.
-        ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 8) {
-                if preferences.prefersBrainTips() {
-                    Text(preferences.onboardingIntents.contains(.projectFolders)
-                         ? "Project folders and prompts stay local — connect a vault and link folders you already use."
-                         : "Organizing prompts stays on-device in Brain. Ask only when you choose; nothing runs idle.")
-                        .font(BarBoyStyle.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 12)
-                        .padding(.top, 10)
-                }
-                BrainWorkspaceView(refreshOnAppear: false)
+        // Fill only the tab body. Never wrap Brain in an outer ScrollView — that let
+        // the tall vault UI push TRACKR header / strip / tabs off-screen.
+        VStack(alignment: .leading, spacing: 0) {
+            if preferences.prefersBrainTips() {
+                Text(preferences.onboardingIntents.contains(.projectFolders)
+                     ? "Project folders and prompts stay local — connect a vault and link folders you already use."
+                     : "Organizing prompts stays on-device in Brain. Ask only when you choose; nothing runs idle.")
+                    .font(BarBoyStyle.bodySmall)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
             }
+            BrainWorkspaceView(refreshOnAppear: false, embedded: true)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

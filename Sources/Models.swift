@@ -43,7 +43,8 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .claude: return ["com.anthropic.claudefordesktop"]
         case .gemini: return ["com.google.gemini", "com.google.GoogleGemini"]
         case .cursor: return ["com.todesktop.230313mzl4w4u92"]
-        case .grok: return ["ai.x.grok", "com.x.grok"]
+        // Grok Bot (Anysphere) ships as com.anysphere.sand; consumer Grok.app may use xAI/X ids.
+        case .grok: return ["com.anysphere.sand", "com.xai.grok", "ai.x.grok", "com.x.grok"]
         }
     }
 
@@ -107,7 +108,31 @@ enum AIProvider: String, CaseIterable, Codable, Identifiable {
         case .claude: return "Connect Claude"
         case .gemini: return "Connect Gemini"
         case .cursor: return "Connect Cursor"
-        case .grok: return "Connect Grok"
+        case .grok: return "Connect Grok Bot"
+        }
+    }
+
+    /// Public download page for the Mac desktop app when Launch Services cannot find it.
+    var desktopInstallURL: URL? {
+        switch self {
+        case .codex: return URL(string: "https://chatgpt.com/codex")
+        case .claude: return URL(string: "https://claude.ai/download")
+        case .gemini: return URL(string: "https://gemini.google.com/app")
+        case .cursor: return URL(string: "https://cursor.com/download")
+        case .grok: return URL(string: "https://docs.x.ai/grok-bot")
+        }
+    }
+
+    /// Prefer these providers first in onboarding connect (desktop-app led).
+    static var onboardingConnectOrder: [AIProvider] {
+        [.claude, .cursor, .grok, .codex, .gemini]
+    }
+
+    /// Account % is not published locally today — activity-only allow stays honest (no fake Connected %).
+    var supportsActivityOnlyConnect: Bool {
+        switch self {
+        case .grok, .gemini: return true
+        case .codex, .claude, .cursor: return false
         }
     }
 
